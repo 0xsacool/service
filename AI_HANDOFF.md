@@ -1162,3 +1162,31 @@ only; `BRN-2026-000001` remains protected with baseline update time
 `2026-08-08T06:19:09.065089Z`. Seven customers lack `brandIds`; their
 migration is outside Gate 2. F5d-37 first records this evidence locally, then
 must stop for an explicit Gate-2.1 approval before enabling Email/Password.
+
+## F5d-37 Gate 2 production provisioning
+
+Gate 2 is complete. Firebase Email/Password is enabled and the approved first
+staff user is `sacool.spizy@gmail.com` with Firebase UID
+`qUbRfp5Iv3drX9IEZL3DyLBvcsj2`. `brands/bruno-thailand` now contains
+`code: "BRN"` and `name: "Bruno Thailand"`; `brands/join-lux-club` contains
+`code: "JLC"` and `name: "Join Lux Club"`. The only staff profile created is
+`staffProfiles/qUbRfp5Iv3drX9IEZL3DyLBvcsj2`, with the sole field
+`brandId: "bruno-thailand"`.
+
+The initial Gate-2.4 PowerShell request interpolated the URL incorrectly and
+created `staffProfiles/.exists=false` with `brandId: "bruno-thailand"`. It
+was detected immediately, explicitly approved for removal, deleted with an
+`updateTime` precondition, and verified absent. The intended UID document was
+also verified absent before a separately approved retry using safe URI
+construction. The final intended profile verification passed. This fully
+remediated incident has no residual production impact and must not be removed
+from the audit history.
+
+All existing-data protections held: the seven approved `SRV-*` records still
+lack `brandId`; `BRN-2026-000001` remains untouched with update time
+`2026-08-08T06:19:09.065089Z`; and all seven customers still lack `brandIds`.
+Worker version `9a8b83f2-861d-4700-9b4a-05260c4ee661` remains at 100% traffic.
+Applied IAM remains database get plus entity get/list/update only, with no
+entity create or delete. Rules, Worker configuration/secrets, Cron,
+`deletionExecutor`, and Firebase Hosting are unchanged. Do not begin Gate 3
+without explicit approval.

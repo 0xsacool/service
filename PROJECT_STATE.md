@@ -560,6 +560,31 @@ explicit backfill, while `BRN-2026-000001` remains protected and unmodified;
 its baseline `updateTime` is `2026-08-08T06:19:09.065089Z`. There are seven
 customers, all without `brandIds`; customer migration is outside Gate 2.
 
+## F5d-37 Gate 2 production provisioning
+
+Gate 2 is complete. Firebase Authentication now has Email/Password enabled
+and its first approved staff identity is `sacool.spizy@gmail.com`
+(`qUbRfp5Iv3drX9IEZL3DyLBvcsj2`). The canonical brand documents now exist:
+`brands/bruno-thailand` has `code: "BRN"` and `name: "Bruno Thailand"`, and
+`brands/join-lux-club` has `code: "JLC"` and `name: "Join Lux Club"`. The
+only staff profile is `staffProfiles/qUbRfp5Iv3drX9IEZL3DyLBvcsj2`, whose sole
+field is `brandId: "bruno-thailand"`.
+
+The first Gate-2.4 attempt exposed a PowerShell URI-interpolation defect that
+created `staffProfiles/.exists=false` with the intended brand value. It was
+detected immediately, removed under an explicit `updateTime` precondition,
+and independently verified absent before the separately approved safe retry.
+The intended UID profile was absent before retry, and the incident is fully
+remediated with no residual production impact. This audit record must remain.
+
+The seven approved `SRV-*` jobs still lack `brandId` and
+`BRN-2026-000001` remains untouched at update time
+`2026-08-08T06:19:09.065089Z`. There are still seven customers, all without
+`brandIds`. Worker version/traffic, four-permission applied IAM, old deployed
+Rules, Worker configuration/secrets, inactive Cron, unwired
+`deletionExecutor`, and uninitialized Firebase Hosting are unchanged. Gate 3
+IAM is not started.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Each new repository's backend swap (Customer, Service Job, Search, Registered Products) gets the same doc-plus-approval treatment Product Master got, not a silent bulk migration.

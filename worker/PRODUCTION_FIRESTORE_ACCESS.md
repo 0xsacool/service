@@ -3170,3 +3170,29 @@ F5d-34 fixed this in `worker/src/firestoreClient.ts` only: the resource name is 
 F5d-34 separately fixed a Firestore Rules defect (the `serviceJobs` update rule denied updates to any Service Job that predates F5d-32, since it dereferenced privileged fields legacy documents don't have — see PROJECT_STATE.md/AI_HANDOFF.md's F5d-34 entries for the full record) and a Worker CORS defect (missing `Authorization`/`Idempotency-Key` in `Access-Control-Allow-Headers`, which would have blocked the browser's own preflight for every authenticated route, files included, before any request reached the Worker). Neither changes IAM or production access; both are recorded here because they were found during this production-access-readiness review.
 
 No production Firestore, IAM, R2, secrets, Auth, or Worker state changed by F5d-33 or F5d-34. `BRN-2026-000001` remains untouched. Cron remains inactive; `deletionExecutor` remains unwired.
+
+## F5d-37 Gate 2 production provisioning
+
+Gate 2 enabled Firebase Email/Password and created one approved staff Auth
+identity, `sacool.spizy@gmail.com` (`qUbRfp5Iv3drX9IEZL3DyLBvcsj2`), two
+canonical brand documents, and one staff profile. The exact records are
+`brands/bruno-thailand` (`code: "BRN"`, `name: "Bruno Thailand"`),
+`brands/join-lux-club` (`code: "JLC"`, `name: "Join Lux Club"`), and
+`staffProfiles/qUbRfp5Iv3drX9IEZL3DyLBvcsj2` with only
+`brandId: "bruno-thailand"`.
+
+The first profile attempt accidentally created `staffProfiles/.exists=false`
+because a PowerShell interpolation placed the precondition text in the
+document path. It contained only the intended canonical `brandId`, was
+immediately detected, and was removed under an explicitly approved
+`updateTime` precondition. Verification proved the stray document absent and
+the intended UID document absent before the safe URI-construction retry. The
+incident is fully remediated with no residual production impact; retain this
+record for audit.
+
+The seven approved seed Service Jobs still have no `brandId`,
+`BRN-2026-000001` remains at update time `2026-08-08T06:19:09.065089Z`, and
+the seven customers still lack `brandIds`. No IAM, Rules, Worker, R2, secret,
+Cron, or deletion-executor change occurred. In particular, the applied role
+remains four permissions (database get and entity get/list/update), without
+entity create or delete. Firebase Hosting remains uninitialized.

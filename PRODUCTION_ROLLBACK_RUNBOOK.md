@@ -64,6 +64,30 @@ record.
   `brands/bruno-thailand`, `brands/join-lux-club`, and that user's
   `staffProfiles/{uid}` record. Each is a separately approved micro-gate.
 
+## F5d-37 Gate 2 completion evidence
+
+- Firebase Email/Password is enabled. The approved staff identity is
+  `sacool.spizy@gmail.com` with UID `qUbRfp5Iv3drX9IEZL3DyLBvcsj2`.
+- `brands/bruno-thailand` is exactly `{ code: "BRN", name: "Bruno Thailand" }`;
+  `brands/join-lux-club` is exactly `{ code: "JLC", name: "Join Lux Club" }`.
+- `staffProfiles/qUbRfp5Iv3drX9IEZL3DyLBvcsj2` exists with the sole field
+  `{ brandId: "bruno-thailand" }`. Removing it would revoke that user's
+  app-side staff allowlist authorization; Auth-user deletion is not a harmless
+  rollback because the UID cannot be recreated as the same identity.
+- Incident record: the first Gate-2.4 request accidentally created
+  `staffProfiles/.exists=false` because PowerShell interpolated a URL
+  incorrectly. It contained only `brandId: "bruno-thailand"`, was removed
+  under an explicitly approved `updateTime` precondition, and was verified
+  absent before the intended profile's safe retry. No residual artifact or
+  protected-record change remains.
+- Existing-data protection passed: the seven approved `SRV-*` documents still
+  lack `brandId`; `BRN-2026-000001` remains at update time
+  `2026-08-08T06:19:09.065089Z`; seven customers remain and all lack
+  `brandIds`.
+- Worker, applied four-permission IAM, deployed Rules, Worker config/secrets,
+  inactive Cron, unwired `deletionExecutor`, and uninitialized Firebase
+  Hosting are unchanged. Gate 3 IAM requires a separate approval.
+
 ## Deferred test improvement
 
 The Rules emulator suite covers legacy updates and hash immutability. A future
