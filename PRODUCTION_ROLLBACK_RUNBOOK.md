@@ -38,6 +38,32 @@ record.
   Job IDs are known from source; the legacy production customer IDs must be
   identified and snapshotted read-only before any `brandIds` backfill.
 
+## Verified F5d-36 production pre-Gate-2 evidence
+
+- Project: `luxace-service` (number `769692662603`).
+- Worker rollback target: `service-tech-files-worker` version
+  `9a8b83f2-861d-4700-9b4a-05260c4ee661` at 100% traffic. Observed binding
+  values are `ALLOWED_ORIGINS=http://localhost:5173`,
+  `FIRESTORE_PROJECT_ID=luxace-service`, and
+  `ATTACHMENTS_BUCKET=service-tech-attachments-prod`. The two expected
+  credential secret names exist; values were neither captured nor recorded.
+  There is no production Cron trigger.
+- Applied IAM rollback baseline is the four-permission role state: database
+  get and entity get/list/update. Entity create is not yet applied and entity
+  delete is absent.
+- Firebase Authentication and Hosting are uninitialized. `brands` and
+  `staffProfiles` were not observed. Gate 2 must re-check their absence before
+  each create-only mutation.
+- The deployed Firestore Rules are old/permissive, not the reviewed source
+  rules. Rules deployment remains outside Gate 2.
+- Eight Service Jobs exist and lack `brandId` and both public-tracking hashes.
+  `BRN-2026-000001` is protected at update time
+  `2026-08-08T06:19:09.065089Z`. Seven customers exist and all lack
+  `brandIds`; no customer or Service Job migration is authorized in Gate 2.
+- Gate 2 may only enable Email/Password and create one approved Auth user,
+  `brands/bruno-thailand`, `brands/join-lux-club`, and that user's
+  `staffProfiles/{uid}` record. Each is a separately approved micro-gate.
+
 ## Deferred test improvement
 
 The Rules emulator suite covers legacy updates and hash immutability. A future

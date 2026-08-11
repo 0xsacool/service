@@ -1136,3 +1136,29 @@ frontend mutation. No remote is configured, no push occurred, and no rollout
 gate has started. Cron remains undeclared in `worker/wrangler.toml`,
 `scheduled()` is not production-triggered, and `deletionExecutor` remains
 unwired.
+
+## F5d-36 production baseline and Gate-2 preflight
+
+Manual F5d-36 production inspection verified project `luxace-service`
+(project number `769692662603`) and found Gate 2 preflight-ready with
+non-blocking findings. The deployed Worker is
+`service-tech-files-worker`, version
+`9a8b83f2-861d-4700-9b4a-05260c4ee661` at 100% traffic. It has the expected
+R2 binding `ATTACHMENTS_BUCKET=service-tech-attachments-prod`,
+`FIRESTORE_PROJECT_ID=luxace-service`, and
+`ALLOWED_ORIGINS=http://localhost:5173`; its two Firestore credential names
+were verified without exposing values. Production Cron is none;
+`scheduled()` remains untriggered and `deletionExecutor` remains unwired.
+
+The applied Worker role is still the four-permission pre-Gate-3 state:
+database get plus entity get/list/update, with neither entity create nor
+delete. Firebase Authentication and Hosting are uninitialized. No brands or
+staff profiles were observed. The deployed Firestore Rules are old/permissive
+and have not been replaced by the reviewed source rules.
+
+Exactly eight Service Jobs were observed, all without `brandId` or either
+public-tracking hash. The seven `SRV-*` seed documents remain later-backfill
+only; `BRN-2026-000001` remains protected with baseline update time
+`2026-08-08T06:19:09.065089Z`. Seven customers lack `brandIds`; their
+migration is outside Gate 2. F5d-37 first records this evidence locally, then
+must stop for an explicit Gate-2.1 approval before enabling Email/Password.

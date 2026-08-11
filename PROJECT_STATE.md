@@ -532,6 +532,34 @@ Production rollout has not started. Cron is not declared in `wrangler.toml`,
 `scheduled()` is not production-triggered, and `deletionExecutor` remains
 unwired.
 
+## F5d-36 production read-only baseline
+
+F5d-36 manually captured and reviewed the production baseline before the
+first rollout mutation. Gate 2 is preflight-ready with non-blocking findings;
+it has not begun. The production Worker remains
+`service-tech-files-worker`, version
+`9a8b83f2-861d-4700-9b4a-05260c4ee661` at 100% traffic, with
+`ALLOWED_ORIGINS=http://localhost:5173`,
+`FIRESTORE_PROJECT_ID=luxace-service`, and
+`ATTACHMENTS_BUCKET=service-tech-attachments-prod`. Its two credential secret
+names are recorded without values. Cron has no production trigger,
+`scheduled()` remains present but untriggered, and `deletionExecutor` remains
+unwired.
+
+The applied Worker IAM custom role has only
+`datastore.databases.get`, `datastore.entities.get`,
+`datastore.entities.list`, and `datastore.entities.update`; the source-only
+`datastore.entities.create` addition is not applied, and delete is absent.
+Firebase Authentication is uninitialized, no `brands` or `staffProfiles`
+collection was observed, Firebase Hosting is uninitialized, and the deployed
+Firestore Rules are older/permissive rather than the reviewed source rules.
+
+The eight observed Service Jobs all lack `brandId` and both public-tracking
+hash fields. The seven `SRV-*` seed records remain approved only for a later
+explicit backfill, while `BRN-2026-000001` remains protected and unmodified;
+its baseline `updateTime` is `2026-08-08T06:19:09.065089Z`. There are seven
+customers, all without `brandIds`; customer migration is outside Gate 2.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Each new repository's backend swap (Customer, Service Job, Search, Registered Products) gets the same doc-plus-approval treatment Product Master got, not a silent bulk migration.
