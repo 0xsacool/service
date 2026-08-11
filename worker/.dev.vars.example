@@ -1,0 +1,19 @@
+# Local-only overrides for `wrangler dev`, read from a gitignored `.dev.vars`
+# file you create yourself (copy this file to `.dev.vars`). Never put an R2
+# access key or secret here or anywhere else in this project — the R2
+# binding in wrangler.toml is the only access this Worker has to R2, and it
+# requires no key at all.
+
+# F5d-5 — set this to run the retention sweep against the local Firestore
+# Emulator (see worker/README.md's "Firestore access" section for setup).
+# When set, googleAuth.ts skips real Google authentication entirely and
+# firestoreClient.ts targets this host instead of real Firestore.
+# FIRESTORE_EMULATOR_HOST=127.0.0.1:8080
+
+# Deliberately left blank/commented — no real GCP service account exists
+# for this project yet (see the F5d architecture review). Do NOT put a real
+# production key here even for local testing; use the emulator above
+# instead. These become `wrangler secret put` values in production, never a
+# .dev.vars or wrangler.toml entry.
+# GOOGLE_SERVICE_ACCOUNT_EMAIL=
+# GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY=

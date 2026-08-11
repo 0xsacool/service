@@ -1,0 +1,46 @@
+# Production Rollback and Preflight Runbook
+
+## Scope and boundary
+
+This runbook is a preflight artifact, not rollout authorization. The initial
+rollout excludes Cron, `deletionExecutor`, public tracking credential issuance,
+and Service Report persistence. Before every mutation, capture the named
+evidence read-only, stop on a mismatch, and retain the capture with the gate
+record.
+
+## Source rollback baseline
+
+- Local Git tag: `f5d35-baseline`.
+- Current source Worker configuration has no Cron declaration.
+- `scheduled()` is not fetch-reachable and `deletionExecutor` is unwired.
+- The source IAM role has get/list/update/create plus `datastore.databases.get`;
+  it has no `datastore.entities.delete` permission.
+
+## Future production gates
+
+| Gate                | Required pre-mutation snapshot                                                                                                                                                                                                                                                                                                       | Authorized mutation                                                               | Verify immediately                                                         | Stop condition                                                         | Rollback                                                                                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Auth, brands, staff | Firebase Auth providers; target UID list; `brands/*` and `staffProfiles/*` non-existence; no customer credentials                                                                                                                                                                                                                    | Enable approved email/password provider, create approved brands and profiles      | Provider state, exact IDs/brand values, client profile-write denial        | Any existing/conflicting identity or profile                           | Disable provider only if no approved live user depends on it; remove only newly created, recorded documents/users under explicit approval |
+| IAM                 | Current role YAML, applied custom-role definition, IAM binding list, service-account key inventory                                                                                                                                                                                                                                   | Apply the reviewed five-permission custom role/binding only                       | Exact role permissions/binding; no delete permission                       | Role differs, unexpected binding/key, or apply response differs        | Restore captured role/binding; revoke only newly created key/binding under explicit approval                                              |
+| Worker              | Current deployed version, traffic allocation, bindings/secret names, Cron trigger state                                                                                                                                                                                                                                              | Upload/deploy the approved version without traffic shift beyond the approved gate | Version ID, bindings, secret names, 100% intended traffic, Cron still none | Binding/secret/trigger/traffic mismatch                                | Shift traffic to captured previous version; do not delete version history                                                                 |
+| Data backfill       | Snapshots for the approved Service Jobs `SRV-2026-0481`, `SRV-2026-0479`, `SRV-2026-0477`, `SRV-2026-0475`, `SRV-2026-0472`, `SRV-2026-0469`, and `SRV-2026-0465`; the exact legacy customer IDs selected to receive `brandIds`; complete prior document snapshots and counts; byte-for-byte protected snapshot of `BRN-2026-000001` | Approved, reviewable backfill only                                                | Per-ID before/after diff and count; prove `BRN-2026-000001` unchanged      | Missing ID, unexpected field, count mismatch, or protected record diff | Restore each captured prior document exactly; never infer a default or touch the protected record                                         |
+| Firestore Rules     | Current deployed ruleset export/version and source ruleset checksum                                                                                                                                                                                                                                                                  | Deploy reviewed source rules only                                                 | Deployed ruleset/version and emulator evidence                             | Unable to capture current rules or deployed content differs            | Redeploy captured prior ruleset                                                                                                           |
+| Frontend            | Current production artifact/version, deployment target, environment-variable names (not values)                                                                                                                                                                                                                                      | Deploy approved artifact only                                                     | Version/artifact, route health, backend configuration gate behavior        | Wrong artifact/configuration or staff flow error                       | Redeploy captured prior artifact/version                                                                                                  |
+
+## Capture status at the F5d-35 baseline
+
+- Worker version `9a8b83f2-861d-4700-9b4a-05260c4ee661` and inactive Cron are documented historical evidence; bindings should be re-read immediately before a Worker gate.
+- Firestore Rules source is available locally. The currently deployed ruleset is **not** established to match source and requires a future read-only capture.
+- Frontend production artifact/version is not available locally and requires future read-only capture.
+- IAM source role is available locally. The currently applied production role/binding requires future read-only capture.
+- Auth provider, user, brand, and staff-profile production state requires future read-only capture.
+- No data backfill snapshot was taken in this phase. The seven approved Service
+  Job IDs are known from source; the legacy production customer IDs must be
+  identified and snapshotted read-only before any `brandIds` backfill.
+
+## Deferred test improvement
+
+The Rules emulator suite covers legacy updates and hash immutability. A future
+test-only improvement should explicitly attempt to add `createdAt` to a legacy
+document and assert rejection. It is not a rollout change and is not part of
+this phase.

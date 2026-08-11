@@ -1,0 +1,121 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function staffProfilePath() {
+      return /databases/$(database)/documents/staffProfiles/$(request.auth.uid);
+    }
+
+    function canonicalBrand(brandId) {
+      return brandId == 'bruno-thailand' || brandId == 'join-lux-club';
+    }
+
+    function staffBrand() {
+      return get(staffProfilePath()).data.brandId;
+    }
+
+    function validStaff() {
+      return signedIn() && exists(staffProfilePath()) && canonicalBrand(staffBrand());
+    }
+
+    function staffOwnsBrand(brandId) {
+      return validStaff() && canonicalBrand(brandId) && staffBrand() == brandId;
+    }
+
+    function staffOwnsAttachment(attachment) {
+      return staffOwnsBrand(
+        get(/databases/$(database)/documents/serviceJobs/$(attachment.jobId)).data.brandId
+      );
+    }
+
+    function staffOwnsCustomer(customer) {
+      return validStaff() && staffBrand() in customer.brandIds;
+    }
+
+    match /staffProfiles/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
+    }
+
+    match /brands/{brandId} {
+      allow read, write: if false;
+    }
+
+    match /serviceJobs/{serviceJobId} {
+      allow get, list: if staffOwnsBrand(resource.data.brandId);
+      allow create: if false;
+      // The diff/affectedKeys check below is the sole guard on these
+      // privileged fields — it denies any update that adds, removes, or
+      // changes 'brandId'/'id'/'createdAt'/both hash fields, and does so
+      // safely even when a legacy document never had one of them. A
+      // previous version paired it with direct equality checks
+      // (request.resource.data.createdAt == resource.data.createdAt, etc.);
+      // those throw "Property ... is undefined on object" the moment either
+      // side lacks the field, denying every ordinary update to a legacy
+      // Service Job (F5d-33/F5d-34 B-2 — confirmed against the emulator).
+      allow update: if staffOwnsBrand(resource.data.brandId) &&
+        request.resource.data.brandId == resource.data.brandId &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'brandId', 'id', 'createdAt', 'publicTrackingCodeHash', 'publicTrackingTokenHash'
+        ]) &&
+        validClosedAtTransition();
+      allow delete: if false;
+
+      function validClosedAtTransition() {
+        return request.resource.data.closedAt == resource.data.closedAt ||
+          (resource.data.closedAt == null &&
+            request.resource.data.closedAt is timestamp &&
+            (request.resource.data.status == 'Completed' ||
+              request.resource.data.status == 'Cancelled' ||
+              request.resource.data.status == 'Rejected'));
+      }
+    }
+
+    match /numberSequences/{sequenceId} {
+      allow read, write: if false;
+    }
+
+    match /serviceJobIntakeKeys/{key} {
+      allow read, write: if false;
+    }
+
+    match /serviceJobAttachments/{attachmentId} {
+      allow get, list: if staffOwnsAttachment(resource.data);
+      allow create: if staffOwnsAttachment(request.resource.data) &&
+        request.resource.data.deletedAt == null;
+      allow update: if staffOwnsAttachment(resource.data) &&
+        immutableAttachmentFieldsPreserved() && validDeletedAtTransition();
+      allow delete: if false;
+
+      function immutableAttachmentFieldsPreserved() {
+        return request.resource.data.jobId == resource.data.jobId &&
+          request.resource.data.category == resource.data.category &&
+          request.resource.data.name == resource.data.name &&
+          request.resource.data.path == resource.data.path &&
+          request.resource.data.contentType == resource.data.contentType &&
+          request.resource.data.size == resource.data.size &&
+          request.resource.data.uploadedAt == resource.data.uploadedAt &&
+          request.resource.data.uploadedBy == resource.data.uploadedBy;
+      }
+
+      function validDeletedAtTransition() {
+        return request.resource.data.deletedAt == resource.data.deletedAt ||
+          (resource.data.deletedAt == null && request.resource.data.deletedAt is timestamp);
+      }
+    }
+
+    match /products/{productId} {
+      allow get, list: if validStaff();
+      allow create, update, delete: if false;
+    }
+
+    match /customers/{customerId} {
+      allow get, list: if staffOwnsCustomer(resource.data);
+      allow create, update, delete: if false;
+    }
+  }
+}

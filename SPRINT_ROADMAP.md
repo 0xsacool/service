@@ -1,0 +1,201 @@
+# Sprint Roadmap
+
+> Logical, reviewable chunks of work. Each sprint should be small enough to approve and complete independently — matching how this project has been run so far (review → approve → execute, one phase at a time). Scope estimates are relative sizing (S/M/L/XL), not calendar commitments. Terminology: the core entity is the **Service Job** — see [DECISIONS.md](DECISIONS.md) #009.
+
+> **Note on sprint numbering:** the plan below was originally written before Product Master, the Import Framework, or the Firebase/Firestore direction existed. Actual execution diverged from the original Sprint 1–8 outline once real feature work started — extra sprints (1B, Search/Identity/Intake phases, Product Master P1–P4, Firestore F0–F2.2) were inserted as the product's real shape became clearer. This file now documents what **actually happened**, consolidated where the original per-sprint granularity no longer matters, plus what's realistically next. See [PROJECT_STATE.md](PROJECT_STATE.md) "Completed Milestones" for the same history from an architecture-snapshot angle rather than a sprint-log angle.
+
+---
+
+## Completed Sprints
+
+### Sprint 0 — Documentation Foundation *(complete)*
+
+**Objective:** Establish a shared, written foundation before any backend/auth/database work begins.
+
+**Deliverables:** `PROJECT_STATE.md`, `PRODUCT_ROADMAP.md`, `SPRINT_ROADMAP.md`, `DATABASE_SCHEMA.md`, `BUSINESS_RULES.md`, `UI_GUIDELINES.md`, `DECISIONS.md`, `CLAUDE.md`, `PRINT_SPECIFICATIONS.md` — including the Customer Master, Product Instance, and Service Job (rename) architecture finalized across all documents.
+
+**Estimated Scope:** S
+
+---
+
+### Sprint 1 — Architecture Cleanup *(complete)*
+
+**Objective:** Fix the structural gaps that would otherwise make every later sprint harder — routing, duplicated components, and the data-access seam — without changing what the app looks like or adding any backend.
+
+**Delivered:**
+- `react-router-dom` adopted, replacing the `PageId` `useState` switch in `App.tsx`; every page now has a real, shareable URL ([DECISIONS.md](DECISIONS.md) #007).
+- Shared components extracted: `Row`, `Timeline`, `PhotoGallery`, `ProgressBar`, `Logo` — no longer duplicated between what were `ClaimDetails.tsx`/`TrackResult.tsx`.
+- Code-level rename `Claim` → `ServiceJob` completed (types, files, routes) ([DECISIONS.md](DECISIONS.md) #009).
+- Invalid tracking-number search no longer falls back to an unrelated real record — resolved via the router's catch-all `NotFoundPage`.
+- ESLint + Prettier configured and passing.
+- Feature-based folder restructure (`src/features/`, `src/shared/`, etc.).
+
+**Estimated Scope:** M
+
+---
+
+### Sprint 1B — Repository & Shared-UI Foundation *(complete)*
+
+**Objective:** Formalize the data-access seam and shared UI primitives that every later feature sprint would otherwise rebuild ad hoc.
+
+**Delivered:** Constants layer (routes, statuses, app name); typed repository interfaces per entity ([DECISIONS.md](DECISIONS.md) #006, since superseded/consolidated by #017); `ErrorBoundary`, `EmptyState`/`LoadingState`/`ErrorState`; validation-layer scaffolding; existing pages retrofitted to the new constants and shared UI.
+
+**Estimated Scope:** M
+
+---
+
+### Search, Product Identity & Service Intake Phases *(complete)*
+
+**Objective:** Turn the static intake form into a real, progressively-revealed flow: find-or-recognize the customer and product first, then capture the problem and intake details.
+
+**Delivered (consolidated from several internally-tracked phases):**
+- Universal search (`searchRepository`, `useUniversalSearch`, recent-searches/recent-customers UI) and a search-first rewrite of `NewServiceJob`.
+- `RegisteredProduct` concept, `registeredProductsRepository`, `useCustomerProducts`, product identity UI — plus two architecture refinements made after initial delivery: switching to a stable `customerId` (not phone) as identity, and modeling warranty independently per registered product rather than as a flat flag.
+- Service intake types/validation, intake section components (accessories, problem, photo evidence, internal notes).
+- `serviceJobCreation` business-logic service, `useCreateServiceJob`, `ServiceRequestPrintPreview` with working `@media print` output, and the full save/print/reset flow wired end-to-end into `NewServiceJob`.
+
+**Estimated Scope:** L (across all phases combined)
+
+---
+
+### Product Master, Sprint P1–P3 *(complete)*
+
+**Objective:** Replace the flat, per-serial mock lookup with a real, admin-manageable product catalog — the foundation every later Product Master/Knowledge feature builds on.
+
+**Delivered:**
+- Product Master types, a real Bruno Thailand mock catalog, `productMasterRepository`.
+- A generic, reusable import framework (`src/imports/shared/`: parser, validator helpers, preview/summary builder) specialized for products (`src/imports/products/`: normalizer, validator, importer).
+- Add Product form + validation, CSV/Excel export, `ProductsPage` (search/filter/sort/table), and a full CSV import wizard (choose file → preview → validation → completed summary).
+
+**Estimated Scope:** L
+
+---
+
+### Product Knowledge, Sprint P4 *(complete)*
+
+**Objective:** Give each product a knowledge base (accessories, common problems) and a real detail/edit view, not just a catalog row.
+
+**Delivered:** `CommonProblemDefinition` (Active/Inactive status), `productKnowledgeRepository`, `ProductDetail` page with General/Accessories/Common Problems tabs, all edit-in-place through the repository layer.
+
+**Estimated Scope:** M
+
+---
+
+### Sprint F0 — Backend Abstraction *(complete)*
+
+**Objective:** Prepare the application so a real backend can be plugged in later with minimal changes, before any actual backend SDK is introduced.
+
+**Delivered:** `RepositoryProvider` (`src/repositories/repositoryProvider.ts`) as the single seam every hook resolves repositories through, replacing direct per-repository imports; `BackendKind` config stub. No business logic changed. [DECISIONS.md](DECISIONS.md) #017.
+
+**Estimated Scope:** S
+
+---
+
+### Sprint F1 — Firebase SDK Integration *(complete)*
+
+**Objective:** Introduce Firebase into the application without connecting it to anything yet — the app must keep running entirely on Mock.
+
+**Delivered:** `firebase` package installed; `src/lib/firebase/firebase.ts` with lazy, fail-fast-on-first-use getters (`getFirestoreDb()`, `getFirebaseAuth()`); `.env.example`; Vite env-var typings. Repository Provider unchanged; Mock remained the only active backend.
+
+**Estimated Scope:** S
+
+---
+
+### Sprint F2 — Firestore Product Repository *(complete)*
+
+**Objective:** Stand up the first real Firestore-backed repository, scoped to Product Master only.
+
+**Delivered:** `firestoreProductMasterRepository.ts` (async factory, synchronous-facade-over-live-cache design — [DECISIONS.md](DECISIONS.md) #018); `seedProductMasterFromMock.ts` idempotent seed-once migration; `BackendKind` widened to `mock | firestore`, resolved from `VITE_BACKEND_KIND`. Live-validated against a real Firebase project (`asia-southeast3`): Add/Update/Search/Detail all correct, no duplicate reseed on refresh. Every other repository stayed Mock, as scoped.
+
+**Estimated Scope:** M
+
+---
+
+### Sprint F2.1 — Firestore Hardening *(complete)*
+
+**Objective:** Improve maintainability and deployment readiness of the Firestore infrastructure — no new business features, no UI changes.
+
+**Delivered:** Checked-in Firebase deployment config (`firestore.rules`, `firestore.indexes.json`, `firebase.json`, `.firebaserc`); fixed a crash-on-bad-config bug where a missing/invalid `.env` with `backendKind=firestore` could fail the entire app instead of falling back to Mock ([DECISIONS.md](DECISIONS.md) #021); deduplicated the `PRODUCTS_COLLECTION` constant; captured the previously-discarded `onSnapshot` unsubscribe handle. Validated repeated `mock ↔ firestore` switching (4 full cycles) plus a deliberate bad-config fallback test, all without an app restart.
+
+**Estimated Scope:** S
+
+---
+
+### Sprint F2.2 — Documentation Refresh *(complete)*
+
+**Objective:** Bring `PROJECT_STATE.md`, `PRODUCT_ROADMAP.md`, `SPRINT_ROADMAP.md` (this file), `DATABASE_SCHEMA.md`, and `DECISIONS.md` back in sync with the actual codebase after the Product Master / Firestore work above. Documentation only — no application code touched.
+
+**Delivered:** All five documents reviewed and updated; this file restructured to reflect real sprint history instead of the original pre-Product-Master plan; `DATABASE_SCHEMA.md` gained a Firestore implementation section; `DECISIONS.md` gained entries #019–#021 plus resolution notes on #006/#007/#009.
+
+**Estimated Scope:** S
+
+---
+
+## Remaining Roadmap
+
+The original plan's Sprint 3 ("Supabase Foundation") is superseded in direction by the F-series: the project is now extending backend coverage **repository-by-repository via Firestore**, the same pattern Product Master proved out, rather than standing up a full relational schema in one large sprint. `@supabase/supabase-js` remains an unused, orphaned dependency — see this sprint's Remaining Gaps for the open question that creates.
+
+### Sprint 2 — UX, Accessibility & Thai-First Pass *(not started)*
+
+**Objective:** Bring the UI up to a real, launch-shaped standard: usable by screen readers/keyboard, and dressed in Thai-market conventions instead of English/placeholder content. (Note: the intake form itself is no longer non-functional — that part of the original Sprint 2 scope was delivered early, during the Search/Intake phases above.)
+
+**Remaining deliverables:**
+- Accessible chip/toggle groups (`aria-pressed`/`role="radiogroup"`), `aria-current="step"` on timeline, focus trap + `Escape` handling on the mobile drawer, labeled icon-only buttons.
+- Locale pass: Thai UI copy, THB currency formatting, DD/MM/YYYY dates, Asia/Bangkok time, Buddhist Era dates on anything print-facing.
+- Brand identity pass: replace placeholder visuals/copy with Bruno Thailand / Join Lux Club identity ([DECISIONS.md](DECISIONS.md) #008).
+
+**Estimated Scope:** M
+
+---
+
+### Sprint F3 — Firestore Customer Repository *(proposed, awaiting approval)*
+
+**Objective:** Extend the Firestore pattern proven in F2/F2.1 to `customersRepository` — the next repository in line, per this project's own "wait for approval before Customer Repository" gating used at the end of every F-sprint so far.
+
+**Likely deliverables:** Firestore document mapping for `customers`, a seed-once migration from the current Mock fixture, `'firestore'` case extended in `repositoryProvider.ts`, live validation against the real Firebase project — same shape as F2, applied to a new entity.
+
+**Estimated Scope:** M
+
+---
+
+### Sprint F4+ — Remaining Repositories *(not yet scoped in detail)*
+
+Service Jobs, Search, and Registered Products follow the same pattern once Customers is done. Each should stay its own reviewable sprint rather than a bulk migration, consistent with how F2/F3 are scoped.
+
+---
+
+### Auth *(not yet scoped)*
+
+Firebase Auth is already wired at the SDK level (`getFirebaseAuth()`) but unused. Once enough repositories are real, staff/admin login and role-based access become meaningful; `firestore.rules`' current open `allow read, write: if true` must tighten at the same time (see `PROJECT_STATE.md` Current Limitations).
+
+---
+
+### Photos & Attachments *(not yet scoped)*
+
+Real file uploads, replacing sample stock-photo placeholders. Firebase Storage is the natural fit given the F-series direction, but this hasn't been decided — flagged in this sprint's Remaining Gaps.
+
+**Estimated Scope:** M
+
+---
+
+### Notifications *(not yet scoped)*
+
+Customer status-change notifications via SMS/LINE/email — channel choice still undecided (see `PRODUCT_ROADMAP.md`).
+
+**Estimated Scope:** M (pending channel decision)
+
+---
+
+### Repair Reports, Approvals & Admin Console *(not yet scoped)*
+
+Factory-facing Repair Report workflow (multiple reports per service job, parts, append-only approval log — [DECISIONS.md](DECISIONS.md) #016) and brand/user/settings management for Admins.
+
+**Estimated Scope:** L
+
+---
+
+### QA Hardening & Launch Readiness *(not yet scoped)*
+
+Print-layout implementation for all three V1 documents (per `PRINT_SPECIFICATIONS.md` — Service Request print preview already exists, Repair Report and Return Form don't yet), automated test coverage (no test runner exists yet at all), cross-device QA, performance/error-state review.
+
+**Estimated Scope:** M

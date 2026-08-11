@@ -1,0 +1,45 @@
+# F5d-6 — prepared, NOT applied to any real GCP project.
+#
+# Custom IAM role definition for the Cloudflare Worker's production
+# Firestore access (see ../PRODUCTION_FIRESTORE_ACCESS.md for the full
+# design rationale and the exact `gcloud` command that would create this
+# role). This file is inert on its own — `gcloud iam roles create` (or
+# `update`) must be run explicitly, by a human, after approval, pointing at
+# this file. Nothing in this repository runs that command automatically.
+#
+# Why a custom role instead of a predefined one:
+# - roles/datastore.viewer (get, list) has no write access — cannot patch
+#   retentionStatus.
+# - roles/datastore.user grants datastore.entities.* — get, list, create,
+#   AND delete. The delete grant is explicitly disallowed for this service
+#   account (see PRODUCTION_FIRESTORE_ACCESS.md's Security Review).
+# Verified against Google Cloud's own predefined-role permission listings
+# (docs.cloud.google.com/datastore/docs/access/iam) as of 2026-08-08 — not
+# guessed.
+#
+# IMPORTANT LIMITATION (documented in full in PRODUCTION_FIRESTORE_ACCESS.md):
+# Firestore/Datastore IAM permissions are granted at the database level.
+# There is no IAM mechanism to scope datastore.entities.* permissions to a
+# single collection (e.g. serviceJobAttachments only) — a service account
+# holding this role can get/list/update entities in ANY collection in the
+# luxace-service default Firestore database (products, customers,
+# serviceJobs, serviceJobAttachments alike), not just the one this Worker's
+# code actually touches. The real boundary is enforced by
+# worker/src/firestoreClient.ts's code (two operations, one collection,
+# reviewed and narrow) — not by IAM. Flagging this honestly rather than
+# implying a scoping guarantee IAM cannot actually provide.
+
+title: "Firestore Retention & Service Job Allocation (Service Tech Worker)"
+description: >-
+  Narrow read, create, and update access to Firestore entities for the Cloudflare
+  Worker's attachment retention and Service Job allocation flows. No
+  delete, no database/index/backup administration, no IAM management.
+  Not scoped to a single collection — enforced by application code, not
+  IAM.
+stage: GA
+includedPermissions:
+  - datastore.databases.get
+  - datastore.entities.get
+  - datastore.entities.list
+  - datastore.entities.update
+  - datastore.entities.create

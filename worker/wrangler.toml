@@ -1,0 +1,40 @@
+name = "service-tech-files-worker"
+main = "src/index.ts"
+compatibility_date = "2026-08-08"
+
+# F5a: local development only — this Worker has never been deployed.
+# `account_id` is intentionally left unset; it's required for `wrangler
+# deploy` but not for `wrangler dev`'s local (default, non-remote) mode,
+# which simulates R2 entirely in-process via Miniflare. Fill it in only when
+# a real deploy is explicitly approved (see worker/README.md).
+
+[[r2_buckets]]
+binding = "ATTACHMENTS_BUCKET"
+bucket_name = "service-tech-attachments-prod"
+# F5d-12 (2026-08-09): real production bucket, created via
+# `wrangler r2 bucket create service-tech-attachments-prod` after explicit
+# user approval — see worker/PRODUCTION_FIRESTORE_ACCESS.md's "F5d-12"
+# section for the full record. `wrangler dev`'s local (default) mode still
+# never touches this real bucket — it continues to simulate the
+# ATTACHMENTS_BUCKET binding entirely in-process via Miniflare, so local
+# development behavior is unchanged by this switch.
+
+[vars]
+# Comma-separated list of origins allowed to call this Worker via fetch()
+# from a browser. Local Vite dev server default; adjust per environment.
+ALLOWED_ORIGINS = "http://localhost:5173"
+
+# F5d-5: the Firestore project ID is not a secret — mirrors
+# VITE_FIREBASE_PROJECT_ID already being public in .env.example. The
+# credential that actually authorizes access (GOOGLE_SERVICE_ACCOUNT_EMAIL/
+# GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY) is deliberately NOT here — those
+# become `wrangler secret put` values only, never a [vars] entry, and do
+# not exist anywhere yet (no real service account has been created — see
+# worker/README.md). FIRESTORE_EMULATOR_HOST is set locally via .dev.vars
+# only, never here — its presence is what tells googleAuth.ts to skip real
+# Google auth entirely, and a real deploy must never accidentally have it set.
+FIRESTORE_PROJECT_ID = "luxace-service"
+
+# Cron is deliberately absent from the default deployment configuration.
+# A future activation requires its own explicitly approved configuration and
+# deploy action; deploying ordinary Worker code must never register a trigger.
