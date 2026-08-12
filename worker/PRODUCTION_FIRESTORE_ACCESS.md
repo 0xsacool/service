@@ -1,5 +1,24 @@
-# Production Firestore Access — Setup Plan (F5d-6 / F5d-7 / F5d-8 / F5d-9 / F5d-10 / F5d-10.1 / F5d-10.2 / F5d-10.3 / F5d-11 / F5d-12 / F5d-13 / F5d-14 / F5d-15 / F5d-16 / F5d-17)
+# Production Firestore Access — Setup Plan (F5d-6 / F5d-7 / F5d-8 / F5d-9 / F5d-10 / F5d-10.1 / F5d-10.2 / F5d-10.3 / F5d-11 / F5d-12 / F5d-13 / F5d-14 / F5d-15 / F5d-16 / F5d-17 / F5d-45 / F5d-46)
 
+> **Status as of F5d-46 (2026-08-12): GATE 7 COMPLETE — Worker deployed to
+> production.** `service-tech-files-worker` is live at version
+> `e1e11e81-04d6-4cf7-bc5b-9b5f31ac26d4` (version number 14), 100% traffic.
+> Rollback candidate `9a8b83f2-861d-4700-9b4a-05260c4ee661` (version 11)
+> remains available; rollback was not needed. Post-deploy unauthenticated/
+> read-only smoke matched the F5d-44 source review exactly: `/health` 200,
+> unauthenticated `POST /service-jobs` and file `GET` both 401, both Public
+> Tracking routes generic 404, allowed-origin CORS preflight 204 with
+> `Authorization`/`Idempotency-Key` allowed, disallowed origin gets no CORS
+> grant. Bindings (`FIRESTORE_PROJECT_ID`, `ALLOWED_ORIGINS`,
+> `ATTACHMENTS_BUCKET`), secret names, the five-permission IAM role (no
+> `datastore.entities.delete`), Cron (none), Queues (none), and
+> `deletionExecutor` (unwired) are all unchanged from what F5d-44 reviewed.
+> `PUBLIC_TRACKING_ENABLED` remains absent. See "F5d-45/46 — Gate 7 Worker
+> Production Rollout" at the end of this document for the full record. **No
+> real authenticated `POST /service-jobs` allocation has been executed in
+> production yet** — that remains its own separate, explicitly approved
+> acceptance micro-gate, not performed this sprint.
+>
 > **Status as of F5d-17 (2026-08-09): Firestore post-delete lifecycle
 > IMPLEMENTED — executor still UNWIRED.** F5d-16's Option C was approved
 > (DECISIONS.md #025): `deletedAt: string | null` added to `Attachment`
@@ -3249,3 +3268,57 @@ approved seed job and unclassified `BRN-2026-000001`; it remains unclassified
 and must not receive `brandIds` without a separate decision. No customer or
 Service Job write, Rules/IAM/Auth change, Worker deployment, R2 mutation, or
 Cron change occurred; `BRN-2026-000001` remains untouched.
+
+## F5d-45/46 — Gate 7 Worker Production Rollout (2026-08-12)
+
+Gate 7 is complete. Following F5d-44's independent source review (no
+blocker, no source patch), `service-tech-files-worker` was deployed and is
+live at version `e1e11e81-04d6-4cf7-bc5b-9b5f31ac26d4` (version number 14),
+100% traffic. The prior version `9a8b83f2-861d-4700-9b4a-05260c4ee661`
+(version 11) remains available as the rollback candidate; rollback was not
+required.
+
+**Live smoke results (unauthenticated/read-only only, no durable write
+attempted):**
+
+- `GET /health` → 200.
+- Unauthenticated `POST /service-jobs` → 401.
+- Unauthenticated file `GET` → 401.
+- Both Public Tracking routes (`POST /public/tracking/{reference}` and
+  `POST /public/tracking`) → generic 404, matching the F5d-39A/F5d-44
+  disabled-by-default containment.
+- Allowed-origin (`http://localhost:5173`) CORS preflight → 204, correct
+  origin echoed, `Authorization` and `Idempotency-Key` both present in
+  `Access-Control-Allow-Headers`.
+- A disallowed origin's preflight received no CORS grant (no
+  `Access-Control-Allow-Origin` header) — never a wildcard.
+
+All results match F5d-44's reviewed expectations exactly; no discrepancy
+between source review and live behavior was found.
+
+**Configuration confirmed unchanged from the reviewed source:**
+`FIRESTORE_PROJECT_ID=luxace-service`,
+`ALLOWED_ORIGINS=http://localhost:5173`,
+`ATTACHMENTS_BUCKET=service-tech-attachments-prod`; secret names only
+(`GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`) —
+values never read or recorded; `PUBLIC_TRACKING_ENABLED` absent; no Cron
+trigger; no Queues; `deletionExecutor` remains unwired, unreachable from
+`index.ts`. IAM remains the five-permission `firestoreRetentionSweeper`
+role (`datastore.databases.get`, `datastore.entities.get/list/update/create`);
+`datastore.entities.delete` remains absent. The live Firestore Rules
+checksum (`E300D6046623945375283605CFBE3BBDFA7F179E12554EE39803A0F50E002589`)
+and the Gate 5 migration state (7/7 approved Service Jobs `brandId`, 7/7
+reviewed customers `brandIds`, `BRN-2026-000001` protected at update time
+`2026-08-08T06:19:09.065089Z`) are all unchanged by this Worker rollout.
+
+**Remaining acceptance item.** No real authenticated `POST /service-jobs`
+call has been executed against production. The privileged allocator has
+passed source review (F5d-44), the full offline/emulator Worker test suite
+(187 checks), and unauthenticated live smoke — but not a genuine
+authenticated end-to-end production allocation, which would be the first
+durable write this Worker performs in production. This is recorded as the
+next explicit, separately approved acceptance micro-gate, deliberately not
+performed as part of Gate 7.
+
+No Rules, IAM, Auth, R2, Cron, or frontend change occurred as part of
+Gate 7.

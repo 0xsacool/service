@@ -60,14 +60,14 @@ clients, one collection, by design (DECISIONS.md #022).
 | Item                                                            | Value                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Cloudflare Worker name                                          | `service-tech-files-worker`                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Worker deployment status                                        | **Deployed, live** — 100% traffic on version `9a8b83f2-861d-4700-9b4a-05260c4ee661` (version number 11), created 2026-08-09T05:09:20Z                                                                                                                                                                                                                                                                                           |
-| Worker bindings (confirmed via `wrangler versions view --json`) | `ALLOWED_ORIGINS` (plain text), `ATTACHMENTS_BUCKET` (R2 bucket binding), `FIRESTORE_PROJECT_ID` (plain text), `GOOGLE_SERVICE_ACCOUNT_EMAIL` (secret), `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` (secret) — exactly 5, nothing more                                                                                                                                                                                                 |
+| Worker deployment status                                        | **Deployed, live** — 100% traffic on version `e1e11e81-04d6-4cf7-bc5b-9b5f31ac26d4` (version number 14), Gate 7 (F5d-46). Rollback candidate `9a8b83f2-861d-4700-9b4a-05260c4ee661` (version 11) remains available; rollback was not required                                                                                                                                                                                   |
+| Worker bindings (confirmed via `wrangler versions view --json`) | `ALLOWED_ORIGINS` (plain text), `ATTACHMENTS_BUCKET` (R2 bucket binding), `FIRESTORE_PROJECT_ID` (plain text), `GOOGLE_SERVICE_ACCOUNT_EMAIL` (secret), `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` (secret) — exactly 5, nothing more, unchanged by Gate 7                                                                                                                                                                            |
 | R2 bucket name                                                  | `service-tech-attachments-prod` (created F5d-12)                                                                                                                                                                                                                                                                                                                                                                                |
 | R2 bucket status                                                | Active, region APAC, Standard storage class, **0 objects**, no public access, no custom domain                                                                                                                                                                                                                                                                                                                                  |
 | Firestore project                                               | `luxace-service`                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Firestore database                                              | `(default)`                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Service account                                                 | `firestore-retention-sweeper@luxace-service.iam.gserviceaccount.com`                                                                                                                                                                                                                                                                                                                                                            |
-| IAM custom role                                                 | `projects/luxace-service/roles/firestoreRetentionSweeper` — exactly 4 permissions: `datastore.databases.get`, `datastore.entities.get`, `datastore.entities.list`, `datastore.entities.update`. Exactly 1 IAM binding exists for this role (this service account only).                                                                                                                                                         |
+| IAM custom role                                                 | `projects/luxace-service/roles/firestoreRetentionSweeper` — five approved permissions as of Gate 3 (F5d-38): `datastore.databases.get`, `datastore.entities.get`, `datastore.entities.list`, `datastore.entities.update`, `datastore.entities.create`. `datastore.entities.delete` remains absent. Exactly 1 IAM binding exists for this role (this service account only).                                                      |
 | Secrets (names only — see Security note below)                  | `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` — confirmed via `wrangler secret list`, exactly these two, nothing else                                                                                                                                                                                                                                                                                    |
 | Cron status                                                     | **No default trigger and none active on Cloudflare.** `worker/wrangler.toml` contains no `[triggers]` section, while the deployed Worker bundle retains a `scheduled()` handler. Normal code deployment cannot activate Cron; any future activation requires a separate approved configuration and deploy action. The live version has `"handlers": ["scheduled", "fetch"]` but no registered Cron trigger.                     |
 | R2 status                                                       | Enabled on the Cloudflare account, one bucket exists (above), no public access configured, no custom domain                                                                                                                                                                                                                                                                                                                     |
@@ -1238,3 +1238,40 @@ candidates. One links to both an approved seed job and unclassified
 No customer PII was recorded. No customer or Service Job backfill occurred;
 `BRN-2026-000001` remains untouched. The next gate is controlled
 data-migration planning only.
+
+## F5d-45/46 Gate 7 Worker production rollout complete
+
+Gate 7 is complete. `service-tech-files-worker` is live at version
+`e1e11e81-04d6-4cf7-bc5b-9b5f31ac26d4` (version number 14), 100% traffic.
+The prior version `9a8b83f2-861d-4700-9b4a-05260c4ee661` (version 11) remains
+available as the rollback candidate; rollback was not required.
+
+Live smoke checks (unauthenticated/read-only only): `GET /health` returned
+200; unauthenticated `POST /service-jobs` returned 401; an unauthenticated
+file `GET` returned 401; both Public Tracking routes returned the generic
+404; an allowed-origin (`localhost`) CORS preflight returned 204 with the
+correct origin echoed back and both `Authorization` and `Idempotency-Key`
+allowed; a disallowed origin received no CORS grant.
+
+Configuration confirmed unchanged from the reviewed source (F5d-44):
+`FIRESTORE_PROJECT_ID=luxace-service`, `ALLOWED_ORIGINS=http://localhost:5173`,
+`ATTACHMENTS_BUCKET=service-tech-attachments-prod`, secret names
+`GOOGLE_SERVICE_ACCOUNT_EMAIL`/`GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` (values
+never recorded), `PUBLIC_TRACKING_ENABLED` absent, no Cron trigger, no
+Queues, `deletionExecutor` still unwired. IAM remains the five-permission
+`firestoreRetentionSweeper` role with `datastore.entities.delete` absent.
+The live Firestore Rules checksum
+(`E300D6046623945375283605CFBE3BBDFA7F179E12554EE39803A0F50E002589`) and the
+Gate 5 migration state (7/7 Service Jobs `brandId`, 7/7 customers
+`brandIds`, `BRN-2026-000001` protected at update time
+`2026-08-08T06:19:09.065089Z`) are all unchanged by this Worker rollout.
+
+**Remaining acceptance item:** no authenticated `POST /service-jobs` call has
+been executed against production yet. The privileged allocator has passed
+source review, the full offline/emulator test suite, and unauthenticated
+live smoke — but not a real authenticated end-to-end production allocation.
+This is recorded as the next explicit, separately approved acceptance
+micro-gate, not performed as part of Gate 7.
+
+No Rules, IAM, Auth, R2, Cron, or frontend change occurred as part of
+Gate 7.

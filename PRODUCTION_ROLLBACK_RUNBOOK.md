@@ -183,6 +183,40 @@ config/` pattern) and must never be committed; this repository records
   recorded pre-Gate-6 checksum from the retained `.f5d42-firebase-config/`
   artifact, per the Firestore Rules gate row above.
 
+## F5d-45/46 Gate 7 Worker deployment evidence
+
+- Gate 7 deployed the F5d-44-reviewed Worker source. `service-tech-files-worker`
+  is live at version `e1e11e81-04d6-4cf7-bc5b-9b5f31ac26d4` (version number
+  14), 100% traffic. The rollback candidate is
+  `9a8b83f2-861d-4700-9b4a-05260c4ee661` (version 11); rollback was not
+  required.
+- Post-deploy live smoke (unauthenticated/read-only only, matching the
+  Worker gate row's "avoid durable writes" acceptance guidance): `GET
+/health` → 200; unauthenticated `POST /service-jobs` → 401; unauthenticated
+  file `GET` → 401; both Public Tracking routes → generic 404; allowed
+  (`localhost`) CORS preflight → 204 with correct origin,
+  `Authorization`/`Idempotency-Key` both allowed; disallowed origin → no
+  CORS grant. All match F5d-44's expected behavior.
+- Bindings/secrets/IAM/Rules/migration state all confirmed unchanged from
+  the reviewed source: `FIRESTORE_PROJECT_ID`, `ALLOWED_ORIGINS`,
+  `ATTACHMENTS_BUCKET` as before; secret names only, no values recorded;
+  `PUBLIC_TRACKING_ENABLED` absent; no Cron trigger; no Queues;
+  `deletionExecutor` unwired; IAM five-permission role with
+  `datastore.entities.delete` absent; live Rules checksum
+  `E300D6046623945375283605CFBE3BBDFA7F179E12554EE39803A0F50E002589`
+  unchanged; 7/7 Service Jobs and 7/7 customers migration state and
+  `BRN-2026-000001` protection unchanged.
+- Remaining acceptance item: a real authenticated `POST /service-jobs`
+  production allocation has not been executed. This is the next explicit,
+  separately approved acceptance micro-gate per the Worker gate row's
+  guidance that the first durable allocator write must not be folded into
+  routine smoke testing.
+- Rollback for this gate, if ever needed: shift 100% traffic back to
+  version `9a8b83f2-861d-4700-9b4a-05260c4ee661`; do not delete version
+  history, per the Worker gate row above.
+- No Rules, IAM, Auth, R2, Cron, or frontend change occurred as part of
+  Gate 7.
+
 ## Deferred test improvement
 
 The Rules emulator suite covers legacy updates and hash immutability. A future

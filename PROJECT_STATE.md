@@ -724,6 +724,40 @@ IAM remains the five-permission `firestoreRetentionSweeper` role
 `entities.create`; `entities.delete` still absent). No Worker, frontend, R2,
 Auth, or Cron change occurred as part of Gate 6.
 
+## F5d-45/46 — Gate 7 Worker production rollout complete
+
+Gate 7 is complete. `service-tech-files-worker` is now live at version
+`e1e11e81-04d6-4cf7-bc5b-9b5f31ac26d4` (version number 14), 100% traffic.
+The rollback candidate `9a8b83f2-861d-4700-9b4a-05260c4ee661` (version 11)
+remains available; rollback was not required.
+
+Live, unauthenticated/read-only smoke results: `GET /health` → 200;
+unauthenticated `POST /service-jobs` → 401; an unauthenticated file `GET` →
+401; both Public Tracking routes → generic 404; an allowed-origin
+(`localhost`) CORS preflight → 204 with the correct origin and both
+`Authorization`/`Idempotency-Key` allowed; a disallowed origin received no
+CORS grant. All results match the F5d-44 source review's expectations
+exactly.
+
+Configuration and security controls are unchanged from what F5d-44
+reviewed: `FIRESTORE_PROJECT_ID=luxace-service`,
+`ALLOWED_ORIGINS=http://localhost:5173`,
+`ATTACHMENTS_BUCKET=service-tech-attachments-prod`, secret names only
+(`GOOGLE_SERVICE_ACCOUNT_EMAIL`/`GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`,
+values never recorded), `PUBLIC_TRACKING_ENABLED` absent, no Cron trigger,
+no Queues, `deletionExecutor` unwired. IAM remains the five-permission
+`firestoreRetentionSweeper` role with `datastore.entities.delete` absent.
+The live Firestore Rules checksum
+(`E300D6046623945375283605CFBE3BBDFA7F179E12554EE39803A0F50E002589`) and the
+Gate 5 migration state (7/7 Service Jobs, 7/7 customers, `BRN-2026-000001`
+protected at update time `2026-08-08T06:19:09.065089Z`) are unchanged.
+
+Authenticated end-to-end allocator acceptance remains pending: no real
+authenticated `POST /service-jobs` call has been executed against
+production. This is the next explicit, separately approved acceptance
+micro-gate — not performed as part of Gate 7. No Rules, IAM, Auth, R2,
+Cron, or frontend change occurred as part of this gate.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Each new repository's backend swap (Customer, Service Job, Search, Registered Products) gets the same doc-plus-approval treatment Product Master got, not a silent bulk migration.

@@ -371,22 +371,31 @@ exists yet at all (see "Firestore access" above).
   Rate limiting is explicitly not implemented this sprint (see the F5
   proposal's Risks section) — flagged, not solved.
 
-## Deploying for real — status as of F5d-12 (2026-08-09)
+## Deploying for real — status as of F5d-46 Gate 7 (2026-08-12)
 
 What's live today: the real R2 bucket (`service-tech-attachments-prod`,
 F5d-12) is created and bound; the GCP service account/IAM role/credential
-(F5d-8/F5d-9, fixed in F5d-10.3) is installed and working; the Worker is
-deployed with the real `fetch`/`scheduled` code
-(`9a8b83f2-861d-4700-9b4a-05260c4ee661`, 100% traffic). `ALLOWED_ORIGINS`
-still carries the local dev default (`http://localhost:5173`) — not yet
-tightened to a real deployed app origin, since the main Vite app itself
-hasn't been deployed anywhere yet. Cron remains deliberately disabled.
-The default `wrangler.toml` now has no `[triggers]` section, so normal code
+(F5d-8/F5d-9, fixed in F5d-10.3; five permissions since Gate 3/F5d-38) is
+installed and working; the Worker is deployed with the real
+`fetch`/`scheduled` code (`e1e11e81-04d6-4cf7-bc5b-9b5f31ac26d4`, version
+14, 100% traffic — Gate 7/F5d-46). The prior version
+`9a8b83f2-861d-4700-9b4a-05260c4ee661` remains available as the rollback
+candidate; rollback was not needed. `ALLOWED_ORIGINS` still carries the
+local dev default (`http://localhost:5173`) — not yet tightened to a real
+deployed app origin, since the main Vite app itself hasn't been deployed
+anywhere yet; that update is its own separate, explicitly gated
+configuration-only redeploy. Cron remains deliberately disabled. The
+default `wrangler.toml` still has no `[triggers]` section, so normal code
 deployment cannot activate it; enabling Cron is still a separate,
-explicitly-gated step, same as any future retention-deletion feature. See
-[`PRODUCTION_FIRESTORE_ACCESS.md`](PRODUCTION_FIRESTORE_ACCESS.md) for
-the full sprint-by-sprint history of how each piece was verified before
+explicitly-gated step, same as any future retention-deletion feature.
+Public Tracking remains disabled by default (`PUBLIC_TRACKING_ENABLED`
+absent). See [`PRODUCTION_FIRESTORE_ACCESS.md`](PRODUCTION_FIRESTORE_ACCESS.md)
+for the full sprint-by-sprint history of how each piece was verified before
 being turned on.
+
+No real authenticated `POST /service-jobs` allocation has been executed in
+production yet — that remains its own separate, explicitly approved
+acceptance micro-gate.
 
 Every step above went through the same explicit-confirmation process
 every live Cloudflare/Firebase change in this project has gone through —
