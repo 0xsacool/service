@@ -687,6 +687,43 @@ redeploy the captured prior ruleset, per `PRODUCTION_ROLLBACK_RUNBOOK.md`'s
 existing Firestore Rules gate row; no rules deployment, capture, or rollback
 was performed in F5d-41.
 
+## F5d-42/43 — Gate 6 Firestore Rules deployment complete
+
+Gate 6 is complete. The reviewed `firestore.rules` source (F5d-41, unchanged
+since) is now the live production ruleset for project `luxace-service`:
+release `projects/luxace-service/releases/cloud.firestore`, ruleset ID
+`7538645e-5898-4238-8d2a-33be07b01209`, created `2026-08-12T15:10:50.208079Z`,
+live SHA-256 `E300D6046623945375283605CFBE3BBDFA7F179E12554EE39803A0F50E002589`.
+The pre-Gate-6 ruleset's SHA-256 is recorded as the rollback target,
+`B5DAED02B5B741B1BC92E9429FCDE3BB0199D8F281D856193AD996A28C072533`; the
+rollback artifact (prior rules source plus release metadata) is kept
+read-only under the locally gitignored `.f5d42-firebase-config/` and is
+never committed, matching the existing secrets/credentials exclusion pattern.
+
+Post-deploy read-only production smoke checks confirm fail-closed behavior
+matches the reviewed source: unauthenticated Service Job read denied (403),
+protected `BRN-2026-000001` read denied (403), and `numberSequences`,
+`serviceJobIntakeKeys`, and `serviceReports` all denied (the first two by
+their explicit `if false` rule, `serviceReports` by Firestore's
+default-deny-on-absence, per the F5d-41 wording correction). `BRN-2026-000001`
+remains unmodified: no `brandId`, update time still exactly
+`2026-08-08T06:19:09.065089Z`. The Gate 5 migration remains intact under the
+now-live Rules: 7/7 approved Service Jobs carry `brandId: "bruno-thailand"`
+and 7/7 reviewed legacy customers carry `brandIds: ["bruno-thailand"]`.
+
+Authenticated approved-staff production reads were **not** exercised with a
+real Firebase ID token during Gate 6 (no ID-token session was available in
+this environment) — this is a deliberately recorded remaining production
+acceptance check for later Worker/frontend QA, not a Gate 6 failure; the
+emulator suite already proves this exact scenario (11/11 passing, including
+approved same-brand staff, cross-brand deny, missing-profile deny, and
+malformed-profile deny — see F5d-41).
+
+IAM remains the five-permission `firestoreRetentionSweeper` role
+(`datastore.databases.get`/`entities.get`/`entities.list`/`entities.update`/
+`entities.create`; `entities.delete` still absent). No Worker, frontend, R2,
+Auth, or Cron change occurred as part of Gate 6.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Each new repository's backend swap (Customer, Service Job, Search, Registered Products) gets the same doc-plus-approval treatment Product Master got, not a silent bulk migration.

@@ -150,6 +150,39 @@ record.
   separate, not-yet-approved gate. The currently deployed ruleset is still
   the F5d-36 old/permissive baseline.
 
+## F5d-42/43 Gate 6 Rules deployment evidence
+
+- Gate 6 deployed the reviewed source `firestore.rules` (unchanged since
+  F5d-41) via `firebase deploy --only firestore:rules --project
+luxace-service`, producing release `projects/luxace-service/releases/
+cloud.firestore`, ruleset `7538645e-5898-4238-8d2a-33be07b01209`, created
+  `2026-08-12T15:10:50.208079Z`, live SHA-256
+  `E300D6046623945375283605CFBE3BBDFA7F179E12554EE39803A0F50E002589`.
+- The pre-Gate-6 ruleset's rollback checksum is
+  `B5DAED02B5B741B1BC92E9429FCDE3BB0199D8F281D856193AD996A28C072533`. Its
+  rollback artifact (prior rules source and release metadata) is retained
+  under `.f5d42-firebase-config/`, which is gitignored (`.f5d*-firebase-
+config/` pattern) and must never be committed; this repository records
+  only the checksum and location, never its contents.
+- Post-deploy read-only checks confirm: unauthenticated Service Job read
+  denied, protected `BRN-2026-000001` read denied, `numberSequences` denied
+  (explicit rule), `serviceJobIntakeKeys` denied (explicit rule),
+  `serviceReports` denied (default-deny, no match block). `BRN-2026-000001`
+  is unmodified — no `brandId`, update time still exactly
+  `2026-08-08T06:19:09.065089Z`. The 7/7 Service Job and 7/7 customer Gate 5
+  migration remains intact and correctly scoped under the now-live Rules.
+- Authenticated approved-staff production reads were not exercised with a
+  real Firebase ID token this gate (no ID-token session available) and
+  remain a recorded, non-blocking acceptance check for later Worker/frontend
+  QA — not a Gate 6 failure. Rules emulator coverage already proves this
+  scenario (11/11 passing, F5d-41).
+- No Worker, frontend, R2, Auth, or Cron change occurred as part of Gate 6.
+  IAM remains the five-permission `firestoreRetentionSweeper` role with
+  `datastore.entities.delete` still absent.
+- Rollback for this gate, if ever needed: redeploy the ruleset matching the
+  recorded pre-Gate-6 checksum from the retained `.f5d42-firebase-config/`
+  artifact, per the Firestore Rules gate row above.
+
 ## Deferred test improvement
 
 The Rules emulator suite covers legacy updates and hash immutability. A future
