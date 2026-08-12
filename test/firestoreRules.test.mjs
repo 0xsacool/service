@@ -125,6 +125,18 @@ test('staff profiles are readable only by their owner and never client-writable'
   );
 });
 
+test('authenticated staff without a profile or with a non-canonical brand are denied', async () => {
+  const noProfileDb = staffDb('staff-no-profile');
+  await assertFails(getDoc(doc(noProfileDb, 'serviceJobs', 'job-bruno')));
+  await assertFails(getDoc(doc(noProfileDb, 'customers', 'customer-bruno')));
+  await assertFails(getDoc(doc(noProfileDb, 'products', 'product-1')));
+
+  const malformedDb = staffDb('staff-malformed');
+  await assertFails(getDoc(doc(malformedDb, 'serviceJobs', 'job-bruno')));
+  await assertFails(getDoc(doc(malformedDb, 'customers', 'customer-bruno')));
+  await assertFails(getDoc(doc(malformedDb, 'products', 'product-1')));
+});
+
 test('same-brand ServiceJob get and scoped list are allowed', async () => {
   const brunoDb = staffDb(brunoUid);
   await assertSucceeds(getDoc(doc(brunoDb, 'serviceJobs', 'job-bruno')));

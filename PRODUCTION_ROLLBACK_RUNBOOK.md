@@ -122,6 +122,34 @@ record.
 - No production mutation occurred. `BRN-2026-000001` remains protected; Cron
   is inactive and `deletionExecutor` is unwired.
 
+## F5d-40/41 Gate 5 completion evidence
+
+- Gate 5.1 applied the approved `brandId: "bruno-thailand"` backfill to
+  exactly the seven approved `SRV-*` Service Jobs listed in the Data backfill
+  row above, via an atomic multi-document `documents:commit` with a
+  per-document `currentDocument.updateTime` precondition and a `brandId`-only
+  update mask, matching the technique this row specifies.
+- Gate 5.2 applied the same technique with a `brandIds`-only update mask,
+  adding `brandIds: ["bruno-thailand"]` to the six verified legacy customers
+  identified in the F5d-39A classification. No customer document ID or other
+  PII is recorded in this runbook or in `PROJECT_STATE.md`.
+- Gate 5.3 separately reviewed and then migrated the one remaining customer
+  whose relationship also touched protected `BRN-2026-000001`, after
+  confirming (source-verified, not assumed) that no Service Job holds a
+  stored customer foreign key, so the membership grant cannot cascade into or
+  reclassify `BRN-2026-000001` or any Service Job.
+- `BRN-2026-000001` remains protected and unmodified: no `brandId`, update
+  time still exactly `2026-08-08T06:19:09.065089Z`.
+- No Worker, Rules, Auth, IAM, R2, frontend, Cron, or `deletionExecutor`
+  change occurred as part of Gate 5. The Data backfill row above is complete;
+  its rollback procedure (restore each captured prior document exactly,
+  under a fresh post-write `updateTime` precondition, separately approved)
+  remains available and untested in production.
+- F5d-41 re-reviewed `firestore.rules` against this migrated state and found
+  no blocking gap; the Firestore Rules gate row above remains the next,
+  separate, not-yet-approved gate. The currently deployed ruleset is still
+  the F5d-36 old/permissive baseline.
+
 ## Deferred test improvement
 
 The Rules emulator suite covers legacy updates and hash immutability. A future

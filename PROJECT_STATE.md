@@ -634,6 +634,59 @@ occurred; `BRN-2026-000001` remains protected and unmodified. The next gate is
 controlled data-migration planning only, not a Worker, Rules, or frontend
 rollout.
 
+## F5d-40/41 — Gate 5 Controlled Data Migration complete; Rules review
+
+Gate 5 is complete. The seven approved Service Jobs (`SRV-2026-0481`,
+`SRV-2026-0479`, `SRV-2026-0477`, `SRV-2026-0475`, `SRV-2026-0472`,
+`SRV-2026-0469`, `SRV-2026-0465`) now carry `brandId: "bruno-thailand"`
+(Gate 5.1). All seven of the previously-classified legacy customers now carry
+`brandIds: ["bruno-thailand"]`: the six candidates verified in F5d-39A (Gate
+5.2), plus the one customer whose relationship also touched protected
+`BRN-2026-000001`, migrated only after separate review confirmed the
+membership grant does not touch or reclassify that record (Gate 5.3). No
+customer PII or document ID is recorded here or in any gate artifact; F5d-40B
+independently verified from source that `brandIds` is an additive,
+non-exclusive membership array and that no Service Job holds a stored
+customer foreign key, so this backfill cannot cascade into or alter any
+Service Job. `BRN-2026-000001` remains unmodified: no `brandId`, update time
+still `2026-08-08T06:19:09.065089Z`. No Rules, Worker, frontend, IAM, Auth,
+R2, Cron, or `deletionExecutor` change occurred as part of Gate 5.
+
+F5d-41 independently re-reviewed `firestore.rules` against this now-migrated
+state. Every collection's read/create/update/delete policy, brand scoping,
+and legacy/missing-field behavior was re-verified against source (not
+assumed from prior reports); no wildcard or permissive fallthrough rule
+exists. `BRN-2026-000001` and any still-unbackfilled legacy record fail
+closed under the reviewed Rules (denied `get`, silently excluded from
+`array-contains`/brand-scoped `list`), which does not affect any branded
+customer or Service Job query. `numberSequences` has an explicit
+`match`/`allow read, write: if false` block (fully denied by name);
+`serviceReports` has no `match` block at all and is denied only by
+Firestore's default-deny-on-absence model. Both are fully inaccessible to
+clients today — a pre-existing, already-tracked gap, not a Gate 5
+regression.
+
+The Firestore Rules emulator suite was run to completion (11/11 passing).
+One coverage gap was closed: the suite seeded an authenticated user with a
+non-canonical `staffProfiles.brandId` and implicitly relied on
+`validStaff()`'s existing `canonicalBrand()` check, but never asserted the
+resulting denial, and never exercised an authenticated user with no
+`staffProfiles` document at all. `test/firestoreRules.test.mjs` now has an
+explicit test for both cases across `serviceJobs`, `customers`, and
+`products`. No `firestore.rules` source change was needed or made. Full
+validation after this review: TypeScript build and Vite production build
+pass; ESLint and Prettier pass; the serialized application suite passes 125
+of 126 Node tests in-process (the 126th, the Firestore Rules suite, requires
+the emulator and is run separately, where it passes 11/11); Worker
+TypeScript typecheck and the full Worker test suite pass.
+
+The currently deployed production Firestore Rules remain the old/permissive
+ruleset from the F5d-36 baseline — deploying the reviewed source Rules is a
+separate, not-yet-approved gate. Rollback for that future deployment is to
+redeploy the captured prior ruleset, per `PRODUCTION_ROLLBACK_RUNBOOK.md`'s
+existing Firestore Rules gate row; no rules deployment, capture, or rollback
+was performed in F5d-41.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Each new repository's backend swap (Customer, Service Job, Search, Registered Products) gets the same doc-plus-approval treatment Product Master got, not a silent bulk migration.

@@ -501,7 +501,11 @@ and Rules enforce the same membership. New durable Service Jobs need a trusted
 customer reference in a later source phase; legacy records remain unbackfilled.
 No customer RBAC or client profile-write capability is introduced.
 
-**Status:** Decided (explicit user directive, F5d-27.1 approval).
+**Status:** Decided (explicit user directive, F5d-27.1 approval). Gate 5.2/5.3
+(see PROJECT_STATE.md) executed the `brandIds`-only backfill this decision
+authorizes for the seven reviewed legacy customers. The phone-number document
+ID scheme itself remains unmigrated and still has no authorized production
+migration.
 
 ---
 
