@@ -1208,3 +1208,33 @@ confirmed `BRN-2026-000001` has no `brandId` and retains update time
 `2026-08-08T06:19:09.065089Z`. No Rules, Auth, user, brand, staff-profile,
 Service Job, customer, R2, frontend, Worker configuration/secret, Cron, or
 deletion-executor change occurred. Gate 4 is not authorized or started.
+
+## F5d-39A Public Tracking containment and legacy preflight
+
+Gate 4 was explicitly reordered and remains unapproved. Public Tracking stays
+deferred: its rate-limit policy, trusted issuance transaction, code
+revocation/lifetime, and accurate public timeline remain future work. The
+Worker serves either public tracking POST route only when optional
+`PUBLIC_TRACKING_ENABLED` is exactly `"true"`. The binding is deliberately
+absent from `worker/wrangler.toml`; without it the generic 404 returns before
+request parsing, rate-limiter access, Firestore client construction, token/code
+lookup, or DTO construction. This is containment, not activation: no issuance
+or limiter was added. `worker/test/publicTrackingContainment.test.mts` proves
+the default disabled behavior, zero lookup/limiter calls, and no default
+deployment opt-in. Deferred behavior tests explicitly opt in as fixtures.
+
+Read-only production preflight found attachment metadata count `0` and live
+attachment count `0` for all eight reviewed Service Jobs: the seven approved
+`SRV-*` records and `BRN-2026-000001`. It did not read attachment contents or
+mutate R2. After approved `brandId` backfill, the seven can receive same-brand
+Worker attachment authorization; the protected unclassified record stays fail
+closed because it has no canonical `brandId`.
+
+Seven legacy customers were classified only from exact contact-key links in
+production. Six link exclusively to a single Service Job already explicitly
+approved for `bruno-thailand` backfill, so they are verified Bruno migration
+candidates. One links to both an approved seed job and unclassified
+`BRN-2026-000001`, so it remains unclassified and is not a migration candidate.
+No customer PII was recorded. No customer or Service Job backfill occurred;
+`BRN-2026-000001` remains untouched. The next gate is controlled
+data-migration planning only.

@@ -92,6 +92,9 @@ function createHandler(data: FakeData, allow = true): { handler: ReturnType<type
       ATTACHMENTS_BUCKET: bucket as unknown as R2Bucket,
       ALLOWED_ORIGINS: 'http://localhost:5173',
       FIRESTORE_PROJECT_ID: PROJECT_ID,
+      // Deferred routes default off. The legacy behaviour tests opt in
+      // explicitly so they remain coverage for a future approved activation.
+      PUBLIC_TRACKING_ENABLED: 'true',
     },
     bucket,
   };

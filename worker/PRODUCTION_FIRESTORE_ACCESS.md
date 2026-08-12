@@ -3216,3 +3216,36 @@ code remains the operation/collection boundary. No Worker rollout, Rules,
 Auth, brand, staff-profile, Service Job, customer, R2, secret/configuration,
 frontend, Cron, or deletion-executor change occurred. `BRN-2026-000001` still
 lacks `brandId` and retains update time `2026-08-08T06:19:09.065089Z`.
+
+## F5d-39A Public Tracking containment and read-only legacy preflight
+
+Gate 4 Worker rollout was reordered and is not approved. Public Tracking
+remains deferred because its live rate-limit policy is not approved or
+fail-closed, and trusted issuance/lifecycle work remains incomplete. Source
+requires exact optional Worker binding `PUBLIC_TRACKING_ENABLED="true"` before
+either public POST route is reachable. The binding is absent from default
+`wrangler.toml`; an ordinary Worker deploy therefore returns generic 404 before
+parsing credentials, consulting the rate-limiter seam, or constructing a
+Firestore client. This adds no issuance, rate limiting, public code, secret,
+or production configuration change. Tests assert both routes are disabled by
+default with zero Firestore/limiter calls and assert no default deployment
+opt-in.
+
+One read-only production Firestore attachment-metadata query per reviewed
+Service Job found `0` metadata documents and `0` non-deleted records for each
+of `SRV-2026-0481`, `SRV-2026-0479`, `SRV-2026-0477`, `SRV-2026-0475`,
+`SRV-2026-0472`, `SRV-2026-0469`, `SRV-2026-0465`, and
+`BRN-2026-000001`. No attachment bytes, metadata values, R2 objects, or
+customer data were emitted or changed. The seven approved Service Jobs can be
+eligible for same-brand Worker attachment authorization only after their
+separate approved `brandId` backfill; the protected unclassified record stays
+fail-closed because its canonical brand remains absent.
+
+The read-only customer ownership preflight projected only contact linkage
+fields in memory and emitted only redacted results. Six of seven legacy
+customers have exact links solely to approved `bruno-thailand` backfill jobs;
+they are verified Bruno migration candidates. One has exact links to both an
+approved seed job and unclassified `BRN-2026-000001`; it remains unclassified
+and must not receive `brandIds` without a separate decision. No customer or
+Service Job write, Rules/IAM/Auth change, Worker deployment, R2 mutation, or
+Cron change occurred; `BRN-2026-000001` remains untouched.

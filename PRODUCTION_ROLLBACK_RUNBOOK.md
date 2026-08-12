@@ -106,6 +106,22 @@ record.
   Cron, or deletion-executor change occurred. Gate 4 requires separate
   approval.
 
+## F5d-39A Gate-4 reorder and migration-preflight evidence
+
+- Gate 4 Worker rollout is reordered and remains unapproved. The next Worker
+  source carries Public Tracking containment: routes are disabled unless a
+  future separately approved deployment supplies exact optional binding
+  `PUBLIC_TRACKING_ENABLED=true`; default Worker configuration has no binding.
+- Read-only attachment inventory found zero attachment metadata and zero live
+  records for all seven approved `SRV-*` Service Jobs and protected
+  `BRN-2026-000001`. No R2 inventory or mutation was required.
+- Read-only customer relationship classification found six verified
+  `bruno-thailand` candidates and one unclassified customer whose exact link
+  includes protected `BRN-2026-000001`. Future data-backfill evidence must use
+  the approved six only unless separate review resolves the unclassified case.
+- No production mutation occurred. `BRN-2026-000001` remains protected; Cron
+  is inactive and `deletionExecutor` is unwired.
+
 ## Deferred test improvement
 
 The Rules emulator suite covers legacy updates and hash immutability. A future

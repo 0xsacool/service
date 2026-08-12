@@ -5,6 +5,11 @@ export interface Env {
   // locally). Not a secret — see cors.ts.
   ALLOWED_ORIGINS: string;
 
+  // Public Tracking is deliberately deferred. The route is unavailable unless
+  // a separately approved deployment explicitly sets this exact value to
+  // "true". It is intentionally absent from the default wrangler.toml.
+  PUBLIC_TRACKING_ENABLED?: string;
+
   // F5d-5 — Firestore access config. See googleAuth.ts/firestoreClient.ts.
   // FIRESTORE_PROJECT_ID is public (wrangler.toml [vars], mirrors
   // VITE_FIREBASE_PROJECT_ID already being public). FIRESTORE_EMULATOR_HOST

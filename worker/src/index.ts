@@ -41,6 +41,10 @@ const PUBLIC_TRACKING_CODE_PATH = '/public/tracking';
 const MAX_PUBLIC_TRACKING_BODY_BYTES = 1024;
 const SERVICE_JOBS_PATH = '/service-jobs';
 
+function isPublicTrackingEnabled(env: Env): boolean {
+  return env.PUBLIC_TRACKING_ENABLED === 'true';
+}
+
 export interface PublicTrackingRateLimiter {
   allow(request: Request): Promise<boolean>;
 }
@@ -418,6 +422,20 @@ export function createWorkerHandler(
 
     if (request.method === 'GET' && url.pathname === '/health') {
       return withCors(json({ status: 'ok' }), request, env);
+    }
+
+    // F5d-39A: the public routes must stay unreachable on every ordinary
+    // Worker rollout until a separately approved deployment explicitly opts
+    // in. Keep this guard before body parsing, rate limiting, and Firestore
+    // client construction so a disabled request has no capability lookup or
+    // Firestore side effect.
+    if (
+      request.method === 'POST' &&
+      (url.pathname.startsWith(PUBLIC_TRACKING_PREFIX) ||
+        url.pathname === PUBLIC_TRACKING_CODE_PATH) &&
+      !isPublicTrackingEnabled(env)
+    ) {
+      return withCors(publicTrackingNotFound(), request, env);
     }
 
     if (request.method === 'POST' && url.pathname.startsWith(PUBLIC_TRACKING_PREFIX)) {

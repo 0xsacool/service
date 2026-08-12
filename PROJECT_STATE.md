@@ -605,6 +605,35 @@ staff profile, Service Jobs, customers, R2, frontend, Worker configuration and
 secrets, Cron, and `deletionExecutor` are unchanged. Gate 4 Worker rollout is
 not started.
 
+## F5d-39A Public Tracking containment and legacy-data preflight
+
+Gate 4 was reordered and remains unapproved. A normal Worker deployment must
+not accidentally activate deferred Public Tracking while its rate-limit,
+issuance, lifecycle, and public-timeline decisions remain open. The Worker
+therefore treats Public Tracking as disabled unless the exact optional binding
+`PUBLIC_TRACKING_ENABLED=true` is supplied in a future separately approved
+deployment. The binding is intentionally absent from default `wrangler.toml`.
+While disabled, both public POST routes return the generic 404 before parsing
+a credential, consulting a limiter, or constructing a Firestore client. No
+issuance or rate-limiter implementation was added.
+
+A read-only production preflight found zero attachment metadata and zero live
+attachments for each of the seven approved `SRV-*` Service Jobs and protected
+`BRN-2026-000001`. After the approved seven-job `brandId` backfill, future
+Bruno staff attachment access will be brand-scoped for any subsequently
+created metadata; the protected unclassified record continues to fail closed
+because it has no canonical `brandId`.
+
+The same read-only preflight classified customers only from exact contact-key
+relationships without recording PII. Six of seven legacy customers link only
+to a Service Job explicitly approved for `bruno-thailand` backfill and are
+verified Bruno migration candidates. One customer also links to unclassified
+`BRN-2026-000001`; it remains unclassified and excluded from a future customer
+migration unless separately resolved. No Service Job or customer backfill
+occurred; `BRN-2026-000001` remains protected and unmodified. The next gate is
+controlled data-migration planning only, not a Worker, Rules, or frontend
+rollout.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Each new repository's backend swap (Customer, Service Job, Search, Registered Products) gets the same doc-plus-approval treatment Product Master got, not a silent bulk migration.
