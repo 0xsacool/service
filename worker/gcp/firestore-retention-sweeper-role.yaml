@@ -1,11 +1,13 @@
-# F5d-6 — prepared, NOT applied to any real GCP project.
+# F5d-6 prepared this role definition. F5d-38 applied its reviewed five
+# permissions to the existing production custom role after a separately
+# approved preflight; this file remains inert and does not apply IAM itself.
 #
 # Custom IAM role definition for the Cloudflare Worker's production
 # Firestore access (see ../PRODUCTION_FIRESTORE_ACCESS.md for the full
 # design rationale and the exact `gcloud` command that would create this
-# role). This file is inert on its own — `gcloud iam roles create` (or
-# `update`) must be run explicitly, by a human, after approval, pointing at
-# this file. Nothing in this repository runs that command automatically.
+# role). This file is inert on its own — any `gcloud iam roles update` must be
+# run explicitly, by a human, after approval, pointing at this file. Nothing
+# in this repository runs that command automatically.
 #
 # Why a custom role instead of a predefined one:
 # - roles/datastore.viewer (get, list) has no write access — cannot patch
@@ -21,12 +23,12 @@
 # Firestore/Datastore IAM permissions are granted at the database level.
 # There is no IAM mechanism to scope datastore.entities.* permissions to a
 # single collection (e.g. serviceJobAttachments only) — a service account
-# holding this role can get/list/update entities in ANY collection in the
+# holding this role can get/list/update/create entities in ANY collection in the
 # luxace-service default Firestore database (products, customers,
 # serviceJobs, serviceJobAttachments alike), not just the one this Worker's
 # code actually touches. The real boundary is enforced by
-# worker/src/firestoreClient.ts's code (two operations, one collection,
-# reviewed and narrow) — not by IAM. Flagging this honestly rather than
+# worker/src/firestoreClient.ts's reviewed narrow code paths — not by IAM.
+# Flagging this honestly rather than
 # implying a scoping guarantee IAM cannot actually provide.
 
 title: "Firestore Retention & Service Job Allocation (Service Tech Worker)"

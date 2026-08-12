@@ -1190,3 +1190,21 @@ Applied IAM remains database get plus entity get/list/update only, with no
 entity create or delete. Rules, Worker configuration/secrets, Cron,
 `deletionExecutor`, and Firebase Hosting are unchanged. Do not begin Gate 3
 without explicit approval.
+
+## F5d-38 Gate 3 IAM production change
+
+Gate 3 is complete. The already-bound custom role
+`projects/luxace-service/roles/firestoreRetentionSweeper` changed only by
+adding `datastore.entities.create`; no permission was removed. Its final live
+set is `datastore.databases.get` and entity get/list/update/create. Entity
+delete remains absent, and the existing Worker service-account binding is
+unchanged.
+
+This IAM permission is database-scoped, so Worker code—not IAM—continues to
+provide collection and create-only operation discipline. No Worker version was
+deployed or promoted: production remains
+`9a8b83f2-861d-4700-9b4a-05260c4ee661` at 100% traffic. Protection verification
+confirmed `BRN-2026-000001` has no `brandId` and retains update time
+`2026-08-08T06:19:09.065089Z`. No Rules, Auth, user, brand, staff-profile,
+Service Job, customer, R2, frontend, Worker configuration/secret, Cron, or
+deletion-executor change occurred. Gate 4 is not authorized or started.

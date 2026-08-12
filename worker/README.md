@@ -474,7 +474,7 @@ suite currently passes 147 checks.
 
 ## F5d-32 Service Job creation boundary (source only)
 
-`POST /service-jobs` is an authenticated, staff-profile-authorized Worker route. It accepts only a bounded `{ intake }` body plus an `Idempotency-Key` UUIDv4 header. The Worker derives brand, Bangkok numbering year, tracking/Service Request numbers, document ID, timestamps, status, and initial security fields; the browser cannot select them. One Firestore transaction creates the private idempotency record, both sequence values, and the create-only Service Job. Collision probes are bounded and `BRN-2026-000001` is never modified. This route has not been deployed. Its future production IAM prerequisite is `datastore.entities.create`; browser Rules must deny Service Job creation and the two private allocator collections.
+`POST /service-jobs` is an authenticated, staff-profile-authorized Worker route. It accepts only a bounded `{ intake }` body plus an `Idempotency-Key` UUIDv4 header. The Worker derives brand, Bangkok numbering year, tracking/Service Request numbers, document ID, timestamps, status, and initial security fields; the browser cannot select them. One Firestore transaction creates the private idempotency record, both sequence values, and a create-only Service Job. Collision probes are bounded and `BRN-2026-000001` is never modified. This route has not been deployed. F5d-38 applied its required `datastore.entities.create` permission to the existing custom role; browser Rules still must deny Service Job creation and the two private allocator collections before rollout.
 
 ## F5d-37 Gate 2 production provisioning
 
@@ -485,11 +485,19 @@ Firebase Email/Password is now enabled. The initial staff allowlist record is
 `brands/join-lux-club` documents also exist with their approved code/name
 pairs. This provisioning does not deploy this Worker or the reviewed Rules, so
 the deployed Worker remains
-`9a8b83f2-861d-4700-9b4a-05260c4ee661` at 100% traffic and Gate 3's IAM
-create permission is still absent.
+`9a8b83f2-861d-4700-9b4a-05260c4ee661` at 100% traffic.
 
 The first staff-profile write created `staffProfiles/.exists=false` because of
 a PowerShell URI-interpolation defect. It was deleted under an approved
 `updateTime` precondition and verified absent before a safe retry created the
 intended UID record. The incident is fully remediated with no residual
 production impact; this history is retained for audit.
+
+## F5d-38 Gate 3 IAM production change
+
+The existing Worker custom role now has exactly database get and entity
+get/list/update/create. F5d-38 added only entity create; entity delete remains
+absent and the service-account binding is unchanged. No Worker deploy, Rules,
+Auth, data, R2, secret/configuration, Cron, or deletion-executor change
+occurred. The Worker is still on version
+`9a8b83f2-861d-4700-9b4a-05260c4ee661` at 100% traffic.

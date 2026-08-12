@@ -2679,7 +2679,7 @@ Google Cloud supports **custom IAM roles** built from any valid permission
 string, including individual `datastore.entities.*` permissions — used here
 to close that gap.
 
-### Proposed custom role: `firestoreRetentionSweeper`
+### Historical F5d-6 proposed custom role: `firestoreRetentionSweeper`
 
 Defined in [`gcp/firestore-retention-sweeper-role.yaml`](gcp/firestore-retention-sweeper-role.yaml):
 
@@ -2690,7 +2690,10 @@ Defined in [`gcp/firestore-retention-sweeper-role.yaml`](gcp/firestore-retention
 | `datastore.entities.update` | `firestoreClient.ts`'s `updateRetentionStatus()` — the sweep's one write operation, always with `updateMask.fieldPaths=retentionStatus`.                                                                                                                                                                                                                   |
 | `datastore.databases.get`   | Included defensively — present in _both_ predefined roles above, likely needed to resolve the `(default)` database via the REST API. Not empirically confirmed against a real project this sprint (no real credential exists to test with) — verify when the real connection is first tested, and drop it from the role if it turns out to be unnecessary. |
 
-Deliberately **excluded**: `datastore.entities.create`, `datastore.entities.delete`,
+F5d-6 deliberately **excluded** `datastore.entities.create` and
+`datastore.entities.delete`. This historical four-permission proposal was
+superseded by F5d-38, which added only entity create; delete remains absent.
+The remaining exclusions were:
 anything under `datastore.indexes.*`/`datastore.databases.delete`/
 `datastore.databases.update` (no index or database administration),
 `resourcemanager.projects.*` (Console project visibility, irrelevant to
@@ -2888,14 +2891,13 @@ explicit approval — none were run.
 - Listing a service account's key IDs for either operation:
   `gcloud iam service-accounts keys list --iam-account=firestore-retention-sweeper@luxace-service.iam.gserviceaccount.com`.
 
-## What this service account cannot do
+## Historical F5d-6 service-account limitations (superseded by F5d-38)
 
 - Cannot delete any Firestore document (no `datastore.entities.delete` in
   the custom role).
-- Cannot create new Firestore documents (no `datastore.entities.create`) —
-  consistent with the Worker's own code, which never creates
-  `serviceJobAttachments` documents (only the app's upload flow does, via a
-  different auth path entirely).
+- At F5d-6 it could not create Firestore documents. F5d-38 later added the
+  narrow `datastore.entities.create` permission for the reviewed Service Job
+  allocator; this does not add delete permission or collection-level IAM scope.
 - Cannot manage IAM, indexes, backups, or database configuration (no
   `*.admin`/`*.owner`-level permissions anywhere in the custom role).
 - Has **no R2 permissions of any kind** — Cloudflare and Google Cloud are
@@ -3158,8 +3160,9 @@ current source-controlled role in `gcp/firestore-retention-sweeper-role.yaml`
 contains exactly `datastore.databases.get`, `datastore.entities.get`,
 `datastore.entities.list`, `datastore.entities.update`, and
 `datastore.entities.create`. It does **not** contain
-`datastore.entities.delete`. This is source specification only; the applied
-production role and binding remain a future read-only preflight item.
+`datastore.entities.delete`. F5d-38 later applied this exact five-permission
+definition to the existing production role; its service-account binding was
+unchanged.
 
 ## F5d-33 review / F5d-34 source-only remediation
 
@@ -3196,3 +3199,20 @@ the seven customers still lack `brandIds`. No IAM, Rules, Worker, R2, secret,
 Cron, or deletion-executor change occurred. In particular, the applied role
 remains four permissions (database get and entity get/list/update), without
 entity create or delete. Firebase Hosting remains uninitialized.
+
+## F5d-38 Gate 3 IAM production change
+
+F5d-38 updated only the existing
+`projects/luxace-service/roles/firestoreRetentionSweeper` role. Its previous
+four permissions were database get and entity get/list/update; the approved
+change added only `datastore.entities.create`, leaving no removed permission.
+The final role has exactly database get plus entity get/list/update/create and
+still has no entity delete. The existing Worker service-account binding was
+verified unchanged, with no additional binding, broader predefined role, or
+new key.
+
+IAM is database-scoped rather than collection-scoped, so the reviewed Worker
+code remains the operation/collection boundary. No Worker rollout, Rules,
+Auth, brand, staff-profile, Service Job, customer, R2, secret/configuration,
+frontend, Cron, or deletion-executor change occurred. `BRN-2026-000001` still
+lacks `brandId` and retains update time `2026-08-08T06:19:09.065089Z`.

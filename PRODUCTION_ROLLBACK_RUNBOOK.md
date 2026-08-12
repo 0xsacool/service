@@ -88,6 +88,24 @@ record.
   inactive Cron, unwired `deletionExecutor`, and uninitialized Firebase
   Hosting are unchanged. Gate 3 IAM requires a separate approval.
 
+## F5d-38 Gate 3 IAM completion evidence
+
+- The existing role `projects/luxace-service/roles/firestoreRetentionSweeper`
+  changed from four permissions (database get and entity get/list/update) to
+  exactly five by adding only `datastore.entities.create`. No permission was
+  removed and `datastore.entities.delete` remains absent.
+- The existing Worker service-account binding is unchanged; no additional IAM
+  binding, predefined role, service-account identity, or key was added.
+- Rollback evidence is the captured prior four-permission role definition.
+  Restoring it would remove entity-create capability; it requires a separate
+  approved IAM mutation.
+- `BRN-2026-000001` remains unmodified, without `brandId`, at update time
+  `2026-08-08T06:19:09.065089Z`. The Worker remains version
+  `9a8b83f2-861d-4700-9b4a-05260c4ee661` at 100% traffic.
+- No Worker, Rules, Auth, Firestore data, R2, frontend, secret/configuration,
+  Cron, or deletion-executor change occurred. Gate 4 requires separate
+  approval.
+
 ## Deferred test improvement
 
 The Rules emulator suite covers legacy updates and hash immutability. A future

@@ -585,6 +585,26 @@ Rules, Worker configuration/secrets, inactive Cron, unwired
 `deletionExecutor`, and uninitialized Firebase Hosting are unchanged. Gate 3
 IAM is not started.
 
+## F5d-38 Gate 3 IAM production change
+
+Gate 3 is complete. The existing custom role
+`projects/luxace-service/roles/firestoreRetentionSweeper` was updated from
+its four-permission state by adding only `datastore.entities.create`; no
+permission was removed. Its final permissions are database get plus entity
+get/list/update/create. `datastore.entities.delete` remains absent, and the
+existing Worker service-account binding is unchanged.
+
+The change grants database-scoped Firestore create capability to the Worker
+service account, not a collection-scoped privilege. The reviewed Worker code
+and its create-only allocator semantics remain the collection/operation
+discipline; no Worker rollout occurred. Protection checks confirmed
+`BRN-2026-000001` still lacks `brandId` and retains update time
+`2026-08-08T06:19:09.065089Z`. The production Worker remains
+`9a8b83f2-861d-4700-9b4a-05260c4ee661` at 100% traffic. Rules, Auth, brands,
+staff profile, Service Jobs, customers, R2, frontend, Worker configuration and
+secrets, Cron, and `deletionExecutor` are unchanged. Gate 4 Worker rollout is
+not started.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Each new repository's backend swap (Customer, Service Job, Search, Registered Products) gets the same doc-plus-approval treatment Product Master got, not a silent bulk migration.
