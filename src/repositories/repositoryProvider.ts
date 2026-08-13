@@ -132,6 +132,8 @@ async function createFirestoreBackedRepositoryProvider(
     await import('./firestoreProductMasterRepository');
   const { createFirestoreServiceReportsRepository } =
     await import('./firestoreServiceReportsRepository');
+  const { createFirestoreRegisteredProductsRepository } =
+    await import('./firestoreRegisteredProductsRepository');
   const serviceJobs = await createFirestoreServiceJobRepository(brandId, tokenProvider);
   return {
     ...createUnavailableRepositoryProvider(),
@@ -140,6 +142,7 @@ async function createFirestoreBackedRepositoryProvider(
     productMaster: await createFirestoreProductMasterRepository(),
     attachments: await resolveAttachmentsRepository(serviceJobs, tokenProvider),
     serviceReports: await createFirestoreServiceReportsRepository(serviceJobs),
+    registeredProducts: createFirestoreRegisteredProductsRepository(serviceJobs),
   };
 }
 

@@ -663,3 +663,15 @@ unapproved).
 **Impact:** Production activation additionally requires the reviewed IAM source specification (including `datastore.entities.create`) and a Rules deployment. No IAM, Rules, Worker, or production data change is authorized by this source-only decision. `BRN-2026-000001` is legacy and remains untouched.
 
 **Status:** Decided (F5d-32 Phase 2 approval).
+
+---
+
+## 037 - Firestore registered-products read model is derived only from real Service Job history, never fabricated or fuzzy-matched
+
+**Reason:** Firestore mode had no `registeredProducts` implementation at all (a permanent unavailable stub), so New Service Job could never reach product selection for a real customer — blocking Gate 7.1 acceptance. The real Product Instance entity (#012, `product_instances`) does not exist in Firestore; inventing one, or fuzzy-matching a Service Job's free-text `product`/`productCategory` against Product Master by name, would risk silently wrong or fabricated data.
+
+**Decision:** The Firestore registered-products read path (`firestoreRegisteredProductsRepository.ts`) derives entries only from the customer's own already brand-scoped Service Job history (grouped by serial number), reusing the existing Service Job repository rather than issuing an independent Firestore query — brand isolation is inherited by construction, not re-derived, so no Rules change is needed or made. It never fabricates a "never serviced" bucket (Mock mode's only source for that is a mock-only fixture with no real analog) and never attempts a name-based Product Master match. `RegisteredProduct.purchaseDate`/`warrantyMonths`/`warrantyExpiresAt` become optional on the shared type — genuinely absent under Firestore mode rather than backdated from `createdAt` — while `warrantyStatus` is set directly from the most recent Service Job's own recorded `warranty` flag.
+
+**Impact:** A customer with prior real Service Jobs can now select an existing product in Firestore mode; a customer with none sees an empty list, not fabricated entries. Neither `ProductCard` nor `ProductSummaryCard` renders the now-optional fields, so no UI change was needed. Discovered, not fixed, in this same review: `repositories.search` remains permanently unavailable under Firestore mode (never overridden in `createFirestoreBackedRepositoryProvider`), so `UniversalSearch` still cannot find a real customer to select in the first place — this decision does not resolve that separate gap.
+
+**Status:** Decided (F5d-48 approval).

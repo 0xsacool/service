@@ -22,7 +22,7 @@ Platform: responsive web application (mobile through desktop), Thai-first for Ve
 
 - The app runs on **real client-side routing** (`react-router-dom`), a **feature-based folder structure**, and a **Repository Provider** seam — not the original flat `src/components/` + `useState<PageId>` + static-array design described in earlier versions of this document.
 - Every data read/write goes through a typed repository interface (`src/repositories/types.ts`), resolved via `repositories` in `src/repositories/repositoryProvider.ts`. By default every repository is backed by an **in-memory Mock implementation** seeded from static fixtures.
-- **Product Master, Customers, and Service Jobs have an opt-in Firestore backend.** Local development defaults to Mock; a production build requires exactly `VITE_BACKEND_KIND=firestore` and otherwise stops before mounting routes or repositories. This setting has not been changed for a deployed frontend by this codebase.
+- **Product Master, Customers, Service Jobs, and Registered Products have an opt-in Firestore backend.** Local development defaults to Mock; a production build requires exactly `VITE_BACKEND_KIND=firestore` and otherwise stops before mounting routes or repositories. This setting has not been changed for a deployed frontend by this codebase. Universal Search has no Firestore backend at all (see Current Limitations).
 - `@supabase/supabase-js` is still an installed dependency but is **not used anywhere in the code** — it predates the Firebase/Firestore direction taken in Sprint F0–F2.1 and is effectively orphaned (see Current Limitations).
 - Firebase Auth is now used by the source-only staff session provider. No production Auth provider, Firebase user, or `staffProfiles/{uid}` document has been created, so no live staff session exists yet. `Login` uses email/password only when the provider is later enabled and a valid own-profile allowlist record can be read.
 - **Mock repositories remain session-only.** In Firestore mode, Customers and Service Jobs are persistent and shared; Product Master is deliberately read-only until a privileged catalog workflow is approved. Service Job creation allocates tracking and Service Request numbers inside one Firestore transaction, then returns only a server-confirmed document. The numbering year remains derived from the existing browser-created `createdAt` date; F5d-31 does not claim a trusted server year because that needs a later privileged allocator design. Current Rules deliberately deny `numberSequences`, so this durable creation path is source-complete but not live-ready until that later Rules/privileged-allocator decision.
@@ -39,7 +39,7 @@ Platform: responsive web application (mobile through desktop), Thai-first for Ve
 | Icons             | `lucide-react`                                                                                                                                                                                                                                                                                                                                                                        |
 | Data access       | Typed repository interfaces (`src/repositories/types.ts`) resolved through the **Repository Provider** (`src/repositories/repositoryProvider.ts`), consumed by hooks (`useServiceJobs`, `useCustomers`, `useUniversalSearch`, `useCustomerProducts`, `useCreateServiceJob`, `useProductMaster`, `useProductDetail`) — components never import a repository or mock data file directly |
 | Backend (default) | **Mock** — static fixtures under `src/repositories/mockData/`, wrapped by in-memory repository implementations                                                                                                                                                                                                                                                                        |
-| Backend (opt-in)  | **Firestore**, via `firebase` SDK (`src/lib/firebase/firebase.ts`), selected by `VITE_BACKEND_KIND=firestore` for Product Master, Customers, and Service Jobs — see Backend & Repository Architecture below                                                                                                                                                                           |
+| Backend (opt-in)  | **Firestore**, via `firebase` SDK (`src/lib/firebase/firebase.ts`), selected by `VITE_BACKEND_KIND=firestore` for Product Master, Customers, Service Jobs, and Registered Products — see Backend & Repository Architecture below                                                                                                                                                      |
 | State             | Local `useState`/hooks per page/component; no global store; no React Context for repositories (deliberate — see [DECISIONS.md](DECISIONS.md) #017)                                                                                                                                                                                                                                    |
 | Auth              | Source-only Firebase Auth session provider with email/password sign-in, own-profile validation, staff guard, and Worker token refresh handling. No provider/user/profile has been provisioned or deployed. `@supabase/supabase-js` is an unused, orphaned dependency                                                                                                                  |
 | Folder structure  | Feature-based (`src/features/`, `src/shared/`, `src/repositories/`, `src/imports/`, `src/types/`, `src/constants/`, `src/validation/`, `src/services/`, `src/utils/`, `src/lib/`, `src/config/`) — see Folder Structure below                                                                                                                                                         |
@@ -137,7 +137,7 @@ Grouped by what shipped, not by exact sprint label (many sprints predate a forma
 ## Current Limitations
 
 - **No authentication or roles** — Admin, Service Staff, and Customer are still not distinguished in code. Firebase Auth is reachable but nothing calls it.
-- **Partial Firestore persistence only** — in `VITE_BACKEND_KIND=firestore` mode, Product Master, Customers, and Service Jobs are durable and shared. Search and Registered Products remain Mock/in-memory, and no deployed frontend has been switched to Firestore mode.
+- **Partial Firestore persistence only** — in `VITE_BACKEND_KIND=firestore` mode, Product Master, Customers, Service Jobs, and (since F5d-48) Registered Products are durable/derived and shared. **Universal Search remains permanently unavailable in Firestore mode** (`repositories.search` is never overridden — see F5d-48 below) — `UniversalSearch` cannot find a real customer at all, which independently blocks the New Service Job flow regardless of the F5d-48 fix. No deployed frontend has been switched to Firestore mode.
 - **Orphaned dependency** — `@supabase/supabase-js` remains in `package.json` from the original prototype but is called nowhere; the actual backend direction taken (F0–F2.1) is Firebase/Firestore, not Supabase. This divergence from the original [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) target (which is Postgres/Supabase-flavored) has not been formally reconciled — see that document's new "Implementation Status" section and this sprint's Remaining Gaps.
 - **`StaffShell.tsx` appears superseded by `StaffLayout.tsx`** — `App.tsx`'s router uses `StaffLayout` exclusively; `StaffShell` still exists in `src/shared/layouts/` but nothing imports it. Worth a cleanup pass, not urgent.
 - **Localization boundary is source-only** — staff UI is Thai-first and public tracking supports the four approved locales, but live auth/backend rollout and any broader content translation remain separately gated.
@@ -757,6 +757,54 @@ authenticated `POST /service-jobs` call has been executed against
 production. This is the next explicit, separately approved acceptance
 micro-gate — not performed as part of Gate 7. No Rules, IAM, Auth, R2,
 Cron, or frontend change occurred as part of this gate.
+
+## F5d-48 — Firestore registered-products read path (source only)
+
+Root cause of Gate 7.1's UI block: `repositories.registeredProducts` was
+never overridden under Firestore mode — it stayed on the permanent
+unavailable stub (`getForCustomer: () => []`) — so after selecting a
+customer, `ProductSelection` always rendered empty and New Service Job
+could never reach Save & Print.
+
+`src/repositories/firestoreRegisteredProductsRepository.ts` (new) derives a
+customer's registered products purely from their own real Service Job
+history, reusing the already brand-scoped `serviceJobs` repository
+directly — no new Firestore query, no `firestore.rules` change needed or
+made, since brand isolation is inherited by construction. No Product
+Instance entity ([DECISIONS.md](DECISIONS.md) #012) exists in Firestore, so
+(per [DECISIONS.md](DECISIONS.md) #037) this deliberately derives only
+"previously serviced" entries and never fabricates a "never serviced"
+bucket or fuzzy-matches Product Master by name. `RegisteredProduct.purchaseDate`/
+`warrantyMonths`/`warrantyExpiresAt` are now optional on the shared type —
+genuinely absent under Firestore mode rather than backdated — and
+`warrantyStatus` comes directly from the customer's most recent intake's
+own `warranty` flag. Neither `ProductCard` nor `ProductSummaryCard` reads
+the now-optional fields, so no UI change was needed or made.
+
+**Independently re-confirmed, contradicting this task's stated background:**
+`repositories.search` is still never overridden under Firestore mode (only
+`serviceJobs`, `customers`, `productMaster`, `attachments`,
+`serviceReports`, and now `registeredProducts` are). `UniversalSearch`
+therefore cannot find any real customer in Firestore mode today — a
+separate, still-open blocker to New Service Job's normal staff flow,
+independent of this fix, and out of this task's explicit scope. Gate 7.1
+cannot proceed through the ordinary staff UI until that gap is separately
+fixed; the direct authenticated Worker call validated in F5d-47S remains
+the only currently-viable Gate 7.1 acceptance path.
+
+9 new tests cover the read path, customer scoping, brand isolation,
+service-history derivation (accumulation and latest-visit tracking),
+ordering, missing/legacy-data behavior (empty, not fabricated), the
+now-optional fields staying genuinely absent, the repository's read-only
+surface, and the New Service Job Save & Print gate condition being
+satisfiable once real customer/product/intake data exists. Full validation
+after F5d-48: TypeScript build and Vite production build pass; ESLint and
+Prettier pass; the serialized application suite passes 134 of 135 Node
+tests in-process (the 135th, the Firestore Rules suite, requires the
+emulator and passes 11/11 there, unaffected since `firestore.rules` itself
+was not touched). No Worker source was touched, so the Worker suite was not
+re-run. No production deployment, mutation, or Gate 7.1 resumption
+occurred.
 
 ## Development Principles
 

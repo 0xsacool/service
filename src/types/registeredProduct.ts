@@ -9,9 +9,16 @@ export type WarrantyStatus = 'in_warranty' | 'out_of_warranty';
 // number is the only stable identifier a physical unit has in mock data.
 //
 // Warranty is modeled as its own attribute (purchaseDate + warrantyMonths,
-// with warrantyExpiresAt/warrantyStatus derived from them) rather than
-// copied from a service job's warranty flag — a service job records what
-// was true *at that visit*, not the product's actual warranty term.
+// with warrantyExpiresAt derived from them) rather than copied from a
+// service job's warranty flag, wherever a real purchase record backs it —
+// a service job records what was true *at that visit*, not the product's
+// actual warranty term. purchaseDate/warrantyMonths/warrantyExpiresAt are
+// optional because no Product Instance entity exists in Firestore yet
+// (F5d-48): Mock mode always populates them from its purchase fixtures;
+// the Firestore read path (derived only from real Service Job history —
+// see firestoreRegisteredProductsRepository.ts) leaves them genuinely
+// absent rather than inventing a purchase date, and sets warrantyStatus
+// directly from the customer's most recently recorded intake instead.
 export interface RegisteredProduct {
   id: string;
   brand: string;
@@ -20,10 +27,10 @@ export interface RegisteredProduct {
   serialNumber: string;
   category: string;
   status: ProductStatus;
-  purchaseDate: string; // ISO date
-  warrantyMonths: number;
-  warrantyExpiresAt: string; // ISO date, derived: purchaseDate + warrantyMonths
-  warrantyStatus: WarrantyStatus; // derived: warrantyExpiresAt vs. now
+  purchaseDate?: string; // ISO date — absent when no purchase record backs this entry
+  warrantyMonths?: number; // absent when no purchase record backs this entry
+  warrantyExpiresAt?: string; // ISO date, derived: purchaseDate + warrantyMonths, when both are known
+  warrantyStatus: WarrantyStatus;
   lastServiceDate: string; // ISO date, or '—' if never serviced
   previousServiceCount: number;
 }
