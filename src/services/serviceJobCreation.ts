@@ -6,6 +6,8 @@ import type {
 } from '../types';
 import { isCanonicalBrandId, type BrandId } from '../types';
 import type { NewDurableServiceJob } from '../repositories/types';
+import type { BackendKind } from '../config/backend';
+import type { CreatePathAssertion } from '../config/runtimeDiagnostics';
 import { formatTime } from '../utils/formatDate';
 import { bangkokIsoDate } from './bangkokTime';
 
@@ -124,4 +126,41 @@ export function buildNewDurableServiceJob(
     buildServiceJobIntakePayload(input),
     new Date()
   );
+}
+
+export interface ServiceJobCreateDelegates<T> {
+  // Only invoked when backendKind === 'mock' — never gated on Worker
+  // readiness, since Mock development must never depend on Worker
+  // configuration (F5d-54B Objective 2).
+  createViaMock: () => Promise<T>;
+  // Only invoked once createPathReadiness.ok === true. Deliberately a
+  // lazy delegate (a function, not an already-started Promise) so that
+  // nothing it does — including idempotency-key generation — can run
+  // before the readiness check below (F5d-54B Objective 5).
+  createViaFirestore: () => Promise<T>;
+}
+
+// F5d-54B — Terra (F5d-54A) found that assertFirestoreWorkerCreatePath()
+// was computed and logged but never enforced: a Service Job create could
+// still reach the Firestore repository even when the assertion reported
+// `ok: false` (e.g. backendKind=firestore with a non-worker files backend).
+// This function is the actual fail-closed enforcement — the runtime
+// indicator and the [Create Path] console log remain observability only.
+// A Firestore create is allowed only when createPathReadiness.ok is true;
+// everything else (Worker fetch, attachment processing, any mutation)
+// lives inside createViaFirestore and therefore can never run otherwise.
+export async function performServiceJobCreate<T>(
+  backendKind: BackendKind | null,
+  createPathReadiness: CreatePathAssertion,
+  delegates: ServiceJobCreateDelegates<T>
+): Promise<T> {
+  if (backendKind === 'mock') {
+    return await delegates.createViaMock();
+  }
+  if (!createPathReadiness.ok) {
+    throw new Error(
+      `Firestore create path is not ready for Worker mode (${createPathReadiness.reasons.join('; ')}). Contact a developer before retrying.`
+    );
+  }
+  return await delegates.createViaFirestore();
 }

@@ -4,9 +4,11 @@ import { repositories } from '../repositories/repositoryProvider';
 import {
   buildNewDurableServiceJob,
   buildServiceJobIntakePayload,
+  performServiceJobCreate,
   type NewServiceJobInput,
 } from '../services/serviceJobCreation';
 import { backendKind } from '../config/backend';
+import { assertFirestoreWorkerCreatePath } from '../config/runtimeDiagnostics';
 import { resolveNewServiceJobBrandId } from '../services/serviceJobBrandContext';
 import { getAuthorizedBrandId } from '../auth/authSession';
 import { useAuthSession } from '../auth/authSessionContext';
@@ -29,18 +31,32 @@ export function useCreateServiceJob(): UseCreateServiceJobResult {
     if (!brandId) {
       throw new Error('Staff authorization is required to create a durable Service Job');
     }
-    if (backendKind === 'mock') {
-      return await repositories.serviceJobs.create(
-        buildNewDurableServiceJob({ ...input, brandId })
+    // F5d-54, Objective 3 / F5d-54B: assertFirestoreWorkerCreatePath() is
+    // shared, single-source-of-truth readiness evaluation — the
+    // [Create Path] log below and the RuntimeModeIndicator badge are
+    // observability only. performServiceJobCreate() below is the actual
+    // enforced fail-closed boundary: it is the only thing that decides
+    // whether createViaFirestore (and everything inside it — idempotency
+    // key generation, the repository call, the Worker fetch) ever runs.
+    const assertion = assertFirestoreWorkerCreatePath();
+    if (import.meta.env.DEV) {
+      console.info(
+        `[Create Path] ${assertion.path}${assertion.ok ? '' : ` — NOT a verified Worker path (${assertion.reasons.join('; ')})`}`
       );
     }
-    attemptKey.current ??= crypto.randomUUID();
-    const created = await repositories.serviceJobs.create({
-      idempotencyKey: attemptKey.current,
-      intake: buildServiceJobIntakePayload(input),
+    return await performServiceJobCreate(backendKind, assertion, {
+      createViaMock: () =>
+        repositories.serviceJobs.create(buildNewDurableServiceJob({ ...input, brandId })),
+      createViaFirestore: async () => {
+        attemptKey.current ??= crypto.randomUUID();
+        const created = await repositories.serviceJobs.create({
+          idempotencyKey: attemptKey.current,
+          intake: buildServiceJobIntakePayload(input),
+        });
+        attemptKey.current = null;
+        return created;
+      },
     });
-    attemptKey.current = null;
-    return created;
   };
 
   return { createServiceJob };

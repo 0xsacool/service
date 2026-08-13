@@ -18,5 +18,6 @@ export { PageHeader } from './PageHeader';
 export { PageContainer } from './PageContainer';
 export { FormSection } from './FormSection';
 export { Modal } from './Modal';
+export { RuntimeModeIndicator } from './RuntimeModeIndicator';
 export { UniversalSearch, CustomerSummaryCard } from './search';
 export { ProductSelection, ProductSummaryCard } from './product';

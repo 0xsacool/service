@@ -1064,6 +1064,217 @@ Gate 7.1 remains **paused**, pending a separately and explicitly scoped
 approval — this non-reproduction is not that approval. Production durable
 writes = zero. No production deployment or mutation occurred.
 
+## F5d-54 — Runtime backend safety guard (Mock/Firestore ambiguity)
+
+**Root cause of Gate 7.1's manual "success."** Production incident
+verification proved zero production writes for the manual submit that
+produced `BRN-2026-000001`/`SR-2026-000001`: the protected BRN was
+unchanged, `BRN-2026-000002` never existed, both sequences were logically
+0, no intake-key mapping existed, and the Worker's `POST /service-jobs` was
+never reached. The browser was running the **Mock create path** — the
+checked-in `.env.example`/local `.env` default is `VITE_BACKEND_KIND=mock`,
+and the operator had no way to visually tell Mock mode from the required
+Firestore/Worker runtime. This was compounded by `serviceJobsRepository.ts`
+(Mock) deliberately formatting its generated IDs in the exact same
+`BRN-YYYY-NNNNNN`/`SR-YYYY-NNNNNN` shape as the real Firestore/Worker path
+(so a staff member never sees a jarring fake-looking ID during ordinary
+development) — meaning the two paths' _results_ are indistinguishable by
+design, and only the _runtime configuration that produced them_ can be
+told apart. **This was a safe, no-op Mock-only execution: production
+durable writes = zero.** Gate 7.1 itself was not executed and remains
+pending.
+
+**Runtime indicator (Objectives 1/2).** New `RuntimeModeIndicator`
+component, wired into `Login.tsx` (visible before any staff action) and
+`StaffShell.tsx`'s topbar (visible on every staff page, including New
+Service Job's Save & Print flow). Mock mode renders a loud, high-contrast
+amber banner — "โหมดทดสอบ — Mock Data (ไม่ใช่ระบบใช้งานจริง)" — impossible
+to mistake for a quiet, easy-to-miss label. Firestore mode renders a calm
+badge, "FIRESTORE + WORKER", that turns into the same amber warning style
+("FIRESTORE (ยังไม่พร้อม Worker)") if the create path isn't fully provable
+rather than presenting a half-configured Firestore session as trustworthy.
+Both branches read `src/config/runtimeDiagnostics.ts` — one source of
+truth, never a second independently-computed check — so the indicator can
+never drift from what `useCreateServiceJob.ts` actually does.
+
+**Create-path assertion (Objective 3) — three distinct roles, not one.**
+`assertFirestoreWorkerCreatePath()` (`runtimeDiagnostics.ts`) is a **shared
+readiness evaluation**: it computes, from the same configuration
+`useCreateServiceJob.ts` and `repositoryProvider.ts` already branch on,
+whether the active path is genuinely `backendKind=firestore` +
+`filesBackend=worker` + Worker URL configured — a read, never a mutation,
+architecturally general (no Gate 7.1 ID or brand hardcoded anywhere in
+it). `RuntimeModeIndicator` and the dev-only `[Create Path] ...` console
+log (`useCreateServiceJob.ts`) both consume this evaluation for **operator
+observability only** — as F5d-54A's Terra audit correctly found, in the
+original F5d-54 cut neither of those actually stopped a create from
+proceeding. The **enforced fail-closed mutation boundary** is
+`performServiceJobCreate()` (F5d-54B, below) — see that section for the
+distinction this file previously blurred.
+
+**Production build safety (Objective 4) — already guarded, reconfirmed
+here, not newly built.** `backend.ts`'s `resolveBackendConfiguration()`
+(F5d-33/34) already fails closed on `VITE_BACKEND_KIND=mock` in a
+production build (`import.meta.env.PROD`), and `App.tsx` already wraps the
+entire app in `BackendConfigurationGate`, which renders only a
+configuration-unavailable message — no routes, no repositories — when that
+check fails. F5d-54 did not introduce new production-build code; it
+directly reconfirmed (via `resolveBackendConfiguration('mock', true)` and
+the `BackendConfigurationGate`/`App.tsx` wiring) that a production build
+cannot silently ship with the Mock backend. **The actual gap F5d-54 closed
+was development/rehearsal-time observability** — the production guard was
+never the problem; the operator's inability to see which mode a _locally
+running, non-production_ session was in, was.
+
+**Safe runtime diagnostics (Objective 5).** `getRuntimeDiagnostics()`
+returns exactly `{backendKind, filesBackend, workerConfigured,
+firebaseProject}` — a Firebase project ID is a public identifier (it
+appears in the app's own URLs), not a credential. Never reads or exposes
+`VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_APP_ID`,
+`VITE_FIREBASE_MESSAGING_SENDER_ID`, or the Worker URL's actual value
+(only whether it's set, as a boolean).
+
+18 new tests (`runtimeDiagnostics.test.mjs`) cover: Mock/Firestore/invalid
+diagnostics shapes computed from explicit inputs (mirroring `backend.ts`'s
+own `resolveBackendConfiguration(raw, isProduction)` testing pattern, so
+none of this depends on whatever happens to be in the local `.env` at test
+time), the returned shape never carrying a fifth key, the create-path
+assertion's ok/mock/reasons contract including failing closed on a missing
+Worker URL and on a non-worker files backend, that a Mock result's
+assertion is always `ok: false` (so it can never present as verified), that
+neither the API key nor other Firebase credential env vars are ever read,
+the indicator/hook wiring, and that Mock workflows are unaffected. Full
+validation: TypeScript build and Vite production build pass; ESLint
+passes; Prettier passes on every source file this task touched (`prettier
+--check` run directly against each changed `.ts`/`.tsx`/`.mjs` file); the
+direct Node suite passes 202/203 in-process (the one already-known
+emulator-only exception unchanged, `firestore.rules` untouched); the
+production bundle was directly inspected and contains neither the
+`[Firestore Init]` nor the `[Create Path]` dev-only console strings.
+Live-verified in a running dev session (Firestore+Worker mode): the badge
+correctly rendered "FIRESTORE + WORKER" on the Login page. **Correction
+(F5d-54D):** a repo-wide `prettier --check .` also reports 8 pre-existing
+Markdown formatting findings (`AGENTS.md`, `BUSINESS_RULES.md`,
+`CLAUDE.md`, `DATABASE_SCHEMA.md`, `PRINT_SPECIFICATIONS.md`,
+`PRODUCT_ROADMAP.md`, `SPRINT_ROADMAP.md`, `UI_GUIDELINES.md`) — these
+predate F5d-54, are unrelated to it, were not introduced or touched by
+this task, and are intentionally left unreformatted here (reformatting
+them is out of this task's scope). The "Prettier pass" statement above
+refers only to this task's own changed files, not a clean repo-wide
+`prettier --check .`.
+
+**Deployment/environment implications.** No `.env`/`.env.local` change was
+made or is required by this task. Any future production frontend
+deployment must set `VITE_BACKEND_KIND=firestore`, `VITE_FILES_BACKEND=worker`,
+and `VITE_FILES_WORKER_URL` explicitly — the existing fail-closed guard
+already prevents a production build from silently defaulting to Mock, and
+this task adds no exception to that. A checked-in Mock default remains the
+correct, safe default for ordinary local development; it must never be
+read as production readiness, and Gate 7.1 acceptance must be judged by
+verified production writes (as F5d-50/F5d-52B's own incident review did),
+never by a superficially successful-looking ID.
+
+Gate 7.1 remains **pending** (not resumed, not retried by this task).
+Production durable writes = zero. No production deployment, mutation, or
+Rules/Worker/Auth/IAM change occurred.
+
+### F5d-54B — enforced fail-closed create guard (Terra F5d-54A blocker)
+
+**Terra's F5d-54A finding (blocking).** `assertFirestoreWorkerCreatePath()`
+was computed and logged, but nothing actually stopped a create from
+proceeding when it reported `ok: false`. Concretely:
+`backendKind=firestore` with a non-worker `filesBackend` (or a missing
+Worker URL) still reached the Firestore-backed `repositories.serviceJobs.create()`
+call — the indicator correctly showed a warning and the assertion
+correctly said not-ok, but `useCreateServiceJob.ts`'s original `if
+(backendKind === 'mock') {...} else {...}` branch never consulted the
+assertion at all before taking the `else` (Firestore) path.
+
+**The distinction this file now states explicitly, per Terra's own
+wording:**
+
+- **Runtime indicator** (`RuntimeModeIndicator`) = operator observability.
+- **`assertFirestoreWorkerCreatePath()`** = shared readiness evaluation —
+  a pure read, the single source of truth both the indicator and the
+  guard consume.
+- **`performServiceJobCreate()`** (new, `serviceJobCreation.ts`) =
+  the enforced fail-closed mutation boundary. This is the only thing
+  that decides whether a Firestore create is attempted at all.
+
+**How the guard works.** `performServiceJobCreate(backendKind,
+createPathReadiness, delegates)` takes two lazy delegates —
+`createViaMock`/`createViaFirestore`, plain functions, not
+already-started Promises — plus the current readiness evaluation. Mock
+mode calls `createViaMock` unconditionally, exactly as before, with no
+Worker dependency (Objective 2: Mock development must never require
+Worker configuration). Any non-mock `backendKind` first checks
+`createPathReadiness.ok`; if false, it throws `Firestore create path is
+not ready for Worker mode (<reasons>). Contact a developer before
+retrying.` — using only the already-sanitized `reasons` strings
+`computeCreatePathAssertion()` produces (e.g. `'filesBackend is not
+"worker"'`), never a raw URL, key, or env dump — and `createViaFirestore`
+is never called. Because the Firestore delegate is a lazy closure,
+nothing inside it (idempotency-key generation via `crypto.randomUUID()`,
+the repository call, the eventual Worker fetch) can run before the
+readiness check — confirmed by a dedicated test asserting the delegate's
+side effect never fires on rejection.
+
+**Firestore readiness truth table (Objective 3), all confirmed by
+behavioral tests with spy delegates in `serviceJobCreateGuard.test.mjs`:**
+
+| backendKind  | filesBackend | Worker URL | Result                                                                                                                                   |
+| ------------ | ------------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| mock         | any          | any        | Mock create allowed (Worker irrelevant)                                                                                                  |
+| firestore    | worker       | configured | Firestore create allowed                                                                                                                 |
+| firestore    | worker       | missing    | Rejected before any delegate runs                                                                                                        |
+| firestore    | non-worker   | any        | Rejected before any delegate runs                                                                                                        |
+| invalid/null | —            | —          | App-level `BackendConfigurationGate` already prevents this state from reaching the hook at all; the guard rejects defensively regardless |
+
+10 new tests (`serviceJobCreateGuard.test.mjs`) prove actual dispatch
+behavior with spy delegates (call counts, not just source-text pattern
+matching): Mock invokes `createViaMock` exactly once regardless of
+readiness; a ready Firestore path invokes `createViaFirestore` exactly
+once; a missing Worker URL and a non-worker files backend each reject
+with neither delegate invoked; an invalid `backendKind` never invokes
+either delegate; the guard and `computeCreatePathAssertion()` agree
+across every backend/filesBackend/worker combination; the rejection
+message contains no secret-shaped content; and the Firestore delegate's
+side effect provably never runs before rejection. Regression-confirmed
+unchanged: all 18 `runtimeDiagnostics.test.mjs` tests still pass (the
+indicator/assertion logic itself was not modified), the badge still
+renders "FIRESTORE + WORKER" live in a running dev session, Mock
+workflows are unaffected, `BackendConfigurationGate` still blocks a
+production+Mock configuration, and both `[Create Path]` and `[Firestore
+Init]` remain absent from the production bundle. Full validation: build
+clean, lint clean, direct suite 212/213 in-process (the one already-known
+emulator-only exception unchanged).
+
+Gate 7.1 remains **pending**. Production durable writes = zero. No
+production deployment, mutation, or Rules/Worker/Auth/IAM change occurred.
+
+### F5d-54D — finalization: non-blocking hardening backlog
+
+Terra's F5d-54C re-audit passed with non-blocking findings. Recorded here
+as **low-priority future hardening only**, not implemented in this task:
+
+- `performServiceJobCreate()` currently relies on the app-level invariant
+  that `backendKind` and `createPathReadiness` are always derived
+  together from the same `runtimeDiagnostics.ts` read. A hypothetical
+  external caller could in principle supply an inconsistent pair (e.g.
+  `backendKind: null` with `createPathReadiness.ok: true`), which the
+  function would not catch on its own. No caller in this application can
+  currently construct that inconsistent pair — `useCreateServiceJob.ts`
+  is the only production caller, and it always derives both values from
+  one `assertFirestoreWorkerCreatePath()` call. A future hardening could
+  have `performServiceJobCreate()` explicitly reject any `backendKind`
+  other than `'mock'`/`'firestore'` rather than trusting the caller — left
+  as optional future work, not a defect in the current, sole call site.
+- The existing Vite chunk-size warning (`firebase-*.js` / `index-*.js`
+  exceeding the 500 kB default limit) predates this task and remains
+  non-blocking technical debt.
+- The 8 pre-existing Markdown Prettier findings noted above remain
+  non-blocking technical debt, unrelated to and untouched by F5d-54.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Each new repository's backend swap (Customer, Service Job, Search, Registered Products) gets the same doc-plus-approval treatment Product Master got, not a silent bulk migration.

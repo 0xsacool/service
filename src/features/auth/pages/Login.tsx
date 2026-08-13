@@ -7,6 +7,7 @@ import {
   PrimaryButton,
   Field,
   inputClass,
+  RuntimeModeIndicator,
 } from '../../../shared/components';
 import { ROUTES } from '../../../constants';
 import { useAuthSession } from '../../../auth/authSessionContext';
@@ -41,6 +42,9 @@ export function Login() {
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 py-12">
       <div className="w-full max-w-md animate-[scale-in_0.4s_cubic-bezier(0.22,1,0.36,1)_both]">
+        <div className="mb-4 flex justify-center">
+          <RuntimeModeIndicator />
+        </div>
         <div className="mb-8 flex flex-col items-center text-center">
           <Logo size="lg" className="mb-4" />
           <h1 className="text-2xl font-semibold tracking-tight text-ink">

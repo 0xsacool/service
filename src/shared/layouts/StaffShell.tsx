@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { Logo } from '../components/Logo';
+import { RuntimeModeIndicator } from '../components/RuntimeModeIndicator';
 import { APP_NAME, ROUTES } from '../../constants';
 import { useAuthSession } from '../../auth/authSessionContext';
 
@@ -189,6 +190,8 @@ export function StaffShell({
                 </div>
               )}
             </div>
+
+            <RuntimeModeIndicator />
 
             <button className="relative rounded-full p-2.5 text-neutral-600 transition-colors hover:bg-neutral-100">
               <Bell className="h-5 w-5" />
