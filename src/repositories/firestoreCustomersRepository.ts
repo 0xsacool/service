@@ -10,6 +10,10 @@ import type { BrandId, Customer } from '../types';
 import type { CustomersRepository } from './types';
 import { fromFirestoreData, CUSTOMERS_COLLECTION } from './firestore/customerMapping';
 import { bumpDataVersion } from './dataVersion';
+import {
+  describeFirestoreInitError,
+  recordFirestoreInitFailure,
+} from './firestoreInitDiagnostics';
 
 // Same synchronous-facade-over-async-backend design as
 // firestoreProductMasterRepository.ts (DECISIONS.md #018) — CustomersRepository's
@@ -61,6 +65,13 @@ export async function createFirestoreCustomersRepository(
       },
       (err) => {
         console.error('[firestoreCustomersRepository] snapshot listener failed:', err);
+        recordFirestoreInitFailure(
+          describeFirestoreInitError(
+            err,
+            'customers',
+            settled ? 'listener' : 'initial-listener'
+          )
+        );
         if (!settled) {
           settled = true;
           resolveFirstSnapshot();

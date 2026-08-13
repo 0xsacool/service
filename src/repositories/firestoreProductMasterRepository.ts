@@ -5,6 +5,10 @@ import type { ProductMasterRepository } from './types';
 import { productCategories } from './mockData/productMaster.mock';
 import { productKnowledgeRepository } from './productKnowledgeRepository';
 import { fromFirestoreData, PRODUCTS_COLLECTION } from './firestore/productMasterMapping';
+import {
+  describeFirestoreInitError,
+  recordFirestoreInitFailure,
+} from './firestoreInitDiagnostics';
 
 export function rejectClientProductMutation(): never {
   throw new Error(
@@ -90,6 +94,13 @@ export async function createFirestoreProductMasterRepository(): Promise<ProductM
         console.error(
           '[firestoreProductMasterRepository] snapshot listener failed:',
           err
+        );
+        recordFirestoreInitFailure(
+          describeFirestoreInitError(
+            err,
+            'productMaster',
+            settled ? 'listener' : 'initial-listener'
+          )
         );
         if (!settled) {
           settled = true;

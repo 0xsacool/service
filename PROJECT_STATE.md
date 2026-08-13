@@ -957,6 +957,113 @@ This is a documentation-only correction — no test file, source file, or
 `firestore.rules` changed. Gate 7.1 remains paused. No production
 deployment, mutation, or Gate 7.1 resumption occurred.
 
+## F5d-52 — Firestore repository initialization diagnostics (local dev only)
+
+F5d-50's live no-submit rehearsal was blocked by a generic
+"Staff data could not be initialized. Try again later." message; F5d-51's
+read-only diagnostic narrowed it to `activateFirestoreRepositories()`, whose
+exception `AuthSessionProvider.tsx` deliberately collapses into that one
+generic message. **The root repository failure itself is still UNKNOWN** —
+this task adds observation only, not a fix, and local rehearsal has not yet
+been repeated to capture the actual failing stage.
+
+`src/repositories/firestoreInitDiagnostics.ts` (new) is the smallest
+mechanism found: a `recordFirestoreInitFailure()`/`getFirestoreInitDiagnostics()`
+recorder that captures `{repository, stage, code}` — repository name (one of
+`serviceJobs`/`customers`/`productMaster`/`attachments`/`serviceReports`),
+stage (`factory`/`initial-listener`/`listener`), and a Firestore error's
+`.code` sanitized against a fixed allow-list of Firestore's own documented
+error codes (anything else becomes `unknown`). No raw error, message,
+`customData`, or stack is ever recorded or logged — deliberately, since this
+app's customer documents are legacy phone-keyed (DECISIONS.md #031/#039), so
+a raw Firestore error's message can itself embed a document path that is a
+customer's phone number. In local development (`import.meta.env.DEV`, the
+same signal `backend.ts` already uses) each recorded entry also prints
+`[Firestore Init] <repository>: <code> (<stage>)` to the console; this line
+is dead-code-eliminated from a production build entirely (confirmed: no
+`"Firestore Init"` string appears anywhere in `dist/` after `npm run
+build`), so production user-facing behavior is unchanged and no
+credential/PII/internal-auth-state exposure risk was introduced.
+
+Tracing activation surfaced a real, pre-existing (not introduced by this
+task) lifecycle property worth flagging: `firestoreServiceJobRepository.ts`,
+`firestoreCustomersRepository.ts`, and `firestoreProductMasterRepository.ts`
+each resolve their factory promise even when their first `onSnapshot` call
+returns an error (e.g. `permission-denied`) — the comment in each file
+already documents this as intentional ("resolves — with an empty cache —
+rather than hanging forever"). Practically, this means a listener-level
+permission/config failure on any of those three repositories does **not**
+reach `activateFirestoreRepositories()`'s catch at all: activation appears
+to succeed, the generic error message never shows, and the UI would instead
+render with silently empty data. Only a genuine synchronous throw or
+rejected factory promise (`activateWithDiagnostics`'s `factory` stage in
+`repositoryProvider.ts`, wrapping `serviceJobs`/`customers`/`productMaster`/
+`attachments`/`serviceReports`) can actually produce the
+"Staff data could not be initialized" message seen in F5d-50. This is
+reported here as a discovered lifecycle characteristic, per F5d-52's own
+instruction not to fix anything found while instrumenting — it is not fixed
+in this task.
+
+`serviceReports`/`attachments` listeners attach lazily per-Service-Job well
+after activation completes, so their `stage` is always `listener`, never
+`initial-listener` — documented as the "exact flow" Objective 4 asked for
+when a repository's readiness doesn't gate on its own listener at all.
+
+`AuthSessionProvider.tsx` was not modified — the generic user-facing message
+and its control flow are byte-for-byte unchanged; the new diagnostics are
+entirely internal to `repositoryProvider.ts` and the five repository
+factories that can participate in activation. Query shapes, Firestore
+Rules, brand scoping, repository data results, listener lifecycle, retry
+behavior, customer/product logic, Worker calls, and mutation behavior are
+all unchanged.
+
+13 new tests (`firestoreInitDiagnostics.test.mjs`) cover: error-code
+sanitization against the allow-list, that a raw error carrying PII-shaped
+content is never exposed, the record/get/clear contract, the exact dev
+console line format, every participating repository importing and calling
+the recorder, `initial-listener`/`listener` classification via the same
+`settled` flag each factory already had, `repositoryProvider.ts`'s
+factory-stage wrapping and rethrow, per-attempt diagnostic clearing,
+`AuthSessionProvider.tsx` remaining untouched, and that Mock mode continues
+to load and search successfully with the instrumentation present. Full
+validation: TypeScript build and Vite production build pass; ESLint and
+Prettier pass; the direct Node suite passes 184/185 in-process (185 = 171
+prior + 13 new + the one already-known emulator-only exception counted
+directly; the Rules suite itself still passes 11/11 under its wrapper,
+unaffected since `firestore.rules` was not touched).
+
+Gate 7.1 remains paused. No production deployment or mutation occurred. The
+underlying repository initialization defect this task was meant to help
+diagnose is still not fixed and still not identified — local rehearsal must
+be repeated to capture which repository/stage/code actually fails.
+
+### F5d-52B — local rehearsal repeated: not reproducible, diagnostics retained
+
+F5d-50's live no-submit browser rehearsal was repeated in a normal Chrome
+session. Result: the earlier "Staff data could not be initialized. Try
+again later." failure **did not reproduce** — Firestore repositories
+initialized successfully, no `[Firestore Init]` diagnostic entry was
+emitted at any stage, and the full live path (Search → Customer →
+Registered Product → Intake → reaching the final action) worked. The final
+create action was deliberately not clicked; production durable writes
+remained **zero**.
+
+This is recorded as a non-reproduction, not a resolution. **No root cause
+was identified** — F5d-52's diagnostics never fired because the failure
+this rehearsal was watching for simply didn't occur this time, which says
+nothing about why it occurred during F5d-50. The lifecycle characteristic
+F5d-52 already documented above (a `serviceJobs`/`customers`/`productMaster`
+listener `permission-denied` resolves silently rather than rejecting, so it
+would never have produced this diagnostic's `initial-listener` entry even
+if it had occurred) remains an open, unfixed, unconfirmed possibility, not
+a ruled-out one. The diagnostics themselves remain in place as ordinary
+safe local-development instrumentation for whenever this failure next
+reproduces.
+
+Gate 7.1 remains **paused**, pending a separately and explicitly scoped
+approval — this non-reproduction is not that approval. Production durable
+writes = zero. No production deployment or mutation occurred.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Each new repository's backend swap (Customer, Service Job, Search, Registered Products) gets the same doc-plus-approval treatment Product Master got, not a silent bulk migration.

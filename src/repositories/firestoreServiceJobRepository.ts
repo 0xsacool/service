@@ -25,6 +25,10 @@ import {
 } from './firestore/serviceJobMapping';
 import { needsTrustedClosedAt } from '../services/serviceJobClosure';
 import { bumpDataVersion } from './dataVersion';
+import {
+  describeFirestoreInitError,
+  recordFirestoreInitFailure,
+} from './firestoreInitDiagnostics';
 function workerBaseUrl(): string {
   const configured = import.meta.env.VITE_FILES_WORKER_URL;
   if (typeof configured !== 'string' || configured.trim().length === 0)
@@ -105,6 +109,13 @@ export async function createFirestoreServiceJobRepository(
       },
       (err) => {
         console.error('[firestoreServiceJobRepository] snapshot listener failed:', err);
+        recordFirestoreInitFailure(
+          describeFirestoreInitError(
+            err,
+            'serviceJobs',
+            settled ? 'listener' : 'initial-listener'
+          )
+        );
         if (!settled) {
           settled = true;
           resolveFirstSnapshot();

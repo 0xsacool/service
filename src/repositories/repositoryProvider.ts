@@ -22,6 +22,12 @@ import { registeredProductsRepository } from './registeredProductsRepository';
 import { searchRepository } from './searchRepository';
 import { serviceJobsRepository } from './serviceJobsRepository';
 import { serviceReportsRepository } from './serviceReportsRepository';
+import {
+  clearFirestoreInitDiagnostics,
+  describeFirestoreInitError,
+  recordFirestoreInitFailure,
+  type FirestoreRepositoryName,
+} from './firestoreInitDiagnostics';
 
 export interface RepositoryProvider {
   serviceJobs: ServiceJobsRepository;
@@ -120,6 +126,24 @@ async function resolveAttachmentsRepository(
   return await createWorkerAttachmentsRepository(serviceJobs, tokenProvider);
 }
 
+// F5d-52: wraps each repository's activation so a synchronous throw or
+// rejected factory promise (the only cases that actually propagate out of
+// activateFirestoreRepositories() today — see firestoreInitDiagnostics.ts's
+// 'factory' stage comment) is recorded with its repository name before being
+// rethrown completely unchanged. This does not alter which error reaches the
+// caller, only what's observable in local-dev diagnostics on the way there.
+async function activateWithDiagnostics<T>(
+  repository: FirestoreRepositoryName,
+  factory: () => Promise<T>
+): Promise<T> {
+  try {
+    return await factory();
+  } catch (error) {
+    recordFirestoreInitFailure(describeFirestoreInitError(error, repository, 'factory'));
+    throw error;
+  }
+}
+
 async function createFirestoreBackedRepositoryProvider(
   brandId: BrandId,
   tokenProvider: WorkerTokenProvider
@@ -135,15 +159,25 @@ async function createFirestoreBackedRepositoryProvider(
   const { createFirestoreRegisteredProductsRepository } =
     await import('./firestoreRegisteredProductsRepository');
   const { createFirestoreSearchRepository } = await import('./firestoreSearchRepository');
-  const serviceJobs = await createFirestoreServiceJobRepository(brandId, tokenProvider);
-  const customers = await createFirestoreCustomersRepository(brandId);
+  const serviceJobs = await activateWithDiagnostics('serviceJobs', () =>
+    createFirestoreServiceJobRepository(brandId, tokenProvider)
+  );
+  const customers = await activateWithDiagnostics('customers', () =>
+    createFirestoreCustomersRepository(brandId)
+  );
   return {
     ...createUnavailableRepositoryProvider(),
     serviceJobs,
     customers,
-    productMaster: await createFirestoreProductMasterRepository(),
-    attachments: await resolveAttachmentsRepository(serviceJobs, tokenProvider),
-    serviceReports: await createFirestoreServiceReportsRepository(serviceJobs),
+    productMaster: await activateWithDiagnostics('productMaster', () =>
+      createFirestoreProductMasterRepository()
+    ),
+    attachments: await activateWithDiagnostics('attachments', () =>
+      resolveAttachmentsRepository(serviceJobs, tokenProvider)
+    ),
+    serviceReports: await activateWithDiagnostics('serviceReports', () =>
+      createFirestoreServiceReportsRepository(serviceJobs)
+    ),
     registeredProducts: createFirestoreRegisteredProductsRepository(
       customers,
       serviceJobs
@@ -169,6 +203,10 @@ export async function activateFirestoreRepositories(
     repositories = createUnavailableRepositoryProvider();
     throw unavailableError();
   }
+  // F5d-52: each activation attempt gets its own diagnostic slate — a
+  // diagnostic left over from a prior failed attempt (e.g. a retry after
+  // sign-out/sign-in) must never be misread as describing this attempt.
+  clearFirestoreInitDiagnostics();
   repositories = await createFirestoreBackedRepositoryProvider(brandId, tokenProvider);
 }
 

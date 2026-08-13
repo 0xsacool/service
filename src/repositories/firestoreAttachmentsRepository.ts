@@ -18,6 +18,10 @@ import {
   fromFirestoreData,
   toFirestoreFields,
 } from './firestore/attachmentMapping';
+import {
+  describeFirestoreInitError,
+  recordFirestoreInitFailure,
+} from './firestoreInitDiagnostics';
 
 export interface AttachmentMetadataStore {
   getForJob(jobId: string): Attachment[];
@@ -60,6 +64,9 @@ export async function createFirestoreAttachmentMetadataStore(): Promise<Attachme
         console.error(
           '[firestoreAttachmentsRepository] snapshot listener failed:',
           error
+        );
+        recordFirestoreInitFailure(
+          describeFirestoreInitError(error, 'attachments', 'listener')
         );
       }
     );

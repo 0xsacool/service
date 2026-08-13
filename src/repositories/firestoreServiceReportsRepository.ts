@@ -36,6 +36,10 @@ import {
   SERVICE_REPORTS_COLLECTION,
   toFirestoreFields,
 } from './firestore/serviceReportMapping';
+import {
+  describeFirestoreInitError,
+  recordFirestoreInitFailure,
+} from './firestoreInitDiagnostics';
 
 const NUMBER_SEQUENCES_COLLECTION = 'numberSequences';
 const REPORT_DOCUMENT_TYPE = 'repair_report';
@@ -122,7 +126,10 @@ export async function createFirestoreServiceReportsRepository(
           if (report?.serviceJobId === serviceJobId) reportsById.set(report.id, report);
         });
       },
-      () => {
+      (err) => {
+        recordFirestoreInitFailure(
+          describeFirestoreInitError(err, 'serviceReports', 'listener')
+        );
         for (const [reportId, report] of reportsById) {
           if (report.serviceJobId === serviceJobId) reportsById.delete(reportId);
         }
@@ -149,7 +156,10 @@ export async function createFirestoreServiceReportsRepository(
         }
         reportsById.set(report.id, report);
       },
-      () => {
+      (err) => {
+        recordFirestoreInitFailure(
+          describeFirestoreInitError(err, 'serviceReports', 'listener')
+        );
         reportsById.delete(reportId);
       }
     );
