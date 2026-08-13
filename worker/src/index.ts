@@ -27,6 +27,7 @@ import {
 } from './firebaseAuth.ts';
 import { getAuthorizedStaffProfile, isStaffAuthorizedForServiceJob, type StaffProfile } from './staffAuthorization.ts';
 import { allocateServiceJob, isValidIdempotencyKey, MAX_INTAKE_BYTES, parseServiceJobIntake } from './serviceJobCreation.ts';
+import { logAllocatorStageFailure } from './allocatorDiagnostics.ts';
 import {
   exceedsDeclaredSize,
   FileTooLargeError,
@@ -238,10 +239,22 @@ async function handleServiceJobCreate(request: Request, env: Env, dependencies: 
     const intake = parseServiceJobIntake(JSON.parse(new TextDecoder().decode(raw)));
     if (!intake) return json({ error: 'Invalid Service Job intake' }, { status: 400 });
     const job = await allocateServiceJob({ brandId: authorization.profile.brandId, key, intake, dataAccess: authorization.client });
-    return json({ job }, { status: 201 });
+    try {
+      return json({ job }, { status: 201 });
+    } catch (buildError) {
+      logAllocatorStageFailure('response-build', buildError);
+      throw buildError;
+    }
   } catch (error) {
     if (error instanceof FileTooLargeError || error instanceof SyntaxError) return json({ error: 'Invalid Service Job intake' }, { status: 400 });
-    console.error('[files-worker] Service Job create failed:', error);
+    // F5d-56: the exact failing stage — OAuth token acquisition, a
+    // Firestore transaction/read/commit call, or response construction —
+    // was already logged with a sanitized {stage, code} pair at the exact
+    // point of failure (firestoreClient.ts / the response-build wrapper
+    // above). This line intentionally no longer includes the raw `error`
+    // object — its `.message` can embed a raw Google API response body,
+    // which must never reach Worker logs (Objective 2).
+    console.error('[files-worker] Service Job create failed');
     return json({ error: 'Unable to create Service Job' }, { status: 500 });
   }
 }

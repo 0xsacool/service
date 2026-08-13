@@ -21,6 +21,12 @@ import {
   type ServiceJobCreationDataAccess,
 } from './serviceJobCreation.ts';
 import type { ServiceJob } from '../../src/types/serviceJob.ts';
+import {
+  logAllocatorStageFailure,
+  markAsLocalValidationError,
+  runAllocatorStage,
+  type AllocatorStage,
+} from './allocatorDiagnostics.ts';
 
 // F5d-5 — the narrow slice of the Firestore REST API this Worker needs for
 // retention reconciliation. Deliberately not a generic Firestore client:
@@ -63,7 +69,8 @@ export class FirestoreRequestError extends Error {
 }
 
 export interface FirestoreClient
-  extends StaffAuthorizationDataAccess,
+  extends
+    StaffAuthorizationDataAccess,
     PublicTrackingTokenHashStore,
     ServiceJobCreationDataAccess {
   listAttachments(): Promise<AttachmentRetentionRecord[]>;
@@ -79,7 +86,9 @@ export interface FirestoreClient
   // "metadata missing" and fails closed on, never as permission to act.
   getAttachment(docId: string): Promise<AttachmentRetentionRecord | null>;
   getStaffProfile(uid: string): Promise<StaffProfile | null>;
-  getServiceJobAuthorization(jobId: string): Promise<ServiceJobAuthorizationRecord | null>;
+  getServiceJobAuthorization(
+    jobId: string
+  ): Promise<ServiceJobAuthorizationRecord | null>;
   // A narrow, direct read used only by POST /public/tracking/{reference}.
   // It never lists serviceJobs, attachments, or any other collection.
   getPublicTrackingServiceJob(
@@ -129,31 +138,54 @@ interface FirestoreDocument {
   fields?: Record<string, FirestoreValue>;
 }
 
+// F5d-56/F5d-56B: `allocatorStage`, when provided, tags this read for the
+// allocator's own stage diagnostics (getIntakeKey/getSequence/
+// getServiceJob's Firestore reads during POST /service-jobs). Every other
+// caller (getStaffProfile, getServiceJobAuthorization, public tracking
+// lookups) omits it and behaves exactly as before — this parameter adds
+// diagnostics only for the allocator's own call sites, nothing else.
+//
+// F5d-56B (Terra F5d-56A blocker): the read itself — fetch(), the 404/
+// not-ok checks, and response.json() — is now wrapped by
+// runAllocatorStage() as one unit, so a rejected fetch() or a response
+// body that fails to parse as JSON is attributed to `allocatorStage` too,
+// not just a non-OK HTTP status (F5d-56's original, narrower coverage).
 async function getDocument(
   env: Env,
   baseUrl: string,
   collection: string,
   documentId: string,
-  transaction?: AllocationTransaction
+  transaction?: AllocationTransaction,
+  allocatorStage?: AllocatorStage
 ): Promise<FirestoreDocument | null> {
-  const token = await getAccessToken(env);
-  const url = new URL(`${baseUrl}/${collection}/${encodeURIComponent(documentId)}`);
-  if (transaction) url.searchParams.set('transaction', transaction.id);
-  const response = await fetch(
-    url,
-    { headers: token ? { Authorization: `Bearer ${token}` } : {} }
-  );
-  if (response.status === 404) {
-    return null;
+  let token: string | null;
+  try {
+    token = await getAccessToken(env);
+  } catch (error) {
+    if (allocatorStage) logAllocatorStageFailure('oauth-token', error);
+    throw error;
   }
-  if (!response.ok) {
-    throw new FirestoreRequestError(
-      `get ${collection} document`,
-      response.status,
-      await response.text()
-    );
-  }
-  return (await response.json()) as FirestoreDocument;
+  const readDocument = async (): Promise<FirestoreDocument | null> => {
+    const url = new URL(`${baseUrl}/${collection}/${encodeURIComponent(documentId)}`);
+    if (transaction) url.searchParams.set('transaction', transaction.id);
+    const response = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (response.status === 404) {
+      return null;
+    }
+    if (!response.ok) {
+      throw new FirestoreRequestError(
+        `get ${collection} document`,
+        response.status,
+        await response.text()
+      );
+    }
+    return (await response.json()) as FirestoreDocument;
+  };
+  return allocatorStage
+    ? await runAllocatorStage(allocatorStage, readDocument)
+    : await readDocument();
 }
 
 function valueToJson(value: FirestoreValue | undefined): unknown {
@@ -163,7 +195,13 @@ function valueToJson(value: FirestoreValue | undefined): unknown {
   if (typeof value.booleanValue === 'boolean') return value.booleanValue;
   if (typeof value.integerValue === 'string') return Number(value.integerValue);
   if (value.arrayValue) return (value.arrayValue.values ?? []).map(valueToJson);
-  if (value.mapValue) return Object.fromEntries(Object.entries(value.mapValue.fields ?? {}).map(([key, entry]) => [key, valueToJson(entry)]));
+  if (value.mapValue)
+    return Object.fromEntries(
+      Object.entries(value.mapValue.fields ?? {}).map(([key, entry]) => [
+        key,
+        valueToJson(entry),
+      ])
+    );
   return null;
 }
 
@@ -171,20 +209,38 @@ function jsonToValue(value: unknown): FirestoreValue {
   if (value === null) return { nullValue: null };
   if (typeof value === 'string') return { stringValue: value };
   if (typeof value === 'boolean') return { booleanValue: value };
-  if (typeof value === 'number' && Number.isInteger(value)) return { integerValue: String(value) };
+  if (typeof value === 'number' && Number.isInteger(value))
+    return { integerValue: String(value) };
   if (Array.isArray(value)) return { arrayValue: { values: value.map(jsonToValue) } };
-  if (value && typeof value === 'object') return { mapValue: { fields: Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, jsonToValue(entry)])) } };
+  if (value && typeof value === 'object')
+    return {
+      mapValue: {
+        fields: Object.fromEntries(
+          Object.entries(value).map(([key, entry]) => [key, jsonToValue(entry)])
+        ),
+      },
+    };
   throw new Error('Unsupported Firestore field value');
 }
 
 function parseServiceJobDocument(doc: FirestoreDocument): ServiceJob | null {
-  const fields = Object.fromEntries(Object.entries(doc.fields ?? {}).map(([key, value]) => [key, valueToJson(value)])) as Record<string, unknown>;
+  const fields = Object.fromEntries(
+    Object.entries(doc.fields ?? {}).map(([key, value]) => [key, valueToJson(value)])
+  ) as Record<string, unknown>;
   const id = doc.name.split('/').pop() ?? '';
-  if (!id || typeof fields.brandId !== 'string' || typeof fields.customerName !== 'string' || typeof fields.status !== 'string') return null;
+  if (
+    !id ||
+    typeof fields.brandId !== 'string' ||
+    typeof fields.customerName !== 'string' ||
+    typeof fields.status !== 'string'
+  )
+    return null;
   return { ...fields, id } as ServiceJob;
 }
 
-function authHeaders(token: string | null): HeadersInit { return token ? { Authorization: `Bearer ${token}` } : {}; }
+function authHeaders(token: string | null): HeadersInit {
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 function parseAttachmentDocument(doc: FirestoreDocument): AttachmentRetentionRecord {
   const docId = doc.name.split('/').pop() ?? doc.name;
@@ -209,7 +265,9 @@ function stringOrNull(value: FirestoreValue | undefined): string | null {
   return typeof value?.stringValue === 'string' ? value.stringValue : null;
 }
 
-function parsePublicTimeline(value: FirestoreValue | undefined): PublicTrackingTimelineEvent[] {
+function parsePublicTimeline(
+  value: FirestoreValue | undefined
+): PublicTrackingTimelineEvent[] {
   const values = value?.arrayValue?.values ?? [];
   const timeline: PublicTrackingTimelineEvent[] = [];
   for (const entry of values) {
@@ -262,57 +320,209 @@ export function createFirestoreClient(env: Env): FirestoreClient {
   const resourcePath = resolveDatabasePath(env);
 
   return {
+    // F5d-56B (Terra F5d-56A blocker, Objective 4): the full body after
+    // token acquisition — fetch(), the not-ok check, response.json(), and
+    // the malformed-transaction-identifier check — is now one
+    // runAllocatorStage('firestore-transaction-begin', ...) unit, so a
+    // rejected fetch, an unparsable body, or a structurally malformed 200
+    // response are all attributed, not just a non-OK HTTP status.
     async beginServiceJobTransaction() {
-      const token = await getAccessToken(env);
-      const response = await fetch(`${baseUrl}:beginTransaction`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders(token) }, body: '{}',
+      let token: string | null;
+      try {
+        token = await getAccessToken(env);
+      } catch (error) {
+        logAllocatorStageFailure('oauth-token', error);
+        throw error;
+      }
+      return await runAllocatorStage('firestore-transaction-begin', async () => {
+        const response = await fetch(`${baseUrl}:beginTransaction`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+          body: '{}',
+        });
+        if (!response.ok) {
+          throw new FirestoreRequestError(
+            'beginServiceJobTransaction',
+            response.status,
+            await response.text()
+          );
+        }
+        const body: unknown = await response.json();
+        if (
+          !body ||
+          typeof body !== 'object' ||
+          !('transaction' in body) ||
+          typeof body.transaction !== 'string'
+        )
+          throw new Error('Firestore returned malformed transaction');
+        return { id: body.transaction };
       });
-      if (!response.ok) throw new FirestoreRequestError('beginServiceJobTransaction', response.status, await response.text());
-      const body: unknown = await response.json();
-      if (!body || typeof body !== 'object' || !('transaction' in body) || typeof body.transaction !== 'string') throw new Error('Firestore returned malformed transaction');
-      return { id: body.transaction };
     },
 
     async getIntakeKey(transaction, key) {
-      const doc = await getDocument(env, baseUrl, 'serviceJobIntakeKeys', key, transaction);
+      const doc = await getDocument(
+        env,
+        baseUrl,
+        'serviceJobIntakeKeys',
+        key,
+        transaction,
+        'intake-key-read'
+      );
       const value = doc?.fields?.serviceJobId?.stringValue;
       return typeof value === 'string' && value.length > 0 ? value : null;
     },
 
+    // F5d-56B (Objective 5.E): getDocument()'s own runAllocatorStage call
+    // (above) already covers the read itself (network/status/parse); this
+    // outer wrap additionally covers the numeric-validation throw below,
+    // which only ever occurs *after* a successful read returns. The two
+    // wraps share the same stage and never double-log the same error —
+    // see allocatorDiagnostics.ts's alreadyLoggedErrors dedup.
     async getSequence(transaction, brandId, type, year) {
       const id = `${brandId}__${type}__${year}`;
-      const doc = await getDocument(env, baseUrl, 'numberSequences', id, transaction);
-      const value = doc?.fields?.currentValue?.integerValue;
-      if (value === undefined) return null;
-      const numeric = Number(value);
-      if (!Number.isInteger(numeric) || numeric < 0) throw new Error('Firestore sequence is malformed');
-      return numeric;
-    },
-
-    async getServiceJob(transaction, id) {
-      const doc = await getDocument(env, baseUrl, 'serviceJobs', id, transaction);
-      return doc ? parseServiceJobDocument(doc) : null;
-    },
-
-    async commitServiceJobCreation(transaction, input) {
-      const token = await getAccessToken(env);
-      const trackingId = `${input.job.brandId}__tracking_number__${input.year}`;
-      const requestId = `${input.job.brandId}__service_request__${input.year}`;
-      const fields = (value: Record<string, unknown>) => Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, jsonToValue(entry)]));
-      const resourceName = (collection: string, id: string) => `${resourcePath}/${collection}/${encodeURIComponent(id)}`;
-      const createWrite = (collection: string, id: string, value: Record<string, unknown>) => ({ update: { name: resourceName(collection, id), fields: fields(value) }, currentDocument: { exists: false } });
-      const response = await fetch(`${baseUrl}:commit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
-        body: JSON.stringify({ transaction: transaction.id, writes: [
-          createWrite('serviceJobIntakeKeys', input.key, { serviceJobId: input.job.id }),
-          createWrite('serviceJobs', input.job.id, input.job as unknown as Record<string, unknown>),
-          { update: { name: resourceName('numberSequences', trackingId), fields: fields({ brandId: input.job.brandId, documentType: 'tracking_number', year: input.year, currentValue: input.trackingSequence }) } },
-          { update: { name: resourceName('numberSequences', requestId), fields: fields({ brandId: input.job.brandId, documentType: 'service_request', year: input.year, currentValue: input.serviceRequestSequence }) } },
-        ] }),
+      const stage: AllocatorStage =
+        type === 'tracking_number'
+          ? 'tracking-sequence-read'
+          : 'service-request-sequence-read';
+      return await runAllocatorStage(stage, async () => {
+        const doc = await getDocument(
+          env,
+          baseUrl,
+          'numberSequences',
+          id,
+          transaction,
+          stage
+        );
+        const value = doc?.fields?.currentValue?.integerValue;
+        if (value === undefined) return null;
+        const numeric = Number(value);
+        if (!Number.isInteger(numeric) || numeric < 0)
+          throw new Error('Firestore sequence is malformed');
+        return numeric;
       });
-      if (response.status === 409 || response.status === 412) throw new TransactionConflictError();
-      if (!response.ok) throw new FirestoreRequestError('commitServiceJobCreation', response.status, await response.text());
+    },
+
+    // F5d-56D (Terra F5d-56C blocker, Objective 1): getDocument()'s own
+    // runAllocatorStage call (below) covers the read itself (network/
+    // status/parse-as-JSON); this outer wrap additionally covers
+    // parseServiceJobDocument() — a structurally malformed-but-200-OK
+    // response (e.g. `{}`) makes it throw a genuine TypeError
+    // (`doc.name.split('/')` on an absent `name`), which previously
+    // escaped both wraps entirely, reaching the client as an unattributed
+    // generic 500. The parse call is caught and its error explicitly
+    // marked via markAsLocalValidationError() — not replaced or
+    // wrapped — solely so classifyAllocatorError() reports it as
+    // 'invalid-response' rather than misreading its TypeError class as a
+    // network failure (Objective 4); the original error's identity,
+    // instanceof, and stack are all completely unchanged (Objective 2).
+    async getServiceJob(transaction, id) {
+      return await runAllocatorStage('occupied-id-read', async () => {
+        const doc = await getDocument(
+          env,
+          baseUrl,
+          'serviceJobs',
+          id,
+          transaction,
+          'occupied-id-read'
+        );
+        if (!doc) return null;
+        try {
+          return parseServiceJobDocument(doc);
+        } catch (error) {
+          throw markAsLocalValidationError(error);
+        }
+      });
+    },
+
+    // F5d-56B (Objective 6): the full body after token acquisition —
+    // request construction, fetch(), the 409/412 conflict check, and the
+    // not-ok check — is one runAllocatorStage('firestore-commit', ...)
+    // unit. A rejected fetch is now attributed too, not just a non-OK
+    // response. The commit's request body is JSON.stringify'd over values
+    // already validated/constructed by this codebase (see
+    // classifyAllocatorError's 'serialization-error' comment) — no
+    // response body is parsed on the commit path, so there is no
+    // response-parsing branch here to cover. The write set itself is
+    // completely unchanged.
+    async commitServiceJobCreation(transaction, input) {
+      let token: string | null;
+      try {
+        token = await getAccessToken(env);
+      } catch (error) {
+        logAllocatorStageFailure('oauth-token', error);
+        throw error;
+      }
+      await runAllocatorStage('firestore-commit', async () => {
+        const trackingId = `${input.job.brandId}__tracking_number__${input.year}`;
+        const requestId = `${input.job.brandId}__service_request__${input.year}`;
+        const fields = (value: Record<string, unknown>) =>
+          Object.fromEntries(
+            Object.entries(value).map(([key, entry]) => [key, jsonToValue(entry)])
+          );
+        const resourceName = (collection: string, id: string) =>
+          `${resourcePath}/${collection}/${encodeURIComponent(id)}`;
+        const createWrite = (
+          collection: string,
+          id: string,
+          value: Record<string, unknown>
+        ) => ({
+          update: { name: resourceName(collection, id), fields: fields(value) },
+          currentDocument: { exists: false },
+        });
+        const response = await fetch(`${baseUrl}:commit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+          body: JSON.stringify({
+            transaction: transaction.id,
+            writes: [
+              createWrite('serviceJobIntakeKeys', input.key, {
+                serviceJobId: input.job.id,
+              }),
+              createWrite(
+                'serviceJobs',
+                input.job.id,
+                input.job as unknown as Record<string, unknown>
+              ),
+              {
+                update: {
+                  name: resourceName('numberSequences', trackingId),
+                  fields: fields({
+                    brandId: input.job.brandId,
+                    documentType: 'tracking_number',
+                    year: input.year,
+                    currentValue: input.trackingSequence,
+                  }),
+                },
+              },
+              {
+                update: {
+                  name: resourceName('numberSequences', requestId),
+                  fields: fields({
+                    brandId: input.job.brandId,
+                    documentType: 'service_request',
+                    year: input.year,
+                    currentValue: input.serviceRequestSequence,
+                  }),
+                },
+              },
+            ],
+          }),
+        });
+        // A 409/412 is expected, retried optimistic-concurrency behavior
+        // (allocateServiceJob() retries it up to MAX_TRANSACTION_RETRIES) —
+        // not a genuine failure to diagnose. logAllocatorStageFailure()
+        // itself skips logging a TransactionConflictError unconditionally,
+        // so this stays silent no matter how deeply it's wrapped.
+        if (response.status === 409 || response.status === 412)
+          throw new TransactionConflictError();
+        if (!response.ok) {
+          throw new FirestoreRequestError(
+            'commitServiceJobCreation',
+            response.status,
+            await response.text()
+          );
+        }
+      });
     },
     async listAttachments() {
       const token = await getAccessToken(env);
@@ -371,7 +581,10 @@ export function createFirestoreClient(env: Env): FirestoreClient {
         return null;
       }
       const documentId = doc.name.split('/').pop() ?? '';
-      return parseServiceJobAuthorizationRecord(documentId, doc.fields?.brandId?.stringValue);
+      return parseServiceJobAuthorizationRecord(
+        documentId,
+        doc.fields?.brandId?.stringValue
+      );
     },
 
     async getPublicTrackingServiceJob(trackingReference) {
@@ -386,7 +599,9 @@ export function createFirestoreClient(env: Env): FirestoreClient {
 
     async writeExistingPublicTrackingTokenHash(trackingReference, tokenHash) {
       const token = await getAccessToken(env);
-      const url = new URL(`${baseUrl}/serviceJobs/${encodeURIComponent(trackingReference)}`);
+      const url = new URL(
+        `${baseUrl}/serviceJobs/${encodeURIComponent(trackingReference)}`
+      );
       url.searchParams.set('updateMask.fieldPaths', 'publicTrackingTokenHash');
       url.searchParams.set('currentDocument.exists', 'true');
       const response = await fetch(url.toString(), {

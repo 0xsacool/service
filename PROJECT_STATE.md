@@ -1365,6 +1365,335 @@ attempt failed safely before reaching the network, with zero durable
 production writes and the protected BRN unchanged. No production
 deployment, mutation, or Rules/Worker/Auth/IAM change occurred.
 
+## F5d-56 — Worker allocator safe stage diagnostics (Gate 7.1 reached the Worker, returned a generic 500)
+
+**F5d-55's fix let the next approved Gate 7.1 submit reach the live
+Worker** — it returned `HTTP 500` / `Worker Service Job creation failed
+(500)`. Independent production verification confirmed the same clean,
+no-op outcome as every prior attempt: `BRN-2026-000002` absent, zero
+acceptance Service Jobs, zero intake-key mappings, both Bruno sequences
+absent/logically 0, the protected `BRN-2026-000001` unchanged, no
+Customer/Product/R2 mutation, and full atomicity — no partial allocator
+footprint exists anywhere. **Durable production writes = ZERO.** The
+request reached the Worker and passed Firebase bearer verification and
+staff/brand authorization (a 401/403 would look different), but the
+Worker's `handleServiceJobCreate()` collapsed every allocator-internal
+exception into one `console.error('...', error)` call and one generic
+500, discarding exactly the stage detail needed to reproduce and fix it.
+**The exact underlying stage that failed remains UNKNOWN** — this task
+adds observability only, not a fix, and no controlled reproduction with
+the new diagnostics in place has been run yet.
+
+**Allocator pipeline traced (Objective 1).** `POST /service-jobs` →
+`authorizeStaffCreation()` (Firebase bearer verify, then
+`getAuthorizedStaffProfile()`) → request/idempotency-key validation
+(`worker/src/index.ts`) → `allocateServiceJob()` (`serviceJobCreation.ts`):
+begin transaction → intake-key read (idempotent-replay check) → tracking
+sequence read → service-request sequence read → occupied-ID collision
+probe (repeated `getServiceJob` reads) → one atomic `:commit` (intake key
+
+- Service Job + both sequence documents) → response construction. Every
+  Firestore-touching step first acquires a service-account OAuth token
+  (`googleAuth.ts`'s `getAccessToken()`).
+
+**Diagnostic stage model (Objective 2).** New `worker/src/allocatorDiagnostics.ts`
+defines exactly eight stages matching the real source above:
+`oauth-token`, `firestore-transaction-begin`, `intake-key-read`,
+`tracking-sequence-read`, `service-request-sequence-read`,
+`occupied-id-read`, `firestore-commit`, `response-build`. On failure it
+logs one sanitized line — `[ServiceJob Allocator] <stage>: <code>` — via
+`console.error`, e.g. `[ServiceJob Allocator] firestore-commit:
+PERMISSION_DENIED`. `<code>` is drawn only from a closed, safe set: a
+recognized Google gRPC-style error `status` (`PERMISSION_DENIED`,
+`UNAUTHENTICATED`, etc., extracted only from a parsed `error.status`
+field, never `error.message`), a bare `http-<status>` fallback, or a
+handful of fixed literals (`not-configured`, `transaction-conflict`,
+`unknown`). Never logged: the Authorization header, Firebase ID token,
+service-account private key, access token, any intake field (customer
+name/phone/email/serial/problem description/internal note), a raw request
+body, a Firestore document path (this app's customer documents are legacy
+phone-keyed — DECISIONS.md #031/#039 — so a path can itself be a phone
+number), or a raw Google API response body.
+
+**OAuth vs. Firestore REST coverage (Objective 5), full-boundary as of
+F5d-56B.** `oauth-token` is distinguished from every Firestore-specific
+stage by wrapping each allocator-relevant `firestoreClient.ts` method's
+`getAccessToken()` call in its own try/catch, separate from the
+subsequent operation — so a token-exchange failure is never folded into a
+Firestore stage, and vice versa. Firestore transaction-begin, each of the
+three distinct reads (intake-key, tracking-sequence, service-request-
+sequence, occupied-id), and commit are each tagged independently — not
+one collapsed "allocator" stage. As of F5d-56B (see below), each of these
+stages covers the **full** non-OAuth operation boundary — network
+transport, HTTP-status handling, response parsing, and local structural
+validation — not only a non-OK HTTP response.
+
+**Client-response safety (Objective 3) and error wrapping (Objective 4).**
+`handleServiceJobCreate()`'s client-facing response is completely
+unchanged — still the generic `{error: 'Unable to create Service Job'}` / 500. Its one change: the catch-all `console.error('...', error)` no longer
+dumps the raw error object (which could embed a raw Google response body
+via `FirestoreRequestError.message`) — the sanitized stage line was
+already logged at the exact point of failure inside `firestoreClient.ts`,
+so this line now reads `console.error('[files-worker] Service Job create
+failed')` with nothing appended. `ServiceJobAllocatorStageError` exists as
+a narrow typed carrier purely to format the log line consistently — it is
+**never thrown or returned in place of the original exception**; every
+stage-tagging wrapper logs, then rethrows the original error completely
+unchanged, so `TransactionConflictError`'s `instanceof` check (and the
+409/412 retry it drives) and every other existing control-flow decision
+are untouched.
+
+**Atomicity reconfirmed (Objective 6).** The single `:commit` request
+still contains exactly the same four writes it always did (intake key +
+Service Job + both sequence documents) — verified unchanged by the
+existing `serviceJobAllocatorCommit.test.mts`, still passing without
+modification. No diagnostic Firestore write of any kind was added;
+diagnostics are `console.error`-only.
+
+**Occupied-ID skip independently re-verified (Objective 7).** New
+`allocatorOccupiedIdSkip.test.mts` proves, against the real
+`createFirestoreClient()` with only the network boundary stubbed: the
+occupied `BRN-2026-000001` is read (GET) and never appears in any write;
+the allocator selects `BRN-2026-000002`; the tracking-sequence document is
+written as `2` only inside the one atomic `:commit` (no sequence write
+happens outside it); and the protected existing record is never part of
+the commit write set.
+
+Original F5d-56 validation (superseded in scope by F5d-56B below, kept
+here as the historical starting point): 3 new files
+(`allocatorDiagnostics.test.mts`, `allocatorStageAttribution.test.mts`,
+`allocatorOccupiedIdSkip.test.mts`) proved stage attribution for the
+non-OK-HTTP-response case only. `worker/src/allocatorDiagnostics.ts` and
+the `firestoreClient.ts`/`index.ts` edits introduced zero new `tsc
+--noEmit` errors.
+
+**Non-blocking finding, pre-existing, not introduced by this task:**
+`cd worker && npm run typecheck` currently fails with 6
+`TS2339: Property 'env' does not exist on type 'ImportMeta'` errors in
+`../src/config/backend.ts`/`filesBackend.ts`/`runtimeDiagnostics.ts`.
+These three frontend files are pulled into the Worker's type-declaration
+graph transitively via a `import type` chain
+(`worker/src/serviceJobCreation.ts` → `src/services/serviceJobCreation.ts`
+→ `src/config/backend.ts`/`runtimeDiagnostics.ts`, present since F5d-54
+added that import) — `worker/tsconfig.json` has no Vite `ImportMetaEnv`
+ambient types, so `import.meta.env` doesn't type-check there. Confirmed to
+be a pure type-declaration artifact, not a runtime defect: because every
+such import in the Worker source is `import type` (erased entirely before
+execution), and the full Worker test suite — run directly via `node`,
+which strips types without checking them — passes cleanly (`npm test`
+exits 0, 0 `FAIL` lines) both before and after this task's changes,
+confirmed identically after F5d-56B too. Not fixed here (out of this
+task's scope); left as a discovered, non-blocking finding for a future
+ticket. **`worker: npm run typecheck` is never described as "clean"
+anywhere in this document** — it fails identically at the committed
+baseline and after this task.
+
+### F5d-56B — full operation-boundary attribution (Terra F5d-56A blocker)
+
+**Terra's F5d-56A finding (blocking).** F5d-56's diagnostic only reliably
+attributed a failure when a Firestore REST call returned a non-OK HTTP
+response. A rejected `fetch()` promise, a response body that fails to
+parse as JSON, or a structurally malformed-but-200-OK response could all
+still escape unattributed — reaching the client as a bare generic 500
+with no `[ServiceJob Allocator]` line at all, defeating the point of the
+diagnostic on the next reproduction.
+
+**Full-boundary design (Objective 1).** New `runAllocatorStage(stage,
+operation)` in `allocatorDiagnostics.ts` wraps an allocator operation as
+one unit — network transport, HTTP-status handling, response parsing, and
+any local structural validation the operation performs — catching
+whatever it throws, logging once, and rethrowing the original error
+completely unchanged. OAuth token acquisition is never inside this
+wrapper; every call site acquires its token in its own separate try/catch
+tagged `oauth-token` first, so an OAuth failure is never misclassified as
+a Firestore-stage failure (Objective 1, reconfirmed by 12 dedicated
+tests — one per stage, proving the failure is attributed `oauth-token`
+and never the stage that operation guards).
+
+**Single-stage semantics without cascaded/double logging (Objective 2).**
+`logAllocatorStageFailure()` tracks already-logged error objects by
+_identity_ (a `WeakSet`, not by stage or message). `getSequence()`, for
+example, wraps both `getDocument()`'s own read-level `runAllocatorStage`
+call _and_ its own post-read numeric-validation check with the same
+stage — when the read itself fails, the outer wrap sees the identical
+already-logged error object and skips re-logging, but still rethrows;
+when the read succeeds and only the later validation throws (a distinct,
+never-before-seen error object), the outer wrap logs it for the first
+time. The result: exactly one `[ServiceJob Allocator]` line per real
+failure, always from the first/innermost boundary that actually saw it —
+never an OAuth failure followed by a second, redundant Firestore-stage
+line for the same error.
+
+**Rethrow discipline (Objective 3).** Every wrap still only ever logs
+then `throw`s the exact original error object — never a replacement.
+`TransactionConflictError` remains the exact type `allocateServiceJob()`'s
+retry logic checks via `instanceof`; `logAllocatorStageFailure()` itself
+unconditionally skips logging it (a 409/412 is expected, retried
+behavior, never a genuine failure to diagnose), independent of the
+`WeakSet` dedup or how deeply it's wrapped.
+
+**Coverage per stage (Objectives 4–7).** `beginServiceJobTransaction()`
+and `commitServiceJobCreation()`'s full bodies (fetch → status check →
+parse/validate) are each one `runAllocatorStage` call. Reads
+(`intake-key-read`/`tracking-sequence-read`/`service-request-sequence-read`/`occupied-id-read`)
+get this coverage through `getDocument()`'s own wrap; the two sequence
+reads additionally wrap their own post-read numeric-validation throw
+(`getIntakeKey`/`getServiceJob` have no post-read validation throw to
+cover — a malformed document there already resolves to `null`,
+unchanged, matching existing behavior, not a new gap). `response-build`
+in `index.ts` is unchanged from F5d-56 — documented, not artificially
+instrumented further: `JSON.stringify` over a `ServiceJob` this codebase
+fully constructs from already-sanitized fields cannot realistically throw
+(no circular reference, `BigInt`, or function reaches it), so this
+remains a defensive wrap around a boundary that isn't realistically
+triggerable, exactly as Objective 7 asked to document rather than fake.
+Commit's response is never parsed on success (no `.json()` call exists on
+that path), so "invalid JSON" does not apply there — documented, not
+tested, for the same reason.
+
+**Safe codes (Objective 8).** Two new codes, both drawn from the same
+closed vocabulary: `network-error` (a rejected `fetch()` promise —
+classified via `instanceof TypeError`, the Fetch API's own documented
+rejection shape) and `invalid-json` (`response.json()`/`JSON.parse`
+failing — via `instanceof SyntaxError`). A third, `invalid-response`, is
+produced only by matching two exact, static, developer-authored message
+strings this codebase itself throws
+(`'Firestore returned malformed transaction'`,
+`'Firestore sequence is malformed'`) — never derived from
+`error.message` in general, a response body, a document path, or a
+request body. `serialization-error` remains part of the documented
+vocabulary but is never produced by any branch — the commit path's
+`JSON.stringify` calls serialize only values this codebase already
+validated, so there is no realistic input that reaches it.
+
+**Adversarial sanitization (Objective 9) and behavioral tests (Objective
+10).** New `allocatorFullBoundaryAttribution.test.mts` parameterizes all
+six non-OAuth-token stages across: a rejected fetch (network-error), an
+unparsable JSON body (invalid-json, for every stage that actually parses
+a response body), a malformed-but-200-OK body (invalid-response, for the
+two stages with a real post-read validation throw), and an adversarial
+case where the stubbed Firestore error response embeds a phone number, a
+Firestore document path, a Bearer-token-shaped string, a private-key
+fragment, and acceptance problem text — verified, per stage, to never
+appear in any logged diagnostic line. A twelfth block (one per stage)
+reconfirms OAuth failures are attributed `oauth-token` and never
+misclassified as that stage's own name.
+
+**Occupied-ID test strengthened (Objective 11), no allocator behavior
+changed.** `allocatorOccupiedIdSkip.test.mts` now additionally asserts
+the allocated job's Service Request number is exactly
+`SR-2026-000001`, and that the commit's Service Request sequence write
+is `1` (unaffected by the tracking-ID collision) — alongside its existing
+assertions that the occupied `BRN-2026-000001` is read and never written,
+the allocator selects `BRN-2026-000002`, the tracking sequence commits as
+`2`, and the protected record never appears in the write set.
+
+**Tests/results, defensible accounting (Objective 12).** Deterministically
+counted via `grep -c '  PASS'`/`'  FAIL'` on each file's own output, not
+invented: `allocatorDiagnostics.test.mts` 16/0,
+`allocatorStageAttribution.test.mts` 20/0,
+`allocatorFullBoundaryAttribution.test.mts` (new) 46/0,
+`allocatorOccupiedIdSkip.test.mts` 9/0 — 91 checks across these four
+files, 0 failures. Pre-existing, unmodified-behavior files reconfirmed
+still passing: `serviceJobAllocatorCommit.test.mts` 8/0,
+`serviceJobCreation.test.mts` 13/0. Full suite (17 files, `npm test`
+exits 0): 278 total `PASS` lines, 0 `FAIL` lines, counted the same
+deterministic way across the complete run. `worker: npx tsc --noEmit`
+produces the identical 6 pre-existing errors (see above) both before and
+after this remediation — zero new errors introduced.
+
+### F5d-56D — occupied-ID parser attribution closure (Terra F5d-56C blocker)
+
+**Terra's F5d-56C finding (blocking).** F5d-56B's re-audit found that
+`getServiceJob()` delegated its network read to `getDocument(...,
+'occupied-id-read')`, but then called `parseServiceJobDocument(doc)`
+_outside_ that wrap — the one accessor in this file, unlike every other
+one, that reads `doc.name.split('/')` without optional chaining. Terra
+reproduced this with a genuinely 200-OK, validly-JSON, but structurally
+malformed Firestore response body — `{}` — which made
+`parseServiceJobDocument()` throw a real `TypeError` (`doc.name` is
+`undefined`) that escaped both the read-level wrap (the read itself
+succeeded) and any outer wrap (there wasn't one), reaching the client as
+a bare, unattributed generic 500. **F5d-56/F5d-56B's diagnostics were not
+deploy-ready before this remediation** — this was a real, reproducible
+gap in exactly the boundary Gate 7.1's own failure sits in.
+
+**Fix.** `getServiceJob()`'s full body — the read _and_
+`parseServiceJobDocument()` — is now one `runAllocatorStage('occupied-id-read',
+...)` unit, the same pattern already used for `getSequence()`'s own
+post-read validation. The parse call's error is caught and marked via a
+new `markAsLocalValidationError()` (identity-tracked via a `WeakSet`, not
+a replacement/wrapper) purely so `classifyAllocatorError()` can tell it
+apart from a genuine `fetch()` rejection — both are `TypeError`, but only
+one is a real network failure. The original error object, its
+`instanceof`, `.stack`, and `.message` are all completely untouched; only
+what gets logged is affected. Safe code: `invalid-response` (not
+`network-error`) — reserved exclusively for this class of local
+parsing/validation failure, never for an actual transport error.
+
+**Single-stage guarantee reconfirmed.** For this exact path (malformed
+200-OK → parser throws), exactly **one** `[ServiceJob Allocator]
+occupied-id-read: invalid-response` line is emitted — proven directly,
+not inferred.
+
+**Primitive-throw dedup (Objective 6) — theoretical, non-blocking, not
+broadened.** The `WeakSet`-based already-logged dedup (F5d-56B) cannot
+track a thrown primitive (string/number/boolean), which could in
+principle re-log at nested boundaries. Every throw site in
+`worker/src/*.ts` was reviewed (`serviceJobCreation.ts`,
+`firestoreClient.ts`, `googleAuth.ts`, plus the runtime `TypeError`/
+`SyntaxError` this code can encounter) — none throws a bare primitive
+today, so there is no currently-reachable path. Documented as low-priority
+future hardening in `allocatorDiagnostics.ts` itself; not implemented,
+per this ticket's own instruction not to broaden scope for a hypothetical.
+
+**Regression reconfirmed, no allocator behavior changed.** The
+strengthened occupied-ID success test
+(`allocatorOccupiedIdSkip.test.mts`) still proves: `BRN-2026-000001` read,
+never written; allocated job `BRN-2026-000002`; Service Request number
+`SR-2026-000001`; tracking sequence commits as `2`; Service Request
+sequence commits as `1`; the protected record absent from the commit
+write set. Every previously-passing attribution scenario (OAuth,
+transaction-begin, all four reads, commit, 409/412-not-logged) still
+passes unmodified. The atomic commit still contains exactly the same four
+writes (intake key, Service Job, tracking sequence, Service Request
+sequence) — no diagnostic write, no extra transaction, no retry/
+idempotency change.
+
+**Tests/results, defensible accounting.** New
+`allocatorOccupiedIdParserAttribution.test.mts`: 7/7, deterministically
+counted via `grep -c '  PASS'`/`'  FAIL'` — and confirmed, by temporarily
+reverting just the `getServiceJob()` fix and re-running, that 3 of its 7
+checks genuinely fail against the pre-F5d-56D implementation (zero
+`[ServiceJob Allocator]` lines emitted), then confirmed passing again
+once restored. Combined with F5d-56B's four files (91 checks), the
+allocator-diagnostics-specific total is 98 checks, 0 failures, across 5
+files. Full Worker suite (18 files, `npm test` exits 0): **285 total
+`PASS` lines, 0 `FAIL` lines** (278 + 7 new), same deterministic counting
+method. `worker: npx tsc --noEmit` still produces the identical 6
+pre-existing errors — zero new errors introduced by F5d-56D.
+
+**Coverage claim, precisely scoped.** All realistic allocator transport/
+parse/validation paths covered by current source and tests — network
+transport, HTTP-status handling, response/body parsing, and every local
+structural-validation throw this codebase's allocator methods actually
+contain — are now attributed to a specific stage. This is not a claim of
+absolute coverage against every conceivable JavaScript exception; it is
+substantiated by the behavioral tests above, not asserted beyond them.
+
+**Underlying defect status: still UNKNOWN.** F5d-56, F5d-56B, and F5d-56D
+fix nothing about the live Worker 500 itself — all three add observability
+only. The next controlled reproduction of Gate 7.1 (once separately
+approved) will, for the first time, produce a `[ServiceJob Allocator]
+<stage>: <code>` log line pinpointing exactly which stage failed, across
+the full operation boundary — that reproduction has not yet happened.
+Diagnostics remain **undeployed**. Production durable writes from the
+prior Gate 7.1 attempt remain **ZERO**.
+
+Gate 7.1 remains **PAUSED**. Production durable writes = ZERO. No
+production deployment, mutation, or Rules/Worker/IAM/Auth change
+occurred.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Each new repository's backend swap (Customer, Service Job, Search, Registered Products) gets the same doc-plus-approval treatment Product Master got, not a silent bulk migration.
