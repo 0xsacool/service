@@ -1275,6 +1275,96 @@ as **low-priority future hardening only**, not implemented in this task:
 - The 8 pre-existing Markdown Prettier findings noted above remain
   non-blocking technical debt, unrelated to and untouched by F5d-54.
 
+## F5d-55 — Browser fetch receiver binding (Gate 7.1 failed safely, before HTTP transport)
+
+**Gate 7.1's manual UI acceptance failed safely, at the transport layer,
+before any HTTP request reached the network.** The browser reported
+`Failed to execute 'fetch' on 'Window': Illegal invocation`. Independent
+production verification confirmed this was a clean, no-op failure:
+`BRN-2026-000002` absent, acceptance Service Job count = 0, no
+intake-key mapping, both Bruno sequences absent/logically 0, the
+protected `BRN-2026-000001` unchanged, and the Worker's
+`POST /service-jobs` was **never reached**. **Durable production writes
+from this attempt = ZERO.**
+
+**Exact root cause.** `src/auth/workerTokenProvider.ts` built its default
+browser fetch dependency as `const browserWorkerFetchDependencies = {
+fetch }` — copying the native `fetch` function reference onto a plain
+object with no receiver. Chrome's native `fetch` is a WebIDL
+"unforgeable" method that requires Window (or another Window-like global)
+as its `this`; calling it as `dependencies.fetch(...)` invoked native
+fetch with `dependencies` — an ordinary plain object — as the receiver,
+which Chrome rejects with exactly the observed error. This was purely a
+JavaScript receiver-binding mistake, not an auth, token, CORS, Worker, or
+Rules problem — reconfirmed below (Objective 4) by tracing the full
+transport path end to end.
+
+**The fix.** `browserWorkerFetchDependencies.fetch` is now
+`globalThis.fetch.bind(globalThis)` — permanently rebinding the receiver
+to the real global object, so the bound function behaves correctly
+regardless of what object it's later attached to or called through. This
+is the smallest possible correction: one `const` initializer, no redesign
+of `WorkerTokenProvider`, `fetchWithWorkerToken`, or any caller. Dependency
+injection is fully preserved — `fetchWithWorkerToken`'s `dependencies`
+parameter and its default-value shape are unchanged, so every existing
+test that injects a fake `fetch` (token refresh, 401 retry, 403, missing
+token) continues to work exactly as before.
+
+**Browser-faithful regression proof (not source-text only).** New
+`workerFetchReceiverBinding.test.mjs` reproduces Chrome's actual receiver
+check with a real `function` (not an arrow function, since only a real
+function has call-site-dependent `this`) that throws
+`"Illegal invocation"` unless invoked with `this === globalThis` — proving
+the _old_ `{ fetch: nativeStyleFetch }.fetch(...)` pattern genuinely
+throws, and the _fixed_ `.bind(globalThis)` pattern genuinely succeeds.
+Critically, one test patches `globalThis.fetch` to this same
+receiver-checking simulator and loads `workerTokenProvider.ts` fresh (a
+dedicated Vite server, so the module-level `const` re-evaluates against
+the patched global) with **no `dependencies` override at all** — directly
+exercising the real production default path, not a re-implementation of
+the pattern, and confirms the observed receiver is genuinely
+`globalThis`.
+
+**Token/credential safety (Objective 4), reconfirmed.** The full transport
+path (Firebase authenticated user → `WorkerTokenProvider.getIdToken()` →
+the bound fetch dependency → `Authorization: Bearer <idToken>` header →
+`POST /service-jobs`) is unchanged by this fix — only the fetch
+dependency's receiver was corrected, nothing about token
+lifetime/caching/refresh semantics. `workerTokenProvider.ts` contains no
+`console.*` call anywhere, and the ID token appears textually in exactly
+one place: the `Authorization` header template. A test confirms the
+"missing token" error message never contains a token/Bearer/API-key-shaped
+value.
+
+**F5d-54 create-path guard regression (Objective 5), reconfirmed
+unchanged, no source touched:** all `serviceJobCreateGuard.test.mjs` and
+`runtimeDiagnostics.test.mjs` tests still pass — Mock mode remains usable,
+the FIRESTORE + WORKER indicator remains correct, the Firestore create
+guard remains fail-closed (missing Worker URL and non-worker files backend
+both still reject), and the idempotency-key `crypto.randomUUID()` remains
+generated only after `performServiceJobCreate()`'s readiness check passes.
+
+7 new tests (`workerFetchReceiverBinding.test.mjs`) plus the 5 existing
+`workerTokenProvider.test.mjs` tests (unchanged, still passing) validate
+this fix directly. Combined with the unchanged F5d-54 regression suites
+(`serviceJobCreateGuard.test.mjs`: 10, `runtimeDiagnostics.test.mjs`: 18),
+the F5d-55 focused total is **40/40 passing** (Terra F5d-55A-verified).
+Full validation: TypeScript build and Vite production build pass; ESLint
+passes; Prettier passes on every file this task touched; the direct Node
+suite passes 219/220 in-process (the sole exception is
+`firestoreRules.test.mjs` when run outside its dedicated emulator wrapper
+— it independently passes 11/11 via `npm run test:firestore-rules`,
+unaffected since `firestore.rules` was not touched). No Worker source or
+contract was touched, so the Worker test suite was not re-run.
+
+Gate 7.1 remains **PAUSED**, pending: a fresh independent audit of this
+remediation, a local checkpoint/commit once that audit passes, and a
+freshly-scoped preflight before any further live rehearsal is attempted.
+This document does not claim Gate 7.1 succeeded — the historical manual
+attempt failed safely before reaching the network, with zero durable
+production writes and the protected BRN unchanged. No production
+deployment, mutation, or Rules/Worker/Auth/IAM change occurred.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Each new repository's backend swap (Customer, Service Job, Search, Registered Products) gets the same doc-plus-approval treatment Product Master got, not a silent bulk migration.
