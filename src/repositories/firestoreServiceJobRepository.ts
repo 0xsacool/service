@@ -24,6 +24,7 @@ import {
   toFirestoreUpdateFields,
 } from './firestore/serviceJobMapping';
 import { needsTrustedClosedAt } from '../services/serviceJobClosure';
+import { bumpDataVersion } from './dataVersion';
 function workerBaseUrl(): string {
   const configured = import.meta.env.VITE_FILES_WORKER_URL;
   if (typeof configured !== 'string' || configured.trim().length === 0)
@@ -89,6 +90,10 @@ export async function createFirestoreServiceJobRepository(
           next.set(docSnap.id, fromFirestoreData(docSnap.id, docSnap.data()));
         });
         jobsById = next;
+        // F5d-49B: signals any external-store subscriber (Universal Search)
+        // that fresh data has landed, independent of the first-snapshot
+        // resolve below — this fires on every subsequent snapshot too.
+        bumpDataVersion();
         // Only resolve on a server-confirmed snapshot, not Firestore's
         // possibly-stale first cached event — confirmed live for Product
         // Master/Customers (DECISIONS.md #018) that resolving early leaves

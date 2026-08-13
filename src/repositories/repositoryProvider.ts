@@ -134,15 +134,21 @@ async function createFirestoreBackedRepositoryProvider(
     await import('./firestoreServiceReportsRepository');
   const { createFirestoreRegisteredProductsRepository } =
     await import('./firestoreRegisteredProductsRepository');
+  const { createFirestoreSearchRepository } = await import('./firestoreSearchRepository');
   const serviceJobs = await createFirestoreServiceJobRepository(brandId, tokenProvider);
+  const customers = await createFirestoreCustomersRepository(brandId);
   return {
     ...createUnavailableRepositoryProvider(),
     serviceJobs,
-    customers: await createFirestoreCustomersRepository(brandId),
+    customers,
     productMaster: await createFirestoreProductMasterRepository(),
     attachments: await resolveAttachmentsRepository(serviceJobs, tokenProvider),
     serviceReports: await createFirestoreServiceReportsRepository(serviceJobs),
-    registeredProducts: createFirestoreRegisteredProductsRepository(serviceJobs),
+    registeredProducts: createFirestoreRegisteredProductsRepository(
+      customers,
+      serviceJobs
+    ),
+    search: createFirestoreSearchRepository(customers, serviceJobs),
   };
 }
 

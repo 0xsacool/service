@@ -22,7 +22,7 @@ Platform: responsive web application (mobile through desktop), Thai-first for Ve
 
 - The app runs on **real client-side routing** (`react-router-dom`), a **feature-based folder structure**, and a **Repository Provider** seam — not the original flat `src/components/` + `useState<PageId>` + static-array design described in earlier versions of this document.
 - Every data read/write goes through a typed repository interface (`src/repositories/types.ts`), resolved via `repositories` in `src/repositories/repositoryProvider.ts`. By default every repository is backed by an **in-memory Mock implementation** seeded from static fixtures.
-- **Product Master, Customers, Service Jobs, and Registered Products have an opt-in Firestore backend.** Local development defaults to Mock; a production build requires exactly `VITE_BACKEND_KIND=firestore` and otherwise stops before mounting routes or repositories. This setting has not been changed for a deployed frontend by this codebase. Universal Search has no Firestore backend at all (see Current Limitations).
+- **Product Master, Customers, Service Jobs, Registered Products, and Universal Search have an opt-in Firestore backend.** Local development defaults to Mock; a production build requires exactly `VITE_BACKEND_KIND=firestore` and otherwise stops before mounting routes or repositories. This setting has not been changed for a deployed frontend by this codebase. Firestore-mode search supports name/phone/tracking-number/serial-number only — marketplace username and order number remain unsupported (see Current Limitations, F5d-49).
 - `@supabase/supabase-js` is still an installed dependency but is **not used anywhere in the code** — it predates the Firebase/Firestore direction taken in Sprint F0–F2.1 and is effectively orphaned (see Current Limitations).
 - Firebase Auth is now used by the source-only staff session provider. No production Auth provider, Firebase user, or `staffProfiles/{uid}` document has been created, so no live staff session exists yet. `Login` uses email/password only when the provider is later enabled and a valid own-profile allowlist record can be read.
 - **Mock repositories remain session-only.** In Firestore mode, Customers and Service Jobs are persistent and shared; Product Master is deliberately read-only until a privileged catalog workflow is approved. Service Job creation allocates tracking and Service Request numbers inside one Firestore transaction, then returns only a server-confirmed document. The numbering year remains derived from the existing browser-created `createdAt` date; F5d-31 does not claim a trusted server year because that needs a later privileged allocator design. Current Rules deliberately deny `numberSequences`, so this durable creation path is source-complete but not live-ready until that later Rules/privileged-allocator decision.
@@ -39,7 +39,7 @@ Platform: responsive web application (mobile through desktop), Thai-first for Ve
 | Icons             | `lucide-react`                                                                                                                                                                                                                                                                                                                                                                        |
 | Data access       | Typed repository interfaces (`src/repositories/types.ts`) resolved through the **Repository Provider** (`src/repositories/repositoryProvider.ts`), consumed by hooks (`useServiceJobs`, `useCustomers`, `useUniversalSearch`, `useCustomerProducts`, `useCreateServiceJob`, `useProductMaster`, `useProductDetail`) — components never import a repository or mock data file directly |
 | Backend (default) | **Mock** — static fixtures under `src/repositories/mockData/`, wrapped by in-memory repository implementations                                                                                                                                                                                                                                                                        |
-| Backend (opt-in)  | **Firestore**, via `firebase` SDK (`src/lib/firebase/firebase.ts`), selected by `VITE_BACKEND_KIND=firestore` for Product Master, Customers, Service Jobs, and Registered Products — see Backend & Repository Architecture below                                                                                                                                                      |
+| Backend (opt-in)  | **Firestore**, via `firebase` SDK (`src/lib/firebase/firebase.ts`), selected by `VITE_BACKEND_KIND=firestore` for Product Master, Customers, Service Jobs, Registered Products, and Universal Search (name/phone/tracking/serial only) — see Backend & Repository Architecture below                                                                                                  |
 | State             | Local `useState`/hooks per page/component; no global store; no React Context for repositories (deliberate — see [DECISIONS.md](DECISIONS.md) #017)                                                                                                                                                                                                                                    |
 | Auth              | Source-only Firebase Auth session provider with email/password sign-in, own-profile validation, staff guard, and Worker token refresh handling. No provider/user/profile has been provisioned or deployed. `@supabase/supabase-js` is an unused, orphaned dependency                                                                                                                  |
 | Folder structure  | Feature-based (`src/features/`, `src/shared/`, `src/repositories/`, `src/imports/`, `src/types/`, `src/constants/`, `src/validation/`, `src/services/`, `src/utils/`, `src/lib/`, `src/config/`) — see Folder Structure below                                                                                                                                                         |
@@ -137,7 +137,7 @@ Grouped by what shipped, not by exact sprint label (many sprints predate a forma
 ## Current Limitations
 
 - **No authentication or roles** — Admin, Service Staff, and Customer are still not distinguished in code. Firebase Auth is reachable but nothing calls it.
-- **Partial Firestore persistence only** — in `VITE_BACKEND_KIND=firestore` mode, Product Master, Customers, Service Jobs, and (since F5d-48) Registered Products are durable/derived and shared. **Universal Search remains permanently unavailable in Firestore mode** (`repositories.search` is never overridden — see F5d-48 below) — `UniversalSearch` cannot find a real customer at all, which independently blocks the New Service Job flow regardless of the F5d-48 fix. No deployed frontend has been switched to Firestore mode.
+- **Partial Firestore persistence only** — in `VITE_BACKEND_KIND=firestore` mode, Product Master, Customers, Service Jobs, Registered Products (F5d-48), and Universal Search (F5d-49) are durable/derived and shared. **Firestore-mode search supports name, phone, tracking number, and serial number only** — marketplace username and order number have no Firestore collection to search (`customer_channel_contacts`/`product_instances` were never migrated — DECISIONS.md #038) and always return no match, honestly, not fabricated. No deployed frontend has been switched to Firestore mode.
 - **Orphaned dependency** — `@supabase/supabase-js` remains in `package.json` from the original prototype but is called nowhere; the actual backend direction taken (F0–F2.1) is Firebase/Firestore, not Supabase. This divergence from the original [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) target (which is Postgres/Supabase-flavored) has not been formally reconciled — see that document's new "Implementation Status" section and this sprint's Remaining Gaps.
 - **`StaffShell.tsx` appears superseded by `StaffLayout.tsx`** — `App.tsx`'s router uses `StaffLayout` exclusively; `StaffShell` still exists in `src/shared/layouts/` but nothing imports it. Worth a cleanup pass, not urgent.
 - **Localization boundary is source-only** — staff UI is Thai-first and public tracking supports the four approved locales, but live auth/backend rollout and any broader content translation remain separately gated.
@@ -805,6 +805,157 @@ emulator and passes 11/11 there, unaffected since `firestore.rules` itself
 was not touched). No Worker source was touched, so the Worker suite was not
 re-run. No production deployment, mutation, or Gate 7.1 resumption
 occurred.
+
+## F5d-49 / F5d-49B — Firestore Universal Search read path, Terra-remediated (source only)
+
+Root cause: `repositories.search` was never overridden under Firestore
+mode — it stayed on the permanent unavailable stub (`search: () => []`) —
+so `UniversalSearch` could never find a real customer, independently
+blocking New Service Job's customer-selection step even after F5d-48's
+registered-products fix. An independent Terra audit (F5d-49B) then found
+four further defects in the first F5d-49 implementation before it was
+committed; all four are fixed in place, described below, and the section
+is written to describe only the final, remediated behavior.
+
+**Customer identity vs. the join key (Terra P1).** A customer's Firestore
+document ID is identity only — it is never treated as, or assumed to
+equal, a phone number anywhere in this code. The real, documented
+relationship is `customer.phone` <-> `serviceJob.customerPhone` (Decision
+#031's accepted legacy join key), joined through exactly one canonical
+normalization rule, `normalizeCanonicalPhone()` (`canonicalPhone.ts`) —
+digits-only, so formatting differences (spaces, dashes, parentheses) don't
+silently break the join. A missing/blank phone on either side never
+matches anything, including another blank phone. If more than one scoped
+customer normalizes to the same canonical phone, that phone is treated as
+unresolved: none of the colliding customers appear in search, and
+`registeredProducts.getForCustomer()` returns nothing for any of them —
+Service Job history is never guessed onto one of several possible owners,
+and no customer records are ever merged.
+
+**`RegisteredProductsRepository.getForCustomer(customerId)`'s public
+interface is unchanged** — every UI call site (`useCustomerProducts.ts`,
+`ProductSelection.tsx`, `NewServiceJob.tsx`) still passes the customer's
+`id` exactly as before. Only the Firestore implementation's internal join
+changed: it now resolves `customerId` to the real `Customer` record via the
+(already brand-scoped) `CustomersRepository`, then joins by that record's
+canonical phone, with the same duplicate-phone fail-closed rule as search.
+Mock's implementation and behavior are untouched.
+
+**Blank serials (Terra P2).** A Service Job with a missing, empty, or
+whitespace-only `serialNumber` can exist in history but is never grouped
+into a selectable `RegisteredProduct` — no serial is fabricated to make one
+selectable.
+
+**Search reactivity (Terra P1).** `useUniversalSearch` previously memoized
+`search()` on `query` alone, so a Firestore listener update (a new/changed
+Service Job or customer) never appeared in an already-typed search until
+the user edited the query again. `src/repositories/dataVersion.ts` (new) is
+the smallest external-store mechanism that fits this project's existing
+architecture — no polling, no React Context (deliberately absent, Decision
+#017), no extra Firestore query: `firestoreCustomersRepository.ts` and
+`firestoreServiceJobRepository.ts` each call `bumpDataVersion()` from
+inside their own existing `onSnapshot` handler, and `useUniversalSearch`
+reads the shared counter via React's built-in `useSyncExternalStore` and
+includes it in the search `useMemo`'s dependency array. Mock mode never
+calls `bumpDataVersion()`, so this is inert there.
+
+**Search UX honesty (Terra P2).** `firestoreSearchRepository.ts` matches by
+customer name, phone (digit-normalized), Service Job tracking number, and
+serial number only — reusing the already brand-scoped
+`customers`/`serviceJobs` repositories directly, no new Firestore query, no
+`firestore.rules` change. Marketplace username and order number are
+genuinely unsupported (no `customer_channel_contacts`/`product_instances`
+collection has ever existed in Firestore — DECISIONS.md #038); every result
+leaves those three fields `undefined`. `SearchInput.tsx`,
+`SearchEmptyState.tsx`, and `SearchNoResults.tsx` now branch their Thai
+copy on `backendKind` (same precedent as `ServiceReportsSection.tsx`'s own
+mock-only gating) so Firestore-mode wording only ever promises name/phone/
+tracking/serial; Mock mode keeps its full wording, unchanged. The
+already-unwired "+ New Customer" action (silently a no-op in every backend,
+since `NewServiceJob.tsx` never passes `onCreateNewCustomer` at all) is
+hidden in Firestore mode behind an honest "not supported in this mode yet"
+note rather than a button that looks live — no customer-creation behavior
+was implemented. `getRecentSearches()` returns `[]` rather than Mock's
+illustrative placeholder strings, since neither backend has a real
+tracked-search-history layer. The shared string-matching helpers
+(`normalizeDigits`/`matches`/`matchesPhone`) are extracted to
+`searchMatching.ts` so Mock and Firestore search share one implementation;
+Mock's own search behavior is unchanged (regression-tested).
+
+47 tests across five files (`firestoreSearch.test.mjs`,
+`firestoreRegisteredProducts.test.mjs`, `dataVersion.test.mjs`,
+`searchUxHonesty.test.mjs`, plus the unchanged Rules suite) cover: opaque
+customer IDs never treated as phones, formatted-vs-raw phone joins,
+duplicate-canonical-phone fail-closed (both repositories), missing/blank
+phone on either side, blank and whitespace-only serials ignored, same-serial
+repeat-visit grouping, cross-customer and cross-brand isolation, the
+data-version reactivity mechanism end to end (bump/subscribe contract, both
+Firestore repositories genuinely calling it, `useUniversalSearch` genuinely
+subscribing), supported-vs-unsupported search dimensions, the "+ New
+Customer" gating, Mock search parity, and the full search-finds-customer →
+registeredProducts-loads-their-real-product chain. Full validation:
+TypeScript build and Vite production build pass; ESLint and Prettier pass.
+At the F5d-49B checkpoint, the direct serialized Node run produced 170 of
+171 test declarations passing in-process (the 171st was, at that point,
+still counted alongside the direct suite; see F5d-49F below for the
+corrected accounting that separates the Firestore Rules emulator suite
+out as its own category). The Rules suite itself passed 11/11 under its
+emulator wrapper, unaffected since `firestore.rules` was not touched. No
+Worker source was touched, so the Worker suite was not re-run.
+
+Firestore-mode New Service Job can now reach customer selection, product
+selection, and the Save & Print gate through the ordinary staff UI's data
+layer, with the join safety, ambiguity handling, reactivity, and UX honesty
+Terra required. Gate 7.1 remains paused pending a separate Terra re-audit
+and a separately approved production acceptance step — this task
+implements and tests the read path only; no actual acceptance run was
+performed. No production deployment or mutation occurred.
+
+### F5d-49D — final UX honesty cleanup
+
+Terra's re-audit (F5d-49C) passed all P1 findings and returned one
+remaining P2: `NewServiceJob.tsx`'s own "start search" subtitle (separate
+from `SearchInput.tsx`/`SearchEmptyState.tsx`/`SearchNoResults.tsx`, which
+F5d-49B already fixed) still unconditionally advertised marketplace
+username and order number. Fixed with the same `backendKind` branch used
+by those three components — Firestore mode's subtitle now reads "เริ่มจาก
+ค้นหาลูกค้า — ค้นหาด้วยชื่อ โทรศัพท์ เลขติดตาม หรือหมายเลขเครื่อง" (name,
+phone, tracking number, serial number only); Mock mode keeps its full
+wording, unchanged. A source-text regression test
+(`searchUxHonesty.test.mjs`) now covers this fourth component the same way
+as the other three, so a future edit reintroducing marketplace/order
+wording in the Firestore branch fails the suite. No other stale
+Firestore-visible copy was found — `CustomerSummaryCard.tsx`/
+`CustomerResultCard.tsx` only render `customer.marketplace`/`.username`
+conditionally on real data being present, which Firestore search already
+guarantees stays `undefined` (Terra P2, F5d-49B), so nothing there
+advertises an unsupported dimension. Build, lint, and Prettier all clean;
+see F5d-49F below for the corrected, current test-count accounting. No
+production deployment, mutation, or Gate 7.1 resumption occurred.
+
+### F5d-49F — documentation count cleanup
+
+Terra's final audit (F5d-49E) passed every source/security/data-integrity/
+UX finding across the F5d-49/F5d-49B/F5d-49D series; the only remaining
+issue was that this file's earlier test-count wording (above) blurred the
+direct Node suite together with the Firestore Rules emulator suite as if
+they were one pool. They are two separate categories, run two separate
+ways, and are corrected here to state that plainly:
+
+- **Direct/normal Node tests:** 21 files, **171 test declarations**, all
+  passing in-process via `node --test test/*.test.mjs` (no emulator
+  needed).
+- **Firestore Rules emulator tests:** 1 file
+  (`firestoreRules.test.mjs`), **11 test declarations**, all passing only
+  under its dedicated `npm run test:firestore-rules` emulator wrapper —
+  it fails if run directly outside that wrapper, which is expected and
+  unrelated to `firestore.rules` correctness.
+- **Combined total: 182 test declarations**, all passing under their
+  respective run modes.
+
+This is a documentation-only correction — no test file, source file, or
+`firestore.rules` changed. Gate 7.1 remains paused. No production
+deployment, mutation, or Gate 7.1 resumption occurred.
 
 ## Development Principles
 

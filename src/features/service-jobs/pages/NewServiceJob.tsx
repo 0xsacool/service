@@ -20,6 +20,15 @@ import { ServiceIntakeSection, ServiceRequestPrintPreview } from '../components'
 import { ROUTES, createEmptyServiceIntake } from '../../../constants';
 import { isServiceIntakeComplete } from '../../../validation';
 import { useCreateServiceJob } from '../../../hooks/useCreateServiceJob';
+import { backendKind } from '../../../config/backend';
+
+// F5d-49D (Terra P2 UX honesty follow-up): same rationale as SearchInput.tsx
+// — Firestore mode has no marketplace username/order number backing data
+// (DECISIONS.md #038), so this prompt must not promise those dimensions.
+const START_SEARCH_PROMPT =
+  backendKind === 'mock'
+    ? 'เริ่มจากค้นหาลูกค้า — ค้นหาด้วยชื่อ โทรศัพท์ ชื่อผู้ใช้ ออเดอร์ เลขติดตาม หรือหมายเลขเครื่อง'
+    : 'เริ่มจากค้นหาลูกค้า — ค้นหาด้วยชื่อ โทรศัพท์ เลขติดตาม หรือหมายเลขเครื่อง';
 
 export function NewServiceJob() {
   const navigate = useNavigate();
@@ -86,7 +95,7 @@ export function NewServiceJob() {
   const subtitle = savedJob
     ? 'พร้อมรับลูกค้ารายถัดไปเมื่อคุณพร้อม'
     : !selectedCustomer
-      ? 'เริ่มจากค้นหาลูกค้า — ค้นหาด้วยชื่อ โทรศัพท์ ชื่อผู้ใช้ ออเดอร์ เลขติดตาม หรือหมายเลขเครื่อง'
+      ? START_SEARCH_PROMPT
       : !selectedProduct
         ? 'เลือกสินค้าที่ต้องการซ่อม'
         : !intakeComplete

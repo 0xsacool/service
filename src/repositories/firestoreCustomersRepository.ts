@@ -9,6 +9,7 @@ import { getFirestoreDb } from '../lib/firebase/firebase';
 import type { BrandId, Customer } from '../types';
 import type { CustomersRepository } from './types';
 import { fromFirestoreData, CUSTOMERS_COLLECTION } from './firestore/customerMapping';
+import { bumpDataVersion } from './dataVersion';
 
 // Same synchronous-facade-over-async-backend design as
 // firestoreProductMasterRepository.ts (DECISIONS.md #018) — CustomersRepository's
@@ -45,6 +46,10 @@ export async function createFirestoreCustomersRepository(
           const customer = fromFirestoreData(docSnap.id, docSnap.data());
           return customer ? [customer] : [];
         });
+        // F5d-49B: signals any external-store subscriber (Universal Search)
+        // that fresh data has landed, independent of the first-snapshot
+        // resolve below — this fires on every subsequent snapshot too.
+        bumpDataVersion();
         // Only resolve on a server-confirmed snapshot, not Firestore's
         // possibly-stale first cached event — confirmed live for Product
         // Master (DECISIONS.md #018) that resolving early leaves getAll()

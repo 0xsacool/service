@@ -3,23 +3,25 @@ import type { SearchRepository } from './types';
 import { mockServiceJobs } from './mockData/serviceJobs.mock';
 import { customerChannelMockByPhone } from './mockData/customerSearch.mock';
 import { repositories } from './repositoryProvider';
+import { matches, matchesPhone, normalizeDigits } from './searchMatching';
 
 // Sprint F3.1: customer identity (id/name/phone/email) now comes from
 // CustomerRepository via the Repository Provider — repositories.customers —
 // instead of this module independently re-deriving it from mockServiceJobs.
-// This makes CustomerRepository the single source of truth for customer
-// identity in search results: when backendKind is 'firestore', search
-// reflects the live Firestore customer list, same as every other
-// CustomerRepository consumer, with no change to this file's exported shape.
+// This is the Mock implementation of SearchRepository specifically — under
+// backendKind 'firestore', repositories.search resolves to a separate
+// object, firestoreSearchRepository.ts, built the same way but reading real
+// Firestore customers/Service Jobs instead of mockServiceJobs/
+// customerChannelMockByPhone (see that file for exactly what does and does
+// not carry over — F5d-49).
 //
 // Enrichment fields — previousServiceJobs/lastVisit (job history) and
 // marketplace/username/orderNumber (channel contact) — still come from
-// mockServiceJobs/customerChannelMockByPhone, since neither is part of
-// CustomerRepository's scope and Service Jobs are explicitly not migrated
-// this sprint. Joined by phone number, the same key both CustomerRepository
+// mockServiceJobs/customerChannelMockByPhone here, since Service Jobs and
+// channel-contact identity aren't part of CustomerRepository's own scope.
+// Joined by phone number, the same key both CustomerRepository
 // implementations use as the record/document id (see customers.mock.ts,
-// seedCustomersFromMock.ts) — so the join is correct regardless of which
-// backend repositories.customers currently resolves to.
+// seedCustomersFromMock.ts).
 //
 // Reading repositories from repositoryProvider.ts here is a circular import
 // (repositoryProvider.ts imports searchRepository.ts to build the Mock
@@ -89,20 +91,6 @@ function findCustomerByJobField(
     }
   }
   return customerSearchResults.filter((c) => matchedPhones.has(c.phone));
-}
-
-function normalizeDigits(value: string): string {
-  return value.replace(/\D/g, '');
-}
-
-function matches(haystack: string | undefined, query: string): boolean {
-  if (!haystack) return false;
-  return haystack.toLowerCase().includes(query);
-}
-
-function matchesPhone(phone: string, query: string, queryDigits: string): boolean {
-  if (matches(phone, query)) return true;
-  return queryDigits.length > 0 && normalizeDigits(phone).includes(queryDigits);
 }
 
 // Recent-searches has no real session or persistence layer yet (no backend,
