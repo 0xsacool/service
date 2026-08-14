@@ -69,9 +69,7 @@ export function AuthSessionProvider({ children }: { children: React.ReactNode })
       resetRepositoriesForSession();
       queueMicrotask(() => {
         if (active) {
-          setSession(
-            createUnavailableSession('Authentication configuration is unavailable.')
-          );
+          setSession(createUnavailableSession('การตั้งค่าระบบยืนยันตัวตนไม่พร้อมใช้งาน'));
         }
       });
       return () => {
@@ -121,7 +119,7 @@ export function AuthSessionProvider({ children }: { children: React.ReactNode })
               if (active && currentUser.current?.uid === user.uid) {
                 setSession(
                   createUnavailableSession(
-                    'Staff data could not be initialized. Try again later.'
+                    'ไม่สามารถเตรียมข้อมูลเจ้าหน้าที่ได้ กรุณาลองใหม่ภายหลัง'
                   )
                 );
               }
@@ -132,7 +130,7 @@ export function AuthSessionProvider({ children }: { children: React.ReactNode })
             if (active && currentUser.current?.uid === user.uid) {
               setSession(
                 createUnavailableSession(
-                  'Staff access could not be verified. Try again later.'
+                  'ไม่สามารถตรวจสอบสิทธิ์เจ้าหน้าที่ได้ กรุณาลองใหม่ภายหลัง'
                 )
               );
             }
@@ -143,9 +141,7 @@ export function AuthSessionProvider({ children }: { children: React.ReactNode })
       resetRepositoriesForSession();
       queueMicrotask(() => {
         if (active) {
-          setSession(
-            createUnavailableSession('Authentication configuration is unavailable.')
-          );
+          setSession(createUnavailableSession('การตั้งค่าระบบยืนยันตัวตนไม่พร้อมใช้งาน'));
         }
       });
     }

@@ -55,6 +55,10 @@ test('Mock search behavior is unchanged: still matches by marketplace username',
   const { createServer } = await import('vite');
   const vite = await createServer({
     appType: 'custom',
+    define: {
+      'import.meta.env.VITE_BACKEND_KIND': JSON.stringify('mock'),
+      'import.meta.env.VITE_FILES_BACKEND': JSON.stringify('mock'),
+    },
     server: { middlewareMode: true },
   });
   try {

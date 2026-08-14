@@ -71,7 +71,7 @@ export function NewServiceJob() {
   };
 
   const handleSaveAndPrint = async () => {
-    if (!selectedCustomer || !selectedProduct) return;
+    if (isSaving || !selectedCustomer || !selectedProduct) return;
     setIsSaving(true);
     setSaveError(null);
     try {
@@ -159,7 +159,11 @@ export function NewServiceJob() {
               title="บันทึกและพิมพ์"
               subtitle="เสร็จสิ้นและส่งมอบใบนำส่ง"
             >
-              <PrimaryButton onClick={() => void handleSaveAndPrint()} className="w-full">
+              <PrimaryButton
+                onClick={() => void handleSaveAndPrint()}
+                className="w-full"
+                disabled={isSaving}
+              >
                 <Printer className="h-5 w-5" />
                 {isSaving ? 'กำลังบันทึก…' : 'บันทึกและพิมพ์'}
               </PrimaryButton>

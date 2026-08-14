@@ -3,7 +3,14 @@ import { readFile } from 'node:fs/promises';
 import { after, test } from 'node:test';
 import { createServer } from 'vite';
 
-const vite = await createServer({ appType: 'custom', server: { middlewareMode: true } });
+const vite = await createServer({
+  appType: 'custom',
+  define: {
+    'import.meta.env.VITE_BACKEND_KIND': JSON.stringify('mock'),
+    'import.meta.env.VITE_FILES_BACKEND': JSON.stringify('mock'),
+  },
+  server: { middlewareMode: true },
+});
 after(() => vite.close());
 
 const readSource = async (path) =>
@@ -191,11 +198,11 @@ test('each activation attempt clears diagnostics from any prior attempt before r
   );
 });
 
-test('AuthSessionProvider.tsx is untouched: still one generic message, no diagnostic import, no raw error read from the catch', async () => {
+test('AuthSessionProvider keeps one generic Thai message, no diagnostic import, and no raw error read from the catch', async () => {
   const source = await readSource('src/auth/AuthSessionProvider.tsx');
   assert.doesNotMatch(source, /firestoreInitDiagnostics/);
   assert.match(source, /catch \{/);
-  assert.match(source, /Staff data could not be initialized\. Try again later\./);
+  assert.match(source, /ไม่สามารถเตรียมข้อมูลเจ้าหน้าที่ได้ กรุณาลองใหม่ภายหลัง/);
 });
 
 test('the diagnostic record never carries a repository name outside the closed Firestore repository set', async () => {

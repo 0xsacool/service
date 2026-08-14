@@ -53,7 +53,7 @@ Not yet built. Listed in roughly the order the current sprint trajectory (F-seri
   broader presentation and any customer-visible attachment policy remain.
 - **Quote & warranty approval flow** — customer approves/declines a repair quote before work proceeds.
 - **Remaining printable documents** — Repair Report and Return Form (Service Request printing is already implemented — see Implemented above).
-- **Thai-first localization & accessibility** — Thai UI copy, THB/DD-MM-YYYY/Asia-Bangkok formatting, B.E. dates, and an ARIA/keyboard pass are all still open (see [DECISIONS.md](DECISIONS.md) #003).
+- **Thai-first localization & accessibility** — the F5d-63 source-only trust slice prepares deterministic THB/DD-MM-YYYY/Asia-Bangkok presentation, retains B.E. dates for customer documents, removes misleading production UI, and adds canonical text-only brand context. It is awaiting independent review and a separately approved deployment; the broader ARIA/keyboard and responsive-content pass remains open (see [DECISIONS.md](DECISIONS.md) #003).
 - **Technician workload view** — who's assigned what, to help staff balance the queue.
 - **Customer service history** — repeat-customer view showing all of a customer's past service jobs across their product instances.
 - **Product service history** — for a specific physical unit, a full repair timeline across every service job it's ever had.

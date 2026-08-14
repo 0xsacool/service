@@ -111,7 +111,7 @@ test('production misconfiguration does not mount its child Staff route tree', ()
       createElement('section', { 'data-staff-route': 'mounted' }, 'Staff console')
     )
   );
-  assert.match(markup, /Application configuration unavailable/);
+  assert.match(markup, /การตั้งค่าระบบไม่พร้อมใช้งาน/);
   assert.doesNotMatch(markup, /data-staff-route/);
   assert.doesNotMatch(markup, /Staff console/);
 });

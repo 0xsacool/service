@@ -1,17 +1,33 @@
+const BANGKOK_TIME_ZONE = 'Asia/Bangkok';
+
+const operationalDateFormatter = new Intl.DateTimeFormat('en-GB-u-ca-gregory', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  timeZone: BANGKOK_TIME_ZONE,
+});
+
+const operationalTimeFormatter = new Intl.DateTimeFormat('th-TH', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+  timeZone: BANGKOK_TIME_ZONE,
+});
+
+const thbFormatter = new Intl.NumberFormat('th-TH', {
+  style: 'currency',
+  currency: 'THB',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 export function formatDate(iso: string): string {
   if (iso === '—') return '—';
-  const d = new Date(iso);
-  return d.toLocaleDateString('th-TH', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  return operationalDateFormatter.format(new Date(iso));
 }
 
 export function formatDateShort(iso: string): string {
-  if (iso === '—') return '—';
-  const d = new Date(iso);
-  return d.toLocaleDateString('th-TH', { month: 'short', day: 'numeric' });
+  return formatDate(iso);
 }
 
 export function toIsoDate(date: Date): string {
@@ -19,19 +35,23 @@ export function toIsoDate(date: Date): string {
 }
 
 export function formatTime(date: Date): string {
-  return date.toLocaleTimeString('th-TH', { hour: 'numeric', minute: '2-digit' });
+  return operationalTimeFormatter.format(date);
 }
 
 // DD/MM/YYYY + Buddhist Era, per PRINT_SPECIFICATIONS.md's date-format rule
-// for customer-facing documents (DECISIONS.md #003). Scoped to print output
-// only — the rest of the app's staff-facing UI stays en-US pending the
-// deferred Thai-first pass, so this isn't used outside the print preview.
+// for customer-facing documents (DECISIONS.md #003).
 export function formatThaiDate(iso: string): string {
   if (iso === '—') return '—';
   const d = new Date(iso);
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year = d.getFullYear();
+  const parts = operationalDateFormatter.formatToParts(d);
+  const day = parts.find((part) => part.type === 'day')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const year = Number(parts.find((part) => part.type === 'year')?.value);
+  if (!day || !month || !Number.isInteger(year)) return '—';
   const buddhistEraYear = year + 543;
-  return `${day}/${month}/${year} (B.E. ${buddhistEraYear})`;
+  return `${day}/${month}/${year} (พ.ศ. ${buddhistEraYear})`;
+}
+
+export function formatCurrencyTHB(value: number): string {
+  return thbFormatter.format(value);
 }

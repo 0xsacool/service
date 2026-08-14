@@ -1,5 +1,11 @@
 export type { ServiceJobStatus, Priority, TimelineEvent, ServiceJob } from './serviceJob';
-export { CANONICAL_BRAND_IDS, getBrandCode, isCanonicalBrandId } from './brand';
+export {
+  CANONICAL_BRAND_IDS,
+  getBrandCode,
+  getBrandDisplayLabel,
+  getBrandName,
+  isCanonicalBrandId,
+} from './brand';
 export type { BrandId } from './brand';
 export type { Customer } from './customer';
 export type { Product } from './product';

@@ -140,14 +140,23 @@ verification, and the first staff-only Firebase Hosting rollout. The current
 production record is in `PROJECT_STATE.md`; `@supabase/supabase-js` remains an
 unused, orphaned dependency.
 
-### Sprint 2 — UX, Accessibility & Thai-First Pass *(not started)*
+### Sprint 2 — UX, Accessibility & Thai-First Pass *(in progress; F5d-63 source slice prepared)*
 
 **Objective:** Bring the UI up to a real, launch-shaped standard: usable by screen readers/keyboard, and dressed in Thai-market conventions instead of English/placeholder content. (Note: the intake form itself is no longer non-functional — that part of the original Sprint 2 scope was delivered early, during the Search/Intake phases above.)
 
+**F5d-63 source-only slice prepared:** fabricated Dashboard facts and staff
+identity are removed; production technician reassignment is read-only and
+cannot add a mock technician to an update patch; inert controls and
+unsupported search surfaces are removed; staff date/time, THB, warranty, and
+auth/config presentation are Thai/Thailand-correct; and canonical text-only
+brand context is visible. This slice has not been deployed, so production
+remains on the verified F5d-62 Hosting release. Public Tracking remains
+unavailable.
+
 **Remaining deliverables:**
-- Accessible chip/toggle groups (`aria-pressed`/`role="radiogroup"`), `aria-current="step"` on timeline, focus trap + `Escape` handling on the mobile drawer, labeled icon-only buttons.
-- Locale pass: Thai UI copy, THB currency formatting, DD/MM/YYYY dates, Asia/Bangkok time, Buddhist Era dates on anything print-facing.
-- Brand identity pass: replace placeholder visuals/copy with Bruno Thailand / Join Lux Club identity ([DECISIONS.md](DECISIONS.md) #008).
+- Accessible chip/toggle groups (`aria-pressed`/`role="radiogroup"`), `aria-current="step"` on timeline, focus trap + `Escape` handling on the mobile drawer, and the broader keyboard/screen-reader pass.
+- Remaining Thai copy and responsive/content QA beyond the bounded F5d-63 trust surfaces.
+- Any broader brand visual identity work beyond the canonical text badges delivered in F5d-63 ([DECISIONS.md](DECISIONS.md) #008).
 
 **Estimated Scope:** M
 

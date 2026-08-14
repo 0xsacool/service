@@ -28,6 +28,7 @@ export function Login() {
 
   const submit = async (event: React.FormEvent): Promise<void> => {
     event.preventDefault();
+    if (isSigningIn) return;
     setSignInError(null);
     setIsSigningIn(true);
     try {
@@ -83,7 +84,7 @@ export function Login() {
                 />
               </div>
             </Field>
-            <PrimaryButton type="submit" className="w-full">
+            <PrimaryButton type="submit" className="w-full" disabled={isSigningIn}>
               {isSigningIn ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}
               <ArrowRight className="h-5 w-5" />
             </PrimaryButton>

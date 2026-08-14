@@ -4,6 +4,7 @@ import {
   buildServiceJobUpdate,
   type ServiceJobEdits,
 } from '../services/serviceJobUpdate';
+import { backendKind } from '../config/backend';
 
 export interface UseUpdateServiceJobResult {
   updateServiceJob: (id: string, edits: ServiceJobEdits) => Promise<ServiceJob>;
@@ -26,7 +27,7 @@ export function useUpdateServiceJob(): UseUpdateServiceJobResult {
     if (!current) {
       throw new Error(`Cannot update service job "${id}": no such job exists`);
     }
-    const patch = buildServiceJobUpdate(edits, current);
+    const patch = buildServiceJobUpdate(edits, current, backendKind);
     return await repositories.serviceJobs.update(id, patch);
   };
 

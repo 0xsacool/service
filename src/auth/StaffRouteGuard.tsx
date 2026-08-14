@@ -7,7 +7,7 @@ export function StaffRouteGuard() {
     return <Outlet />;
   }
   if (session.status === 'loading' || session.status === 'profile-loading') {
-    return <p className="p-6 text-sm text-neutral-500">Verifying staff access…</p>;
+    return <p className="p-6 text-sm text-neutral-500">กำลังตรวจสอบสิทธิ์เจ้าหน้าที่…</p>;
   }
   if (session.status === 'signed-out') {
     return <Navigate to="/login" replace />;

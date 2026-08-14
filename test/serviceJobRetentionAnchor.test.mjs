@@ -50,11 +50,34 @@ const openJob = {
 test('non-terminal edits preserve a null closure anchor', () => {
   const patch = buildServiceJobUpdate(
     { status: 'In Repair', technician: 'Tech', notes: [] },
-    openJob
+    openJob,
+    'mock'
   );
 
   assert.equal(patch.closedAt, null);
   assert.equal(needsTrustedClosedAt(openJob.status, null, 'In Repair'), false);
+});
+
+test('an omitted technician edit cannot enter the persistence patch', () => {
+  const patch = buildServiceJobUpdate(
+    { status: 'In Repair', notes: [] },
+    openJob,
+    'firestore'
+  );
+
+  assert.equal(Object.hasOwn(patch, 'technician'), false);
+  assert.equal(patch.status, 'In Repair');
+  assert.deepEqual(patch.notes, []);
+});
+
+test('Firestore mode drops an explicitly supplied mock technician edit', () => {
+  const patch = buildServiceJobUpdate(
+    { status: 'In Repair', technician: 'Daniel Okafor', notes: [] },
+    openJob,
+    'firestore'
+  );
+
+  assert.equal(Object.hasOwn(patch, 'technician'), false);
 });
 
 test('only a first non-terminal-to-terminal transition requests trusted closure time', () => {
@@ -70,7 +93,8 @@ test('only a first non-terminal-to-terminal transition requests trusted closure 
 test('domain update never substitutes browser time for a trusted closure anchor', () => {
   const patch = buildServiceJobUpdate(
     { status: 'Completed', technician: 'Tech', notes: [] },
-    openJob
+    openJob,
+    'mock'
   );
 
   assert.equal(patch.closedAt, null);
@@ -84,7 +108,8 @@ test('existing closure anchors survive terminal and unrelated updates', () => {
   };
   const patch = buildServiceJobUpdate(
     { status: 'Completed', technician: 'Different Tech', notes: [] },
-    closedJob
+    closedJob,
+    'mock'
   );
 
   assert.equal(patch.closedAt, closedJob.closedAt);

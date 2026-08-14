@@ -11,14 +11,17 @@ import {
   CalendarClock,
   ShieldCheck,
   Check,
-  Pencil,
   MessageSquarePlus,
   Printer,
   Send,
   AlertTriangle,
   SearchX,
 } from 'lucide-react';
-import type { ServiceJob, ServiceJobStatus } from '../../../types';
+import {
+  getBrandDisplayLabel,
+  type ServiceJob,
+  type ServiceJobStatus,
+} from '../../../types';
 import { useServiceJobs } from '../../../hooks/useServiceJobs';
 import { useUpdateServiceJob } from '../../../hooks/useUpdateServiceJob';
 import { technicians } from '../../../repositories/mockData/serviceJobs.mock';
@@ -36,8 +39,15 @@ import {
   PageContainer,
 } from '../../../shared/components';
 import { DeliveryNotePrintPreview, ServiceReportsSection } from '../components';
-import { formatDate, formatDateShort } from '../../../utils/formatDate';
+import {
+  formatCurrencyTHB,
+  formatDate,
+  formatDateShort,
+  toIsoDate,
+} from '../../../utils/formatDate';
 import { ROUTES, SERVICE_JOB_STATUSES } from '../../../constants';
+import { backendKind } from '../../../config/backend';
+import { useAuthSession } from '../../../auth/authSessionContext';
 import { statusLabel } from '../../../services/serviceJobPresentation';
 import {
   buildCustomerNotificationMessage,
@@ -91,6 +101,8 @@ function ServiceJobDetailsView({
   onDone: () => void;
 }) {
   const { updateServiceJob } = useUpdateServiceJob();
+  const { user } = useAuthSession();
+  const canReassignTechnician = backendKind === 'mock';
   const [status, setStatus] = useState<ServiceJobStatus>(claim.status);
   const [tech, setTech] = useState(claim.technician);
   const [note, setNote] = useState('');
@@ -104,10 +116,15 @@ function ServiceJobDetailsView({
   } | null>(null);
 
   const saveChanges = async () => {
+    if (isSaving) return;
     setIsSaving(true);
     setSaveError(null);
     try {
-      await updateServiceJob(claim.id, { status, technician: tech, notes });
+      await updateServiceJob(claim.id, {
+        status,
+        notes,
+        ...(canReassignTechnician ? { technician: tech } : {}),
+      });
       onDone();
     } catch (error) {
       setSaveError(
@@ -122,7 +139,11 @@ function ServiceJobDetailsView({
     if (!note.trim()) return;
     setNotes((n) => [
       ...n,
-      { author: 'Daniel Okafor', date: '2026-08-06', text: note.trim() },
+      {
+        author: user?.email ?? 'เจ้าหน้าที่',
+        date: toIsoDate(new Date()),
+        text: note.trim(),
+      },
     ]);
     setNote('');
   };
@@ -176,6 +197,11 @@ function ServiceJobDetailsView({
             <PriorityPill priority={claim.priority} />
           </div>
           <p className="mt-1 text-lg text-neutral-500">{claim.product}</p>
+          {claim.brandId ? (
+            <p className="mt-2 inline-flex rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700 ring-1 ring-brand-100">
+              {getBrandDisplayLabel(claim.brandId)}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <SecondaryButton
@@ -318,11 +344,11 @@ function ServiceJobDetailsView({
                 {claim.issue}
               </Row>
               <Row icon={ShieldCheck} label="การรับประกัน">
-                {claim.warranty ? 'AppleCare+ ยังมีผล' : 'หมดประกัน'}
+                {claim.warranty ? 'อยู่ในระยะรับประกัน' : 'อยู่นอกระยะรับประกัน'}
               </Row>
-              {claim.quote ? (
+              {claim.quote !== undefined ? (
                 <Row icon={Tag} label="ราคาประเมิน">
-                  ${claim.quote}
+                  {formatCurrencyTHB(claim.quote)}
                 </Row>
               ) : null}
             </div>
@@ -333,15 +359,19 @@ function ServiceJobDetailsView({
             <h3 className="mb-3 font-semibold text-ink">การมอบหมายงาน</h3>
             <div className="space-y-3 text-sm">
               <Row icon={Wrench} label="ช่างผู้รับผิดชอบ">
-                <select
-                  value={tech}
-                  onChange={(e) => setTech(e.target.value)}
-                  className="rounded-xl bg-white/80 px-3 py-2 text-sm text-ink ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand-400"
-                >
-                  {technicians.map((t) => (
-                    <option key={t}>{t}</option>
-                  ))}
-                </select>
+                {canReassignTechnician ? (
+                  <select
+                    value={tech}
+                    onChange={(e) => setTech(e.target.value)}
+                    className="rounded-xl bg-white/80 px-3 py-2 text-sm text-ink ring-1 ring-black/10 focus:outline-none focus:ring-2 focus:ring-brand-400"
+                  >
+                    {technicians.map((technician) => (
+                      <option key={technician}>{technician}</option>
+                    ))}
+                  </select>
+                ) : (
+                  claim.technician || 'ยังไม่มอบหมาย'
+                )}
               </Row>
               <Row icon={CalendarClock} label="กำหนดเสร็จโดยประมาณ">
                 {formatDate(claim.estimatedCompletion)}
@@ -350,10 +380,11 @@ function ServiceJobDetailsView({
                 {formatDate(claim.createdAt)}
               </Row>
             </div>
-            <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-neutral-100 py-2.5 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-200">
-              <Pencil className="h-4 w-4" />
-              แก้ไขการมอบหมาย
-            </button>
+            {!canReassignTechnician ? (
+              <p className="mt-4 rounded-2xl bg-neutral-50 px-4 py-3 text-xs text-neutral-500 ring-1 ring-black/5">
+                การเปลี่ยนช่างผู้รับผิดชอบยังไม่พร้อมใช้งานในระบบจริง
+              </p>
+            ) : null}
           </GlassCard>
 
           {/* Customer */}
@@ -380,7 +411,7 @@ function ServiceJobDetailsView({
           <ArrowLeft className="h-4 w-4" />
           งานบริการทั้งหมด
         </SecondaryButton>
-        <PrimaryButton onClick={() => void saveChanges()}>
+        <PrimaryButton onClick={() => void saveChanges()} disabled={isSaving}>
           <Check className="h-5 w-5" />
           {isSaving ? 'กำลังบันทึก…' : 'บันทึกการเปลี่ยนแปลง'}
         </PrimaryButton>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { Plus, SlidersHorizontal, ChevronDown } from 'lucide-react';
+import { Plus, ChevronDown } from 'lucide-react';
 import type { ServiceJobStatus } from '../../../types';
 import { useServiceJobs } from '../../../hooks/useServiceJobs';
 import {
@@ -64,11 +64,6 @@ export function ServiceJobsList() {
             {f === 'All' ? 'ทั้งหมด' : statusLabel(f)}
           </button>
         ))}
-        <button className="ml-auto flex items-center gap-2 rounded-full bg-white/70 px-4 py-2 text-sm font-medium text-neutral-600 ring-1 ring-black/5 backdrop-blur hover:bg-white">
-          <SlidersHorizontal className="h-4 w-4" />
-          เรียงลำดับ
-          <ChevronDown className="h-3.5 w-3.5" />
-        </button>
       </div>
 
       {/* Table on desktop */}

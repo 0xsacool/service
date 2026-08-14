@@ -8,7 +8,6 @@ import {
   Package,
   FileText,
   Search,
-  Bell,
   LogOut,
   Menu,
   X,
@@ -17,6 +16,7 @@ import { Logo } from '../components/Logo';
 import { RuntimeModeIndicator } from '../components/RuntimeModeIndicator';
 import { APP_NAME, ROUTES } from '../../constants';
 import { useAuthSession } from '../../auth/authSessionContext';
+import { getBrandDisplayLabel } from '../../types';
 
 type NavItem = {
   to: string;
@@ -50,10 +50,35 @@ export function StaffShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { signOut, user } = useAuthSession();
+  const { signOut, staffProfile, user } = useAuthSession();
   const isDetail =
     location.pathname.startsWith(`${ROUTES.serviceJobs}/`) &&
     location.pathname !== ROUTES.newServiceJob;
+  const isProductDetail =
+    location.pathname.startsWith(`${ROUTES.masterDataProducts}/`) &&
+    location.pathname !== ROUTES.masterDataProducts;
+  const searchConfig =
+    location.pathname === ROUTES.serviceJobs
+      ? {
+          label: 'ค้นหางานบริการ',
+          placeholder: 'ค้นหางานบริการ ลูกค้า สินค้า หรืออาการ…',
+        }
+      : location.pathname === ROUTES.masterDataProducts
+        ? {
+            label: 'ค้นหาข้อมูลสินค้า',
+            placeholder: 'ค้นหาสินค้า แบรนด์ รุ่น หรือ SKU…',
+          }
+        : null;
+  const routeLabel = isDetail
+    ? 'รายละเอียดงานบริการ'
+    : isProductDetail
+      ? 'รายละเอียดสินค้า'
+      : location.pathname === ROUTES.newServiceJob
+        ? 'สร้างงานบริการ'
+        : location.pathname === ROUTES.dashboard
+          ? 'ภาพรวม'
+          : 'ระบบเจ้าหน้าที่';
+  const brandLabel = staffProfile ? getBrandDisplayLabel(staffProfile.brandId) : null;
 
   const signOutAndReturnHome = async (): Promise<void> => {
     await signOut();
@@ -69,6 +94,9 @@ export function StaffShell({
             {APP_NAME}
           </p>
           <p className="text-xs text-neutral-400">ระบบเจ้าหน้าที่</p>
+          {brandLabel ? (
+            <p className="mt-1 text-xs font-medium text-brand-700">{brandLabel}</p>
+          ) : null}
         </div>
       </div>
 
@@ -118,9 +146,7 @@ export function StaffShell({
       <div className="px-3 pb-4">
         <div className="rounded-2xl bg-white/60 p-3 ring-1 ring-black/5 backdrop-blur">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-cyan-500 text-sm font-semibold text-white">
-              DO
-            </div>
+            <Logo size="sm" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-ink">
                 {user?.email ?? 'เซสชันเจ้าหน้าที่'}
@@ -131,6 +157,7 @@ export function StaffShell({
               onClick={() => void signOutAndReturnHome()}
               className="rounded-full p-2 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600"
               title="ออกจากระบบ"
+              aria-label="ออกจากระบบ"
             >
               <LogOut className="h-4 w-4" />
             </button>
@@ -168,35 +195,32 @@ export function StaffShell({
             <button
               onClick={() => setMobileOpen(true)}
               className="rounded-full p-2 text-neutral-600 hover:bg-neutral-100 lg:hidden"
+              aria-label="เปิดเมนู"
             >
               <Menu className="h-5 w-5" />
             </button>
 
             <div className="flex flex-1 items-center gap-2">
-              {isDetail ? (
-                <div className="flex items-center gap-2 text-sm text-neutral-400">
-                  <FileText className="h-4 w-4" />
-                  <span>รายละเอียดงานบริการ</span>
-                </div>
-              ) : (
+              {searchConfig ? (
                 <div className="relative w-full max-w-md">
                   <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
                   <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="ค้นหางานบริการ ลูกค้า หรือสินค้า…"
+                    placeholder={searchConfig.placeholder}
+                    aria-label={searchConfig.label}
                     className="w-full rounded-full bg-white/80 py-2.5 pl-10 pr-4 text-sm text-ink ring-1 ring-black/5 backdrop-blur placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-400"
                   />
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-neutral-400">
+                  <FileText className="h-4 w-4" />
+                  <span>{routeLabel}</span>
                 </div>
               )}
             </div>
 
             <RuntimeModeIndicator />
-
-            <button className="relative rounded-full p-2.5 text-neutral-600 transition-colors hover:bg-neutral-100">
-              <Bell className="h-5 w-5" />
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-danger-500 ring-2 ring-canvas" />
-            </button>
           </div>
         </header>
 
@@ -208,6 +232,7 @@ export function StaffShell({
         <button
           className="fixed right-4 top-4 z-50 rounded-full bg-white p-2 shadow-lg lg:hidden"
           onClick={() => setMobileOpen(false)}
+          aria-label="ปิดเมนู"
         >
           <X className="h-5 w-5" />
         </button>

@@ -7,6 +7,11 @@ const brandCodes: Readonly<Record<BrandId, string>> = {
   'join-lux-club': 'JLC',
 };
 
+const brandNames: Readonly<Record<BrandId, string>> = {
+  'bruno-thailand': 'BRUNO THAILAND',
+  'join-lux-club': 'JOIN LUX CLUB',
+};
+
 export function isCanonicalBrandId(value: unknown): value is BrandId {
   return (
     typeof value === 'string' &&
@@ -16,4 +21,12 @@ export function isCanonicalBrandId(value: unknown): value is BrandId {
 
 export function getBrandCode(brandId: BrandId): string {
   return brandCodes[brandId];
+}
+
+export function getBrandName(brandId: BrandId): string {
+  return brandNames[brandId];
+}
+
+export function getBrandDisplayLabel(brandId: BrandId): string {
+  return `${getBrandName(brandId)} · ${getBrandCode(brandId)}`;
 }

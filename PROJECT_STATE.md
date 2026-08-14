@@ -2524,6 +2524,31 @@ phase is selected by this closeout; the next roadmap-listed incomplete work is
 the UX/accessibility/Thai-first and brand-identity hardening scope, subject to
 separate approval.
 
+## F5d-63 Phase 2 — Production Trust & Thai-first (source only)
+
+F5d-63 removes fabricated operational content from the Dashboard, removes
+inert notification/sort/assignment controls, and limits the staff-shell search
+field to the Service Jobs and Product Master list routes that actually consume
+it. Operational date/time presentation is deterministic in `Asia/Bangkok`,
+staff dates use `DD/MM/YYYY`, quotes use THB, warranty language is product-
+neutral Thai, and customer-facing Buddhist Era dates remain explicit.
+
+The highest-safety change makes technician reassignment fail closed in the
+Firestore runtime. Service Job details show the durable technician read-only
+in production, and the update builder omits `technician` for Firestore even if
+a caller explicitly supplies one. Mock mode retains its mock technician
+selector. Canonical brand labels are derived only from the authenticated staff
+profile or durable Service Job `brandId`; no tracking-prefix inference or new
+authorization behavior was added. Existing save/sign-in in-flight states now
+disable their corresponding actions.
+
+This is a source-only implementation prepared for independent review. No
+Worker, repository, Firebase configuration, Firestore Rules, schema,
+migration, package, lockfile, dependency, or environment change is part of
+F5d-63. No production mutation or deployment occurred. Production therefore
+remains on the verified F5d-62 Firebase Hosting release recorded above until a
+separate deployment is approved. Public Tracking remains unavailable.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Any future repository or production-data expansion gets the same documentation, review, and approval treatment as the delivered Firestore repositories, not a silent bulk migration.

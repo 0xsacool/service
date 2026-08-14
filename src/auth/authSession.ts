@@ -45,7 +45,7 @@ export async function resolveAuthenticatedSession(
       status: 'denied',
       user,
       staffProfile: null,
-      error: 'This account is not authorized for staff access.',
+      error: 'บัญชีนี้ไม่มีสิทธิ์เข้าใช้งานระบบเจ้าหน้าที่',
     };
   }
   return { status: 'authorized', user, staffProfile, error: null };

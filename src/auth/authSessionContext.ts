@@ -11,9 +11,9 @@ export interface AuthSessionContextValue extends AuthSession {
 }
 
 const unavailableContext: AuthSessionContextValue = {
-  ...createUnavailableSession('Authentication is unavailable.'),
+  ...createUnavailableSession('ระบบยืนยันตัวตนไม่พร้อมใช้งาน'),
   async signIn() {
-    throw new Error('Authentication is unavailable.');
+    throw new Error('ระบบยืนยันตัวตนไม่พร้อมใช้งาน');
   },
   async signOut() {},
   workerTokenProvider: unavailableWorkerTokenProvider,
