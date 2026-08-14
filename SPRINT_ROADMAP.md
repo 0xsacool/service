@@ -133,7 +133,12 @@
 
 ## Remaining Roadmap
 
-The original plan's Sprint 3 ("Supabase Foundation") is superseded in direction by the F-series: the project is now extending backend coverage **repository-by-repository via Firestore**, the same pattern Product Master proved out, rather than standing up a full relational schema in one large sprint. `@supabase/supabase-js` remains an unused, orphaned dependency — see this sprint's Remaining Gaps for the open question that creates.
+The original plan's Sprint 3 ("Supabase Foundation") was superseded by the
+F-series. Later F5 phases completed the Firestore-backed staff repositories,
+staff Auth/Rules boundary, Worker/R2 attachment path, allocator production
+verification, and the first staff-only Firebase Hosting rollout. The current
+production record is in `PROJECT_STATE.md`; `@supabase/supabase-js` remains an
+unused, orphaned dependency.
 
 ### Sprint 2 — UX, Accessibility & Thai-First Pass *(not started)*
 
@@ -148,31 +153,30 @@ The original plan's Sprint 3 ("Supabase Foundation") is superseded in direction 
 
 ---
 
-### Sprint F3 — Firestore Customer Repository *(proposed, awaiting approval)*
+### Sprint F3/F4 repository expansion *(delivered through later F-series work)*
 
-**Objective:** Extend the Firestore pattern proven in F2/F2.1 to `customersRepository` — the next repository in line, per this project's own "wait for approval before Customer Repository" gating used at the end of every F-sprint so far.
-
-**Likely deliverables:** Firestore document mapping for `customers`, a seed-once migration from the current Mock fixture, `'firestore'` case extended in `repositoryProvider.ts`, live validation against the real Firebase project — same shape as F2, applied to a new entity.
-
-**Estimated Scope:** M
-
----
-
-### Sprint F4+ — Remaining Repositories *(not yet scoped in detail)*
-
-Service Jobs, Search, and Registered Products follow the same pattern once Customers is done. Each should stay its own reviewable sprint rather than a bulk migration, consistent with how F2/F3 are scoped.
+Customer, Service Job, Search, Registered Product, attachment, and related
+staff repositories now have Firestore/Worker production paths. Their actual
+incremental delivery history and security gates are recorded in
+`PROJECT_STATE.md`; the earlier F3/F4 proposal is retained here only as the
+roadmap lineage it superseded.
 
 ---
 
-### Auth *(not yet scoped)*
+### Auth expansion *(staff Auth delivered; broader roles remain)*
 
-Firebase Auth is already wired at the SDK level (`getFirebaseAuth()`) but unused. Once enough repositories are real, staff/admin login and role-based access become meaningful; `firestore.rules`' current open `allow read, write: if true` must tighten at the same time (see `PROJECT_STATE.md` Current Limitations).
+Firebase Email/Password staff login, staff-profile/brand authorization, and
+the reviewed Firestore Rules are live. Broader Admin and Customer role models,
+account lifecycle, and administration UX remain future scopes.
 
 ---
 
-### Photos & Attachments *(not yet scoped)*
+### Photos & Attachments *(production foundation delivered; UX expansion remains)*
 
-Real file uploads, replacing sample stock-photo placeholders. Firebase Storage is the natural fit given the F-series direction, but this hasn't been decided — flagged in this sprint's Remaining Gaps.
+Private production attachment storage uses the authenticated Cloudflare
+Worker plus R2 path. Remaining work is product/UI scope such as broader
+attachment presentation and any separately approved customer-visible flow;
+Firebase Storage is not the selected production design.
 
 **Estimated Scope:** M
 
@@ -196,6 +200,9 @@ Factory-facing Repair Report workflow (multiple reports per service job, parts, 
 
 ### QA Hardening & Launch Readiness *(not yet scoped)*
 
-Print-layout implementation for all three V1 documents (per `PRINT_SPECIFICATIONS.md` — Service Request print preview already exists, Repair Report and Return Form don't yet), automated test coverage (no test runner exists yet at all), cross-device QA, performance/error-state review.
+Print-layout implementation for all three V1 documents (per
+`PRINT_SPECIFICATIONS.md` — Service Request print preview already exists,
+Repair Report and Return Form don't yet), expanded automated coverage,
+cross-device QA, and performance/error-state review.
 
 **Estimated Scope:** M

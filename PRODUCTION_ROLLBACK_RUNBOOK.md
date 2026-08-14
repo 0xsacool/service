@@ -2,13 +2,14 @@
 
 ## Scope and boundary
 
-This runbook is a preflight artifact, not rollout authorization. The initial
-rollout excludes Cron, `deletionExecutor`, public tracking credential issuance,
-and Service Report persistence. Before every mutation, capture the named
-evidence read-only, stop on a mismatch, and retain the capture with the gate
-record.
+This runbook began as a preflight artifact and now retains the chronological
+rollout and rollback evidence; it is not authorization for any new mutation.
+The rollout excludes Cron, `deletionExecutor`, public tracking credential
+issuance, and Service Report persistence. Before every future mutation,
+capture the named evidence read-only, stop on a mismatch, and retain the
+capture with the gate record.
 
-## Source rollback baseline
+## Historical F5d-35 source rollback baseline
 
 - Local Git tag: `f5d35-baseline`.
 - Current source Worker configuration has no Cron declaration.
@@ -16,7 +17,7 @@ record.
 - The source IAM role has get/list/update/create plus `datastore.databases.get`;
   it has no `datastore.entities.delete` permission.
 
-## Future production gates
+## Original production gate plan (historical)
 
 | Gate                | Required pre-mutation snapshot                                                                                                                                                                                                                                                                                                       | Authorized mutation                                                               | Verify immediately                                                         | Stop condition                                                         | Rollback                                                                                                                                  |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
@@ -269,6 +270,59 @@ config/` pattern) and must never be committed; this repository records
   new Hosting release ID immediately after deployment.
 - This phase makes no production change. Worker CORS and Firebase Hosting
   deployment remain pending separate operator approvals.
+
+## F5d-62/F5d-62A production frontend rollout and rollback evidence
+
+- `service-tech-files-worker` is live at version
+  `06bc88e9-1437-4708-b68e-07f82caaf916`, deployment message
+  `F5d-62 production frontend CORS rollout`, with 100% traffic.
+  `ALLOWED_ORIGINS` is
+  `http://localhost:5173,https://luxace-service.web.app`; the Firestore
+  project and R2 bucket bindings remain `luxace-service` and
+  `service-tech-attachments-prod`.
+- The Worker rollback baseline for this CORS-only change is F5d-60 version
+  `55d9120c-af26-416b-bd68-1b3a4a3d271a`, not the older F5d-59 rollback
+  candidate. Shifting 100% traffic to F5d-60 restores localhost-only CORS
+  without regressing the allocator remediation. Any rollback remains a
+  separately approved production mutation.
+- Firebase Hosting release
+  `projects/luxace-service/sites/luxace-service/channels/live/releases/1786711638834000`
+  went live at `2026-08-14T12:47:18.834Z` on finalized version
+  `projects/luxace-service/sites/luxace-service/versions/ba65c4997440c3c4`.
+  The approved 21-file, 1,117,909-byte user artifact has canonical manifest
+  SHA-256
+  `e99aa57f713e48666d1947a3eea0c6292e335de3a522f38c4a47a83d1d14bcb8`.
+  The version API's 23 paths are those 21 files plus Firebase's generated
+  `/__/firebase/init.js` and `/__/firebase/init.json`.
+- This is the first application Hosting release, so there is no preceding
+  Hosting artifact to clone or restore. If an emergency withdrawal is ever
+  separately approved, the established rollback remains an explicit
+  `firebase hosting:disable --site luxace-service --project luxace-service
+  --force`; do not improvise a prior release that does not exist.
+- The Mutation 2 pre-deploy manifest gate failed as an operational control:
+  the interactive PowerShell/.NET host lacked
+  `[System.IO.Path]::GetRelativePath()`, producing the invalid aggregate
+  `985ef6f7c14eb51a937868583c14c178cfae907a217b82befa045b75a9a813ed`.
+  Although the mismatch threw, later separately entered interactive commands
+  still deployed Hosting. Classification: **A — control failure, deployed
+  artifact independently proven correct**.
+- No automatic rollback or redeployment was performed. Independent
+  verification matched all 21 local files to the approved manifest and then
+  matched all 21 decoded live bodies byte-for-byte. All approved SPA routes
+  returned the same verified `index.html`, and live endpoint/config checks
+  found only the approved production Worker URL with public tracking still
+  unset.
+- Future gates must avoid unproved `Path.GetRelativePath()` support. Use a
+  resolved `dist` root, verify each file is under that root, remove the root
+  prefix by substring, normalize separators to `/`, sort ordinally, and build
+  the canonical lowercase-hash/two-space/path/LF manifest with a final LF.
+  Run validation and deployment in one non-interactive process with
+  `$ErrorActionPreference = 'Stop'`; exit non-zero on every mismatch and keep
+  the deploy command unreachable until all checks pass. Never rebuild or
+  modify `dist` between the final check and deployment.
+- No public tracking, Auth, Rules, IAM, R2, Cron, DNS, or production-data
+  mutation accompanied Hosting verification. No production write smoke test
+  ran.
 
 ## Deferred test improvement
 

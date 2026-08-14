@@ -1,23 +1,17 @@
-# Production Firestore Access — Setup Plan (F5d-6 / F5d-7 / F5d-8 / F5d-9 / F5d-10 / F5d-10.1 / F5d-10.2 / F5d-10.3 / F5d-11 / F5d-12 / F5d-13 / F5d-14 / F5d-15 / F5d-16 / F5d-17 / F5d-45 / F5d-46)
+# Production Firestore Access — Setup and Rollout Record
 
-> **Status as of F5d-46 (2026-08-12): GATE 7 COMPLETE — Worker deployed to
-> production.** `service-tech-files-worker` is live at version
-> `e1e11e81-04d6-4cf7-bc5b-9b5f31ac26d4` (version number 14), 100% traffic.
-> Rollback candidate `9a8b83f2-861d-4700-9b4a-05260c4ee661` (version 11)
-> remains available; rollback was not needed. Post-deploy unauthenticated/
-> read-only smoke matched the F5d-44 source review exactly: `/health` 200,
-> unauthenticated `POST /service-jobs` and file `GET` both 401, both Public
-> Tracking routes generic 404, allowed-origin CORS preflight 204 with
-> `Authorization`/`Idempotency-Key` allowed, disallowed origin gets no CORS
-> grant. Bindings (`FIRESTORE_PROJECT_ID`, `ALLOWED_ORIGINS`,
-> `ATTACHMENTS_BUCKET`), secret names, the five-permission IAM role (no
-> `datastore.entities.delete`), Cron (none), Queues (none), and
-> `deletionExecutor` (unwired) are all unchanged from what F5d-44 reviewed.
-> `PUBLIC_TRACKING_ENABLED` remains absent. See "F5d-45/46 — Gate 7 Worker
-> Production Rollout" at the end of this document for the full record. **No
-> real authenticated `POST /service-jobs` allocation has been executed in
-> production yet** — that remains its own separate, explicitly approved
-> acceptance micro-gate, not performed this sprint.
+> **Current status as of F5d-62A (2026-08-14): production staff frontend and
+> Worker rollout verified.** `service-tech-files-worker` is live at version
+> `06bc88e9-1437-4708-b68e-07f82caaf916`, 100% traffic, with
+> `ALLOWED_ORIGINS=http://localhost:5173,https://luxace-service.web.app`.
+> F5d-60 version `55d9120c-af26-416b-bd68-1b3a4a3d271a` is the rollback target
+> for that CORS-only change. The staff frontend is live at
+> `https://luxace-service.web.app`; its 21-file approved artifact and the
+> independent read-only verification are recorded in the F5d-62/F5d-62A
+> section at the end of this document. Gate 7.1 completed the authenticated
+> production allocation `BRN-2026-000002` / `SR-2026-000001`. Public Tracking
+> and Cron remain disabled, and `deletionExecutor` remains unwired. Earlier
+> status blocks below are retained as labeled historical checkpoints.
 >
 > **Status as of F5d-17 (2026-08-09): Firestore post-delete lifecycle
 > IMPLEMENTED — executor still UNWIRED.** F5d-16's Option C was approved
@@ -3378,3 +3372,40 @@ No Rules, IAM, Auth, R2, Cron, or configuration change accompanied the
 F5d-60 production rollout or Gate 7.1 verification. The next logical work is
 a separately scoped production frontend rollout preflight; it is not
 authorized by this closeout.
+
+## F5d-62/F5d-62A production frontend rollout closeout
+
+The separately approved frontend rollout is complete. The Worker is now
+version `06bc88e9-1437-4708-b68e-07f82caaf916` at 100% traffic with deployment
+message `F5d-62 production frontend CORS rollout`. Its only production
+configuration change from F5d-60 is versioned
+`ALLOWED_ORIGINS=http://localhost:5173,https://luxace-service.web.app`.
+`FIRESTORE_PROJECT_ID=luxace-service`, the
+`service-tech-attachments-prod` R2 binding, credential secret names, absent
+`PUBLIC_TRACKING_ENABLED`, and zero-Cron state are unchanged. The rollback
+target for this CORS-only rollout is F5d-60 version
+`55d9120c-af26-416b-bd68-1b3a4a3d271a`.
+
+The staff-only frontend is live at `https://luxace-service.web.app` on
+Firebase Hosting release
+`projects/luxace-service/sites/luxace-service/channels/live/releases/1786711638834000`
+and finalized version
+`projects/luxace-service/sites/luxace-service/versions/ba65c4997440c3c4`.
+Its 21 user files total 1,117,909 bytes and have canonical aggregate SHA-256
+`e99aa57f713e48666d1947a3eea0c6292e335de3a522f38c4a47a83d1d14bcb8`.
+Read-only post-deploy verification matched every live decoded body to the
+approved artifact and confirmed `FIRESTORE + WORKER`. Public tracking remains
+disabled/unavailable; no Worker public-route binding, issuance, rate-limit,
+Cron, R2, IAM, Rules, Auth, or production-data change was made.
+
+The original Hosting pre-deploy PowerShell manifest gate failed as a control
+because the interactive host lacked `[System.IO.Path]::GetRelativePath()`.
+The invalid aggregate
+`985ef6f7c14eb51a937868583c14c178cfae907a217b82befa045b75a9a813ed`
+correctly mismatched and threw, but separately entered deployment commands
+still ran in the surviving shell. Classification is **A — control failure,
+deployed artifact independently proven correct**; no rollback or redeployment
+was required. Future gates must use resolved-root prefix verification plus
+substring removal and run validation plus deployment as one fail-closed,
+non-interactive process. No production write was used for rollout
+verification.

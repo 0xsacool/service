@@ -27,21 +27,30 @@ Every service job for Bruno Thailand and Join Lux Club — from drop-off to pick
 
 Features that exist and work in the running app today, not just on paper — see [PROJECT_STATE.md](PROJECT_STATE.md) "Completed Milestones" for the sprint-by-sprint history behind each:
 
-- **Customer-facing tracking** — public, no-login lookup of a service job by tracking number, with a real shareable URL and a proper "not found" state.
-- **Staff service job queue & intake** — filterable/searchable service job list, a full progressive intake flow (universal customer/product search → product identity → problem/accessories → service intake), and a working Save & Print flow producing a real Service Request print layout.
+- **Customer-facing tracking UI** — no-login lookup UX and safe "not found"
+  states exist, but production Public Tracking remains intentionally
+  unavailable until its issuance and fail-closed rate-limit scope is approved.
+- **Production staff service job queue & intake** — the staff-only app is live
+  at `https://luxace-service.web.app` on the Firestore + Worker runtime, with
+  filterable/searchable jobs, progressive intake, and Save & Print.
 - **Product Master catalog** — full CRUD (create, view, edit — no delete by design, see [DECISIONS.md](DECISIONS.md)) for the product catalog, with search/filter/sort, CSV/Excel export, and a CSV import wizard (preview → validation → completed summary).
 - **Product Knowledge** — accessories and common problems attached per product, editable via a dedicated detail page.
 - **Repository Provider architecture** — every page reads data through a typed repository interface, not hardcoded arrays, making later backend swaps low-risk (already proven once, below).
-- **Firestore-backed Product Master (opt-in)** — when `VITE_BACKEND_KIND=firestore` is set, Product Master reads/writes a real, live Firebase project instead of mock data, validated end-to-end including CSV import and idempotent seeding. Every other feature above still runs on mock/in-memory data — this is real but partial backend coverage, not "the app has a backend" yet.
+- **Production backend and staff authorization** — Product Master, Customers,
+  Service Jobs, Search, Registered Products, and related staff flows use the
+  Firestore repository path; file bytes use the authenticated Worker/R2 path.
+  Firebase Email/Password plus staff-profile/brand checks protect the staff
+  surface. Mock remains a development mode, not the production runtime.
 
 ## Planned
 
 Not yet built. Listed in roughly the order the current sprint trajectory (F-series) suggests, though nothing below is scheduled or approved beyond what's in [SPRINT_ROADMAP.md](SPRINT_ROADMAP.md):
 
-- **Real backend coverage for everything else** — Customers, Service Jobs, Search, and Registered Products are still mock/in-memory; each becomes a Firestore-backed repository the same way Product Master did, one reviewed sprint at a time.
-- **Auth & role-based access** — Firebase Auth is connected at the SDK level but nothing calls it; Admin/Staff/Customer are not yet distinguished anywhere in code.
+- **Auth and administration expansion** — staff Auth is live; broader Admin
+  and Customer roles, user lifecycle, and administration remain future work.
 - **Notifications** — automatic customer updates on status change, delivered to a customer's registered contact channel (SMS/LINE/email are the realistic channels for the Thai market; exact channel choice is a future decision, not yet made — the `customer_channel_contacts` entity already anticipates this).
-- **Photo & attachment storage** — real uploads instead of sample stock photos, with internal-vs-customer visibility.
+- **Attachment experience expansion** — private Worker/R2 storage is live;
+  broader presentation and any customer-visible attachment policy remain.
 - **Quote & warranty approval flow** — customer approves/declines a repair quote before work proceeds.
 - **Remaining printable documents** — Repair Report and Return Form (Service Request printing is already implemented — see Implemented above).
 - **Thai-first localization & accessibility** — Thai UI copy, THB/DD-MM-YYYY/Asia-Bangkok formatting, B.E. dates, and an ARIA/keyboard pass are all still open (see [DECISIONS.md](DECISIONS.md) #003).

@@ -10,24 +10,47 @@ The business entity is the **Service Job** (a single repair event), not "Claim" 
 
 **Service Tech** is a service job (repair) tracking system built for two Thailand-based retail brands, **Bruno Thailand** and **Join Lux Club**. It gives three groups of people a shared view of a repair's lifecycle:
 
-- **Customers** track a repair using a tracking number, with no login required.
+- **Customers** are intended to track a repair using a tracking number, with no
+  login required. That UI exists, but production Public Tracking remains
+  intentionally unavailable.
 - **Service Staff** log intake, update status, assign technicians, and manage the repair queue.
 - **Admins** oversee operations across both brands.
 
-Platform: responsive web application (mobile through desktop), Thai-first for Version 1 (see [DECISIONS.md](DECISIONS.md) #003). UX-L10N1 establishes the source-only Thai-first staff surface and the dedicated public tracking locale layer; live auth/backend rollout remains separately gated.
+Platform: responsive web application (mobile through desktop), Thai-first for
+Version 1 (see [DECISIONS.md](DECISIONS.md) #003). The authenticated staff app
+is live at `https://luxace-service.web.app` on the Firestore + Worker runtime.
 
 ## Current Development Stage
 
-**Feature-complete UI on a swappable backend — no activated durable frontend backend and no active auth.** F5d-31 hardens source-only production blockers; there is still no production sign-in, staff profile, Auth provider, Rules deployment, or live durable creation path. The codebase has grown well past the original Bolt.new prototype through a long, incrementally-approved sprint sequence. Concretely, today:
+**Authenticated staff application live on Firebase Hosting, Firestore, and the
+Cloudflare Worker.** The codebase has grown well past the original Bolt.new
+prototype through a long, incrementally approved sprint sequence. Concretely,
+today:
 
 - The app runs on **real client-side routing** (`react-router-dom`), a **feature-based folder structure**, and a **Repository Provider** seam — not the original flat `src/components/` + `useState<PageId>` + static-array design described in earlier versions of this document.
-- Every data read/write goes through a typed repository interface (`src/repositories/types.ts`), resolved via `repositories` in `src/repositories/repositoryProvider.ts`. By default every repository is backed by an **in-memory Mock implementation** seeded from static fixtures.
-- **Product Master, Customers, Service Jobs, Registered Products, and Universal Search have an opt-in Firestore backend.** Local development defaults to Mock; a production build requires exactly `VITE_BACKEND_KIND=firestore` and otherwise stops before mounting routes or repositories. This setting has not been changed for a deployed frontend by this codebase. Firestore-mode search supports name/phone/tracking-number/serial-number only — marketplace username and order number remain unsupported (see Current Limitations, F5d-49).
+- Every data read/write goes through a typed repository interface
+  (`src/repositories/types.ts`), resolved through the Repository Provider.
+  Local development may use Mock; the production artifact fails closed unless
+  it selects Firestore for business data and the Worker for files.
+- **Product Master, Customers, Service Jobs, Registered Products, and Universal
+  Search use the Firestore production path.** Firestore-mode search supports
+  name/phone/tracking-number/serial-number only; marketplace username and order
+  number remain unsupported (see Current Limitations, F5d-49).
 - `@supabase/supabase-js` is still an installed dependency but is **not used anywhere in the code** — it predates the Firebase/Firestore direction taken in Sprint F0–F2.1 and is effectively orphaned (see Current Limitations).
-- Firebase Auth is now used by the source-only staff session provider. No production Auth provider, Firebase user, or `staffProfiles/{uid}` document has been created, so no live staff session exists yet. `Login` uses email/password only when the provider is later enabled and a valid own-profile allowlist record can be read.
-- **Mock repositories remain session-only.** In Firestore mode, Customers and Service Jobs are persistent and shared; Product Master is deliberately read-only until a privileged catalog workflow is approved. Service Job creation allocates tracking and Service Request numbers inside one Firestore transaction, then returns only a server-confirmed document. The numbering year remains derived from the existing browser-created `createdAt` date; F5d-31 does not claim a trusted server year because that needs a later privileged allocator design. Current Rules deliberately deny `numberSequences`, so this durable creation path is source-complete but not live-ready until that later Rules/privileged-allocator decision.
+- Firebase Email/Password Auth, staff-profile allowlisting, brand scoping, and
+  restrictive Firestore Rules are live. The production Login requires a valid
+  Firebase user and canonical `staffProfiles/{uid}` record.
+- **Mock repositories remain development/session-only.** Production Service Job
+  creation uses the authenticated Worker allocator, which derives the staff
+  brand and Bangkok civil year and atomically allocates tracking and Service
+  Request numbers. Gate 7.1 verified this path with `BRN-2026-000002` and
+  `SR-2026-000001`.
 - **Worker-backed attachments require Firestore Service Jobs.** Attachment creation rejects a missing parent before byte upload and derives retention only from its durable parent `closedAt`; open or ambiguous parents remain `deleteAfter: null`. Manual delete retains metadata and writes `deletedAt` after the Worker's idempotent R2 DELETE succeeds.
-- **Brand/auth source foundation (F5d-24, not deployed).** `bruno-thailand` and `join-lux-club` are canonical IDs; new durable Service Jobs require immutable `brandId`, while legacy missing values remain readable as `null` and fail Worker authorization. The Worker source verifies Firebase ID tokens and checks `staffProfiles/{uid}.brandId` against the target Service Job before file routes proceed. No Firebase Auth provider/user, staff profile, brand document, rules deployment, Service Job backfill, or Worker deployment has occurred.
+- **Brand/auth production boundary.** `bruno-thailand` and `join-lux-club` are
+  canonical IDs. New durable Service Jobs require immutable `brandId`; the
+  Worker verifies Firebase ID tokens and checks the staff profile's brand for
+  protected routes. Reviewed Rules, Auth/provider, staff profile, canonical
+  production data, and the Worker are deployed.
 
 ## Current Architecture
 
@@ -38,25 +61,36 @@ Platform: responsive web application (mobile through desktop), Thai-first for Ve
 | Styling           | Tailwind CSS v4 (via `@tailwindcss/vite`), design tokens in [src/index.css](src/index.css)                                                                                                                                                                                                                                                                                            |
 | Icons             | `lucide-react`                                                                                                                                                                                                                                                                                                                                                                        |
 | Data access       | Typed repository interfaces (`src/repositories/types.ts`) resolved through the **Repository Provider** (`src/repositories/repositoryProvider.ts`), consumed by hooks (`useServiceJobs`, `useCustomers`, `useUniversalSearch`, `useCustomerProducts`, `useCreateServiceJob`, `useProductMaster`, `useProductDetail`) — components never import a repository or mock data file directly |
-| Backend (default) | **Mock** — static fixtures under `src/repositories/mockData/`, wrapped by in-memory repository implementations                                                                                                                                                                                                                                                                        |
-| Backend (opt-in)  | **Firestore**, via `firebase` SDK (`src/lib/firebase/firebase.ts`), selected by `VITE_BACKEND_KIND=firestore` for Product Master, Customers, Service Jobs, Registered Products, and Universal Search (name/phone/tracking/serial only) — see Backend & Repository Architecture below                                                                                                  |
+| Backend (development) | **Mock** — static fixtures under `src/repositories/mockData/`, wrapped by in-memory repository implementations                                                                                                                                                                                                                                                                  |
+| Backend (production)  | **Firestore + Worker**, selected explicitly by production environment and guarded fail-closed before the app mounts — see Backend & Repository Architecture below                                                                                                                                                                                                              |
 | State             | Local `useState`/hooks per page/component; no global store; no React Context for repositories (deliberate — see [DECISIONS.md](DECISIONS.md) #017)                                                                                                                                                                                                                                    |
-| Auth              | Source-only Firebase Auth session provider with email/password sign-in, own-profile validation, staff guard, and Worker token refresh handling. No provider/user/profile has been provisioned or deployed. `@supabase/supabase-js` is an unused, orphaned dependency                                                                                                                  |
+| Auth              | Live Firebase Email/Password staff session provider with own-profile validation, brand scope, staff guard, and Worker token refresh handling. `@supabase/supabase-js` is an unused, orphaned dependency                                                                                                                                                                             |
 | Folder structure  | Feature-based (`src/features/`, `src/shared/`, `src/repositories/`, `src/imports/`, `src/types/`, `src/constants/`, `src/validation/`, `src/services/`, `src/utils/`, `src/lib/`, `src/config/`) — see Folder Structure below                                                                                                                                                         |
 
 ## Backend & Repository Architecture
 
 This is the part of the codebase that changed most since the last documentation pass (Sprints F0–F2.1) and is the area most likely to be misunderstood from reading older docs or prototype-era assumptions:
 
-- **`src/config/backend.ts`** exports `BackendKind = 'mock' | 'firestore'` and `backendKind`, resolved once from `import.meta.env.VITE_BACKEND_KIND` (defaults to `'mock'` if unset or any other value).
+- **`src/config/backend.ts`** exports `BackendKind = 'mock' | 'firestore'` and
+  resolves `VITE_BACKEND_KIND`. Development may select Mock; a production
+  build with a missing or non-Firestore business backend is blocked before
+  mounting the application.
 - **`src/repositories/repositoryProvider.ts`** exports `repositories: RepositoryProvider`, the single object every hook depends on. It is resolved via a **top-level `await`**:
   - `backendKind === 'mock'` → every field is the Mock singleton.
-  - `backendKind === 'firestore'` → `productMaster`, `customers`, and `serviceJobs` are dynamically imported and asynchronously constructed against Firestore; the remaining repositories stay Mock.
-  - `VITE_FILES_BACKEND=worker` requires `backendKind === 'firestore'`; otherwise attachment resolution fails closed to the Mock implementation rather than using a non-durable parent anchor.
-  - If Firestore initialization fails for any reason (missing/invalid `.env`, denied Security Rules, network failure), the failure is caught and the provider **falls back to the all-Mock provider** for that session, logging a clear, actionable console error instead of crashing the app. See [DECISIONS.md](DECISIONS.md) #021.
+  - `backendKind === 'firestore'` dynamically constructs the production-capable
+    Firestore repositories; unavailable future repositories remain explicitly
+    unavailable rather than silently substituting production Mock data.
+  - `VITE_FILES_BACKEND=worker` requires Firestore. Production also requires the
+    exact approved HTTPS Worker origin; missing, local, path-bearing, or other
+    origins fail closed through the shared configuration gate.
+  - A production initialization/configuration failure does **not** silently
+    select Mock. The application gate blocks the staff surface.
 - **`src/repositories/firestoreProductMasterRepository.ts`** is an async factory (not a ready-made singleton) that seeds Firestore once if empty, opens a live `onSnapshot` listener on the `products` collection, and exposes the same synchronous `ProductMasterRepository` interface as the Mock implementation by keeping a local cache in sync with the listener. See [DECISIONS.md](DECISIONS.md) #018 for the full reasoning (sync-interface-over-async-backend).
 - **`src/repositories/migrations/seedProductMasterFromMock.ts`** copies the Mock `productMasterEntries` fixture into Firestore exactly once (empty-collection check + atomic `writeBatch`), so switching to `firestore` mode on a fresh project self-populates without a manual seed step, and re-running it never duplicates data.
-- **Firebase deployment config is checked in**: `firebase.json`, `firestore.rules`, `firestore.indexes.json`, `.firebaserc` at the project root. `firestore.rules` currently allows open read/write on the migrated collections as a deliberate pre-auth posture, not a production authorization design.
+- **Firebase deployment config is checked in**: `firebase.json`,
+  `firestore.rules`, `firestore.indexes.json`, and `.firebaserc` at the project
+  root. The reviewed restrictive Rules are deployed; Hosting publishes `dist`
+  with an SPA rewrite to `/index.html`.
 - See [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) for the actual Firestore document shape and how it relates to the still-Postgres-flavored design for entities not yet migrated.
 
 ## Folder Structure
@@ -101,9 +135,9 @@ This differs from the CLAUDE.md target in small naming details only (e.g. `maste
 
 | Route                       | File                                                                           | Audience    | Purpose                                                                                                                                      |
 | --------------------------- | ------------------------------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/`                         | [TrackHome.tsx](src/features/tracking/pages/TrackHome.tsx)                     | Customer    | Public landing page, search a repair by tracking number                                                                                      |
-| `/track/:trackingNumber`    | [TrackResult.tsx](src/features/tracking/pages/TrackResult.tsx)                 | Customer    | Public status page — timeline, photos, contact info                                                                                          |
-| `/login`                    | [Login.tsx](src/features/auth/pages/Login.tsx)                                 | Staff/Admin | Sign-in form (non-functional — accepts anything, no session created)                                                                         |
+| `/`                         | [TrackHome.tsx](src/features/tracking/pages/TrackHome.tsx)                     | Customer    | Tracking UI; production lookup remains unavailable while Public Tracking is disabled                                                        |
+| `/track/:trackingNumber`    | [TrackResult.tsx](src/features/tracking/pages/TrackResult.tsx)                 | Customer    | Tracking result UI; production lookup remains unavailable while Public Tracking is disabled                                                 |
+| `/login`                    | [Login.tsx](src/features/auth/pages/Login.tsx)                                 | Staff/Admin | Firebase Email/Password staff sign-in                                                                                                        |
 | `/dashboard`                | [Dashboard.tsx](src/features/dashboard/pages/Dashboard.tsx)                    | Staff/Admin | Stat cards, weekly intake chart, status breakdown, recent activity                                                                           |
 | `/service-jobs`             | [ServiceJobsList.tsx](src/features/service-jobs/pages/ServiceJobsList.tsx)     | Staff/Admin | Filterable/searchable list of all service jobs                                                                                               |
 | `/service-jobs/new`         | [NewServiceJob.tsx](src/features/service-jobs/pages/NewServiceJob.tsx)         | Staff/Admin | Full intake flow: universal customer/product search → product identity → problem/accessories → service intake → save & print Service Request |
@@ -136,14 +170,22 @@ Grouped by what shipped, not by exact sprint label (many sprints predate a forma
 
 ## Current Limitations
 
-- **No authentication or roles** — Admin, Service Staff, and Customer are still not distinguished in code. Firebase Auth is reachable but nothing calls it.
-- **Partial Firestore persistence only** — in `VITE_BACKEND_KIND=firestore` mode, Product Master, Customers, Service Jobs, Registered Products (F5d-48), and Universal Search (F5d-49) are durable/derived and shared. **Firestore-mode search supports name, phone, tracking number, and serial number only** — marketplace username and order number have no Firestore collection to search (`customer_channel_contacts`/`product_instances` were never migrated — DECISIONS.md #038) and always return no match, honestly, not fabricated. No deployed frontend has been switched to Firestore mode.
+- **Role scope is intentionally narrow** — staff authentication and brand scope
+  are live; broader Admin and Customer role models and administration remain.
+- **Firestore search scope is incomplete** — name, phone, tracking number, and
+  serial number are supported. Marketplace username and order number have no
+  Firestore collection to search (`customer_channel_contacts`/
+  `product_instances` were never migrated — DECISIONS.md #038) and return no
+  match rather than fabricated data.
 - **Orphaned dependency** — `@supabase/supabase-js` remains in `package.json` from the original prototype but is called nowhere; the actual backend direction taken (F0–F2.1) is Firebase/Firestore, not Supabase. This divergence from the original [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) target (which is Postgres/Supabase-flavored) has not been formally reconciled — see that document's new "Implementation Status" section and this sprint's Remaining Gaps.
 - **`StaffShell.tsx` appears superseded by `StaffLayout.tsx`** — `App.tsx`'s router uses `StaffLayout` exclusively; `StaffShell` still exists in `src/shared/layouts/` but nothing imports it. Worth a cleanup pass, not urgent.
-- **Localization boundary is source-only** — staff UI is Thai-first and public tracking supports the four approved locales, but live auth/backend rollout and any broader content translation remain separately gated.
+- **Localization/accessibility are incomplete** — the live staff UI includes
+  the existing Thai-first layer, but broader content translation and the
+  dedicated accessibility pass remain open.
 - **No brand identity** — visuals remain generic/placeholder, not Bruno Thailand or Join Lux Club branding ([DECISIONS.md](DECISIONS.md) #008 — still open).
 - **No accessibility pass** — icon-only buttons, chip/toggle groups, and the mobile drawer have not had a dedicated ARIA/focus-management pass.
-- **Restrictive Firestore Rules are source/emulator-only.** They have not been deployed; live access remains unchanged until separately approved rollout.
+- **Public Tracking is unavailable in production.** Its Worker binding,
+  issuance flow, and fail-closed rate-limit scope remain separately gated.
 - **Limited app test coverage** — Service Job retention-anchor regression tests run through Vite and Node’s built-in test runner; broader application test coverage remains to be established.
 
 ## F5d-26 Auth + Data Access Integration Readiness (source/emulator only)
@@ -2416,12 +2458,78 @@ pending separate approval, as does the Firebase Hosting deployment. No data
 migration is required. F5d-61 Phase 2 performs no Worker/Firebase/Auth/Rules/
 IAM/R2/Cron/DNS mutation and does not deploy the frontend.
 
+## F5d-62/F5d-62A — Staff frontend production rollout and verified closeout
+
+F5d-61 source checkpoint `1767797048f44595f762323c95c678defc52e940`
+(`f5d-61`) supplied the reviewed frontend artifact. F5d-62 first deployed the
+production-only CORS expansion to `service-tech-files-worker` as version
+`06bc88e9-1437-4708-b68e-07f82caaf916`, deployment message
+`F5d-62 production frontend CORS rollout`, at 100% traffic. Its versioned
+`ALLOWED_ORIGINS` is
+`http://localhost:5173,https://luxace-service.web.app`; the Firestore project
+and R2 binding remain `luxace-service` and `service-tech-attachments-prod`.
+The correct rollback target for this CORS-only rollout is the immediately
+preceding F5d-60 version `55d9120c-af26-416b-bd68-1b3a4a3d271a`, which keeps
+the allocator fixes while restoring localhost-only CORS.
+
+The first Firebase Hosting production release is now live at
+`https://luxace-service.web.app`: release
+`projects/luxace-service/sites/luxace-service/channels/live/releases/1786711638834000`
+(`DEPLOY`, `2026-08-14T12:47:18.834Z`), version
+`projects/luxace-service/sites/luxace-service/versions/ba65c4997440c3c4`
+(`FINALIZED`). The deployed user artifact contains 21 files totaling
+1,117,909 bytes. Its canonical manifest SHA-256 is
+`e99aa57f713e48666d1947a3eea0c6292e335de3a522f38c4a47a83d1d14bcb8`.
+The Hosting API reports 23 paths because it additionally exposes the two
+Firebase-generated reserved resources `/__/firebase/init.js` and
+`/__/firebase/init.json`.
+
+The original Mutation 2 pre-deploy PowerShell gate **failed as a control**.
+The interactive host did not support `[System.IO.Path]::GetRelativePath()`,
+relative-path generation emitted errors, and the resulting non-authoritative
+aggregate was
+`985ef6f7c14eb51a937868583c14c178cfae907a217b82befa045b75a9a813ed`.
+The expected-hash mismatch threw, but the separately entered interactive
+deployment commands remained runnable and subsequently executed. Incident
+classification is **A — control failure occurred, but the deployed artifact
+was independently proven correct after deployment**. This must not be
+described as a successful pre-deploy gate.
+
+Independent post-deploy verification passed. The untouched local `dist`
+matched all 21 approved filenames, sizes, and SHA-256 values with no missing
+or unexpected user files, and recomputed the approved aggregate. All 21 live
+user files then returned HTTP 200 and matched the approved decoded byte size
+and SHA-256 exactly. `/`, `/login`, `/dashboard`, `/service-jobs`,
+`/service-jobs/new`, and `/track/example` returned the approved application
+shell. Live code resolves to `FIRESTORE + WORKER`, uses only the approved
+production Worker endpoint, contains no local or preview Worker endpoint, and
+leaves the public-tracking Worker URL empty. No rollback or redeployment was
+needed.
+
+Future artifact gates must use resolved-root prefix verification plus
+substring removal for Windows relative paths, `/` normalization, ordinal
+sorting, lowercase SHA-256 plus two spaces plus relative path plus LF, and a
+final LF. The whole gate and deployment must run as one non-interactive
+process with `$ErrorActionPreference = 'Stop'`; any capability, file, count,
+size, hash, or aggregate mismatch must exit non-zero before the deployment
+command becomes reachable. `dist` must not be rebuilt or modified between
+verification and deployment.
+
+F5d-62 production rollout is complete. The staff-only frontend has no known
+production-critical rollout blocker. Public tracking remains unavailable and
+is a separate future scope; no public route enablement, issuance, or
+rate-limit change occurred. Post-deploy verification used no production write
+and did not create a Service Job or mutate attachments. No new implementation
+phase is selected by this closeout; the next roadmap-listed incomplete work is
+the UX/accessibility/Thai-first and brand-identity hardening scope, subject to
+separate approval.
+
 ## Development Principles
 
-1. **Docs before backend expansion.** Each new repository's backend swap (Customer, Service Job, Search, Registered Products) gets the same doc-plus-approval treatment Product Master got, not a silent bulk migration.
+1. **Docs before backend expansion.** Any future repository or production-data expansion gets the same documentation, review, and approval treatment as the delivered Firestore repositories, not a silent bulk migration.
 2. **Data-access seam before data-source swap.** Realized in code, not just planned: every page reads through `repositories.<name>`, so a future backend swap touches the Repository Provider, not every page — proven out already by the Product Master Firestore cutover.
 3. **No premature abstraction.** Don't build for hypothetical future requirements — extract shared components only where duplication already exists, not speculatively.
 4. **Thai-first, localization-ready.** UX-L10N1 establishes Thai-first staff presentation, Thai dates, Thai/CJK system fallbacks, and the narrow public tracking locale layer while preserving the approved security/domain boundaries.
-5. **Brand-scoped by design.** Bruno Thailand and Join Lux Club are modeled as first-class entities from the schema up ([DECISIONS.md](DECISIONS.md) #002); brand scoping has not yet reached the current repositories/UI since there is no auth or multi-brand data split in the Mock/Firestore layers yet — tracked as part of the eventual backend expansion, not forgotten.
+5. **Brand-scoped by design.** Bruno Thailand and Join Lux Club are modeled as first-class entities from the schema up ([DECISIONS.md](DECISIONS.md) #002); production staff repositories, Rules, and Worker authorization enforce canonical brand scope.
 6. **Customer and product identity are durable, not per-transaction.** Reflected today via stable `customerId` and `RegisteredProduct` concepts in the UI layer, even though the full Customer Master / Product Instance schema in `DATABASE_SCHEMA.md` isn't backed by a real database yet.
-7. **Incremental, reviewable phases.** Each sprint is scoped, executed, validated, and reported before the next one starts — matching how F0 through F2.2 were run, and how Sprint 3 (Customer Repository) onward should continue.
+7. **Incremental, reviewable phases.** Each sprint is scoped, executed, validated, and reported before the next one starts — matching the F-series production rollout and its separately approved gates.

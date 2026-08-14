@@ -9,8 +9,10 @@ directly, and no R2 access key or secret exists anywhere in this project.
 metadata, no retention). As of F5d-5 this Worker can read/patch
 `serviceJobAttachments` for retention reconciliation (see "Firestore
 access" below) — but there is still no automatic deletion, no usage
-dashboard, and no auth. See the approved F5 architecture proposal and the
-F5d Worker-access review for the full picture.
+dashboard. Authentication, brand authorization, Firestore metadata, and the
+production attachment path were added in later F5d phases. See the approved
+F5 architecture proposal and the F5d Worker-access review for the full
+picture.
 
 **As of F5d-12 (2026-08-09), this Worker is deployed to production** with
 a real, bound R2 bucket (`service-tech-attachments-prod`) and working
@@ -174,14 +176,15 @@ at `https://service-tech-files-worker.sacool-spizy.workers.dev`
 F5d-10). Cron is not active. A real R2-deletion executor exists but remains
 unwired from every production route and scheduled handler.
 
-**As of F5d-12 (2026-08-09), `/files/*` is fully wired to a real,
+**Historical F5d-12 checkpoint (2026-08-09): `/files/*` became fully wired to a real,
 private production bucket.** `service-tech-attachments-prod` was created
 and `ATTACHMENTS_BUCKET` now binds to it (version
 `9a8b83f2-861d-4700-9b4a-05260c4ee661`, 100% traffic) — `/files/*` no
 longer 500s for lack of a binding. No public access or custom domain was
 configured on the bucket; the only way to reach an object's bytes is
-still through this unauthenticated Worker (see "Security posture" below —
-that gap is unchanged by this sprint). See
+still went through the then-unauthenticated Worker. Later F5d phases added the
+current authenticated and brand-scoped boundary described under "Security
+posture" below. See
 [`PRODUCTION_FIRESTORE_ACCESS.md`](PRODUCTION_FIRESTORE_ACCESS.md)'s
 "F5d-12" section for the full record, including the two dashboard-related
 stops it took to get there.
@@ -345,8 +348,9 @@ token, authorization, route, retention, and deletion-executor regressions.
 overrides for `wrangler dev`. As of F5d-5, this is where `FIRESTORE_EMULATOR_HOST`
 goes for local testing. **Never put an R2 access key/secret, or a real
 Google service-account key, here or anywhere else in this project** — the
-R2 binding needs no key at all by design, and no real Firestore credential
-exists yet at all (see "Firestore access" above).
+R2 binding needs no key at all by design. Production Google credentials are
+Cloudflare Worker secrets; their values are not stored in this repository
+(see "Firestore access" above).
 
 ## Security posture — read before relying on this for anything real
 
@@ -358,44 +362,34 @@ exists yet at all (see "Firestore access" above).
   F5d-12) is private.** No public bucket access or custom domain was
   configured; the only way to reach an object's bytes is through this
   Worker.
-- **These endpoints are currently unauthenticated.** This app has no login
-  anywhere yet (see `PROJECT_STATE.md`), and this sprint was explicitly
-  scoped not to invent an auth model. That means anyone who can reach a
-  deployed instance of this Worker and knows or guesses a valid `jobId`/
-  `path` can upload or download through it today. **Treat this Worker as
-  development/internal infrastructure only until real auth exists** — do
-  not deploy it somewhere publicly reachable with real customer files
-  before that gap is closed.
+- **Production staff routes are authenticated and brand-scoped.** File routes
+  and `POST /service-jobs` require a Firebase ID token plus the approved staff
+  profile/brand checks. `/health` remains intentionally public. Public
+  Tracking routes remain unreachable because `PUBLIC_TRACKING_ENABLED` is
+  absent; CORS is not treated as authorization.
 - Basic abuse safeguards that do exist: content-type allowlist, a hard size
   cap enforced on real bytes, and CORS restricted to configured origins.
   Rate limiting is explicitly not implemented this sprint (see the F5
   proposal's Risks section) — flagged, not solved.
 
-## Deploying for real — status as of F5d-46 Gate 7 (2026-08-12)
+## Current production status — F5d-62/F5d-62A (2026-08-14)
 
-What's live today: the real R2 bucket (`service-tech-attachments-prod`,
-F5d-12) is created and bound; the GCP service account/IAM role/credential
-(F5d-8/F5d-9, fixed in F5d-10.3; five permissions since Gate 3/F5d-38) is
-installed and working; the Worker is deployed with the real
-`fetch`/`scheduled` code (`e1e11e81-04d6-4cf7-bc5b-9b5f31ac26d4`, version
-14, 100% traffic — Gate 7/F5d-46). The prior version
-`9a8b83f2-861d-4700-9b4a-05260c4ee661` remains available as the rollback
-candidate; rollback was not needed. `ALLOWED_ORIGINS` still carries the
-local dev default (`http://localhost:5173`) — not yet tightened to a real
-deployed app origin, since the main Vite app itself hasn't been deployed
-anywhere yet; that update is its own separate, explicitly gated
-configuration-only redeploy. Cron remains deliberately disabled. The
-default `wrangler.toml` still has no `[triggers]` section, so normal code
-deployment cannot activate it; enabling Cron is still a separate,
-explicitly-gated step, same as any future retention-deletion feature.
-Public Tracking remains disabled by default (`PUBLIC_TRACKING_ENABLED`
-absent). See [`PRODUCTION_FIRESTORE_ACCESS.md`](PRODUCTION_FIRESTORE_ACCESS.md)
-for the full sprint-by-sprint history of how each piece was verified before
-being turned on.
+The real R2 bucket (`service-tech-attachments-prod`) and the GCP service
+account/custom IAM role are installed and working. The Worker is live at
+version `06bc88e9-1437-4708-b68e-07f82caaf916`, 100% traffic, with
+`ALLOWED_ORIGINS=http://localhost:5173,https://luxace-service.web.app`.
+F5d-60 version `55d9120c-af26-416b-bd68-1b3a4a3d271a` is the rollback target
+for this CORS-only rollout. Cron remains deliberately disabled, the default
+`wrangler.toml` has no `[triggers]`, and Public Tracking remains disabled
+(`PUBLIC_TRACKING_ENABLED` absent).
 
-No real authenticated `POST /service-jobs` allocation has been executed in
-production yet — that remains its own separate, explicitly approved
-acceptance micro-gate.
+The staff frontend is live at `https://luxace-service.web.app`. Gate 7.1
+already completed one authenticated production allocation, creating
+`BRN-2026-000002` / `SR-2026-000001`; F5d-62 post-deploy verification used
+read-only checks only. See
+[`PRODUCTION_FIRESTORE_ACCESS.md`](PRODUCTION_FIRESTORE_ACCESS.md) and
+[`../PROJECT_STATE.md`](../PROJECT_STATE.md) for the audited deployment and
+artifact records.
 
 Every step above went through the same explicit-confirmation process
 every live Cloudflare/Firebase change in this project has gone through —
