@@ -15,11 +15,13 @@ import { AuthSessionProvider } from '../auth/AuthSessionProvider';
 import { StaffRouteGuard } from '../auth/StaffRouteGuard';
 import { backendConfiguration, combineBackendConfigurations } from '../config/backend';
 import { filesBackendConfiguration } from '../config/filesBackend';
+import { filesWorkerUrlConfiguration } from '../config/workerUrl';
 import { BackendConfigurationGate } from './BackendConfigurationGate';
 
 const appConfiguration = combineBackendConfigurations(
   backendConfiguration,
-  filesBackendConfiguration
+  filesBackendConfiguration,
+  filesWorkerUrlConfiguration
 );
 
 export default function App() {

@@ -10,6 +10,8 @@ const { resolveBackendConfiguration, combineBackendConfigurations } =
 const { resolveFilesBackendConfiguration } = await vite.ssrLoadModule(
   '/src/config/filesBackend.ts'
 );
+const { APPROVED_PRODUCTION_FILES_WORKER_URL, resolveFilesWorkerUrlConfiguration } =
+  await vite.ssrLoadModule('/src/config/workerUrl.ts');
 
 // F5d-33/F5d-34 — a missing/unset VITE_FILES_BACKEND previously always
 // defaulted to 'mock', including in a production build with a durable
@@ -28,6 +30,19 @@ test('development defaults remain the safe Mock attachments backend', () => {
   assert.deepEqual(resolveFilesBackendConfiguration('mock', false, 'firestore'), {
     valid: true,
     kind: 'mock',
+    error: null,
+  });
+});
+
+test('production business data requires Firestore and never silently falls back to Mock', () => {
+  for (const value of [undefined, '', 'mock', 'invalid']) {
+    const configuration = resolveBackendConfiguration(value, true);
+    assert.equal(configuration.valid, false);
+    assert.equal(configuration.kind, null);
+  }
+  assert.deepEqual(resolveBackendConfiguration('firestore', true), {
+    valid: true,
+    kind: 'firestore',
     error: null,
   });
 });
@@ -88,4 +103,70 @@ test('combineBackendConfigurations returns the primary when both axes are valid'
   const validSecondary = resolveFilesBackendConfiguration('worker', true, 'firestore');
   const combined = combineBackendConfigurations(validPrimary, validSecondary);
   assert.equal(combined, validPrimary);
+});
+
+test('Worker mode requires an explicit URL in every environment', () => {
+  for (const isProduction of [false, true]) {
+    const configuration = resolveFilesWorkerUrlConfiguration(
+      undefined,
+      isProduction,
+      'worker'
+    );
+    assert.equal(configuration.valid, false);
+    assert.equal(configuration.baseUrl, null);
+    assert.match(configuration.error, /VITE_FILES_WORKER_URL/);
+  }
+});
+
+test('production rejects malformed, local, insecure, and unapproved Worker URLs', () => {
+  const rejected = [
+    'not a url',
+    'http://localhost:8787',
+    'https://localhost:8787',
+    'http://127.0.0.1:8787',
+    'https://127.0.0.1:8787',
+    'http://service-tech-files-worker.sacool-spizy.workers.dev',
+    'https://other-worker.example.com',
+    `${APPROVED_PRODUCTION_FILES_WORKER_URL}/files`,
+  ];
+  for (const value of rejected) {
+    const configuration = resolveFilesWorkerUrlConfiguration(value, true, 'worker');
+    assert.equal(configuration.valid, false, value);
+    assert.equal(configuration.baseUrl, null, value);
+  }
+});
+
+test('production accepts only the approved HTTPS Worker origin', () => {
+  assert.deepEqual(
+    resolveFilesWorkerUrlConfiguration(
+      `${APPROVED_PRODUCTION_FILES_WORKER_URL}/`,
+      true,
+      'worker'
+    ),
+    {
+      valid: true,
+      baseUrl: APPROVED_PRODUCTION_FILES_WORKER_URL,
+      error: null,
+    }
+  );
+});
+
+test('development can explicitly select a local Worker without a silent fallback', () => {
+  assert.deepEqual(
+    resolveFilesWorkerUrlConfiguration('http://127.0.0.1:8787', false, 'worker'),
+    {
+      valid: true,
+      baseUrl: 'http://127.0.0.1:8787',
+      error: null,
+    }
+  );
+});
+
+test('the app-level configuration gate includes Worker URL validity', () => {
+  const primary = resolveBackendConfiguration('firestore', true);
+  const files = resolveFilesBackendConfiguration('worker', true, 'firestore');
+  const workerUrl = resolveFilesWorkerUrlConfiguration(undefined, true, 'worker');
+  const combined = combineBackendConfigurations(primary, files, workerUrl);
+  assert.equal(combined.valid, false);
+  assert.equal(combined.error, workerUrl.error);
 });

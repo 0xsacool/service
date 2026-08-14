@@ -246,6 +246,30 @@ config/` pattern) and must never be committed; this repository records
   separate future gate with its own preflight, authorization, verification,
   and rollback evidence.
 
+## F5d-61 Phase 2 frontend rollout readiness (source/config only)
+
+- Firebase Hosting is selected for the initial staff-only frontend rollout;
+  the approved URL is `https://luxace-service.web.app`. Hosting source serves
+  `dist` with a catch-all `/index.html` SPA rewrite.
+- Production frontend configuration must resolve to Firestore plus the Worker
+  and the exact approved HTTPS production Worker origin. Public tracking has
+  no production URL and remains explicitly unavailable; its Worker routes,
+  issuance, and rate limiting remain disabled and outside this gate.
+- Before any frontend deployment, capture the empty/pre-release Hosting live
+  channel, current Worker version/traffic/configuration, and current
+  `ALLOWED_ORIGINS`. The Worker CORS update adding the approved frontend
+  origin is a separate production mutation and must precede the Hosting
+  deployment.
+- The future deployment must target Hosting only. It must not include
+  Firestore Rules, Functions, Auth, or any other Firebase resource. No data
+  migration is required.
+- The first Hosting release has no prior application release to restore.
+  Preflight must therefore approve a maintenance/empty rollback artifact or
+  an explicit Hosting-disable procedure before deployment, then capture the
+  new Hosting release ID immediately after deployment.
+- This phase makes no production change. Worker CORS and Firebase Hosting
+  deployment remain pending separate operator approvals.
+
 ## Deferred test improvement
 
 The Rules emulator suite covers legacy updates and hash immutability. A future

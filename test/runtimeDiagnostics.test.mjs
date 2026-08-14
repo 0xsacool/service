@@ -173,9 +173,9 @@ test('runtimeDiagnostics.ts never reads the Firebase API key, auth domain, app I
   assert.doesNotMatch(source, /import\.meta\.env\.VITE_FIREBASE_MESSAGING_SENDER_ID/);
 });
 
-test('runtimeDiagnostics.ts reads the Worker URL only to compute a boolean, never assigning its raw value into the returned shape', async () => {
+test('runtimeDiagnostics.ts uses the validated Worker URL configuration and never returns its raw value', async () => {
   const source = await readSource('src/config/runtimeDiagnostics.ts');
-  assert.match(source, /import\.meta\.env\.VITE_FILES_WORKER_URL/);
+  assert.match(source, /filesWorkerUrlConfiguration/);
   assert.doesNotMatch(source, /workerUrl:\s*inputs\.workerUrl,/);
   assert.doesNotMatch(source, /workerConfigured:\s*inputs\.workerUrl,/);
 });
@@ -219,17 +219,17 @@ test('production build already fails closed on VITE_BACKEND_KIND=mock (F5d-33/34
   assert.match(appSource, /<BackendConfigurationGate configuration={appConfiguration}>/);
   assert.match(
     appSource,
-    /combineBackendConfigurations\(\s*backendConfiguration,\s*filesBackendConfiguration\s*\)/
+    /combineBackendConfigurations\(\s*backendConfiguration,\s*filesBackendConfiguration,\s*filesWorkerUrlConfiguration\s*\)/
   );
 
   const gateSource = await readSource('src/app/BackendConfigurationGate.tsx');
   assert.match(gateSource, /if \(!configuration\.valid\)/);
 });
 
-test('Mock mode workflows are unaffected: repositoryProvider.ts still resolves a working Mock search under Mock configuration', async () => {
-  const { repositories } = await vite.ssrLoadModule(
+test('Mock mode workflows are unaffected: an explicit Mock provider still exposes seeded Service Jobs', async () => {
+  const { createMockRepositoryProvider } = await vite.ssrLoadModule(
     '/src/repositories/repositoryProvider.ts'
   );
-  const results = repositories.search.search('maggie.chen88');
-  assert.ok(results.length >= 1);
+  const repositories = createMockRepositoryProvider();
+  assert.ok(repositories.serviceJobs.getAll().length >= 1);
 });

@@ -12,12 +12,7 @@ import type {
 import { createFirestoreAttachmentMetadataStore } from './firestoreAttachmentsRepository';
 import { resolveParentAttachmentRetention } from '../services/attachmentRetention';
 import { deleteAttachmentWithRetainedMetadata } from '../services/attachmentDeletion';
-
-function readWorkerBaseUrl(): string {
-  const raw = import.meta.env.VITE_FILES_WORKER_URL;
-  const trimmed = raw?.trim();
-  return trimmed ? trimmed.replace(/\/+$/, '') : 'http://127.0.0.1:8787';
-}
+import { getFilesWorkerBaseUrl } from '../config/workerUrl';
 
 interface UploadResponse {
   path: string;
@@ -55,7 +50,7 @@ export async function createWorkerAttachmentsRepository(
   serviceJobs: ServiceJobsRepository,
   tokenProvider: WorkerTokenProvider = unavailableWorkerTokenProvider
 ): Promise<AttachmentsRepository> {
-  const baseUrl = readWorkerBaseUrl();
+  const baseUrl = getFilesWorkerBaseUrl();
   const metadata = await createFirestoreAttachmentMetadataStore();
 
   return {

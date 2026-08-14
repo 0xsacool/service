@@ -1,5 +1,6 @@
 import { backendConfiguration, type BackendKind } from './backend';
 import { filesBackendConfiguration, type FilesBackendKind } from './filesBackend';
+import { filesWorkerUrlConfiguration } from './workerUrl';
 
 // F5d-54 — root cause: Gate 7.1's manual rehearsal appeared to succeed
 // (produced BRN-2026-000001/SR-2026-000001) but was actually running the
@@ -65,7 +66,10 @@ export function getRuntimeDiagnostics(): RuntimeDiagnostics {
     filesBackendKind: filesBackendConfiguration.valid
       ? filesBackendConfiguration.kind
       : null,
-    workerUrl: import.meta.env.VITE_FILES_WORKER_URL,
+    workerUrl:
+      filesWorkerUrlConfiguration.valid && filesWorkerUrlConfiguration.baseUrl
+        ? filesWorkerUrlConfiguration.baseUrl
+        : undefined,
     firebaseProjectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   });
 }

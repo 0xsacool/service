@@ -102,9 +102,45 @@ export function parsePublicTrackingDto(value: unknown): PublicTrackingDto | null
   };
 }
 
-function readPublicTrackingWorkerUrl(): string {
-  const configured = import.meta.env.VITE_PUBLIC_TRACKING_WORKER_URL?.trim();
-  return (configured || 'http://127.0.0.1:8787').replace(/\/+$/, '');
+function isLoopbackHostname(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname === '127.0.0.1' ||
+    hostname === '[::1]'
+  );
+}
+
+export function resolvePublicTrackingWorkerUrl(
+  raw: string | undefined,
+  isProduction: boolean
+): string | null {
+  const configured = raw?.trim();
+  if (!configured) return null;
+  try {
+    const url = new URL(configured);
+    if (
+      (url.protocol !== 'http:' && url.protocol !== 'https:') ||
+      url.username ||
+      url.password ||
+      (url.pathname !== '/' && url.pathname !== '') ||
+      url.search ||
+      url.hash ||
+      (isProduction && (url.protocol !== 'https:' || isLoopbackHostname(url.hostname)))
+    ) {
+      return null;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+function readPublicTrackingWorkerUrl(): string | null {
+  return resolvePublicTrackingWorkerUrl(
+    import.meta.env.VITE_PUBLIC_TRACKING_WORKER_URL,
+    import.meta.env.PROD
+  );
 }
 
 async function readBoundedJson(response: Response): Promise<unknown | null> {
@@ -186,8 +222,10 @@ export function getPublicTrackingGateway(): PublicTrackingGateway {
   if (backendKind === null || backendKind === 'mock') {
     return unavailablePublicTrackingGateway;
   }
+  const baseUrl = readPublicTrackingWorkerUrl();
+  if (!baseUrl) return unavailablePublicTrackingGateway;
   return createPublicTrackingGateway({
-    baseUrl: readPublicTrackingWorkerUrl(),
+    baseUrl,
     fetch: globalThis.fetch,
   });
 }

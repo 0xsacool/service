@@ -29,14 +29,7 @@ import {
   describeFirestoreInitError,
   recordFirestoreInitFailure,
 } from './firestoreInitDiagnostics';
-function workerBaseUrl(): string {
-  const configured = import.meta.env.VITE_FILES_WORKER_URL;
-  if (typeof configured !== 'string' || configured.trim().length === 0)
-    throw new Error(
-      'VITE_FILES_WORKER_URL is required for Firestore Service Job creation'
-    );
-  return configured.replace(/\/$/, '');
-}
+import { getFilesWorkerBaseUrl } from '../config/workerUrl';
 
 function isIntakeAttempt(value: ServiceJobCreateInput): value is ServiceJobIntakeAttempt {
   return 'idempotencyKey' in value && 'intake' in value;
@@ -145,7 +138,7 @@ export async function createFirestoreServiceJobRepository(
         async () => {
           const response = await fetchWithWorkerToken(
             tokenProvider,
-            `${workerBaseUrl()}/service-jobs`,
+            `${getFilesWorkerBaseUrl()}/service-jobs`,
             {
               method: 'POST',
               headers: {

@@ -2378,6 +2378,44 @@ frontend rollout scope and preflight, since the privileged Worker allocation
 path is now production-verified. F5d-60A does not authorize or implement that
 rollout.
 
+## F5d-61 Phase 2 — Production frontend readiness (source/config only)
+
+Firebase Hosting is the approved frontend target and
+`https://luxace-service.web.app` is the approved initial production URL. The
+initial rollout is staff-only. `firebase.json` now publishes only `dist` and
+rewrites all unmatched paths to `/index.html`, so the existing
+`BrowserRouter` routes can resolve on direct navigation and refresh.
+
+Production configuration now fails closed unless business data uses
+Firestore, files use the Worker, and `VITE_FILES_WORKER_URL` resolves exactly
+to the approved HTTPS production Worker origin
+`https://service-tech-files-worker.sacool-spizy.workers.dev`. Missing,
+malformed, HTTP, localhost, loopback, path-bearing, and other unapproved
+production Worker URLs are rejected by one shared configuration boundary used
+by the app gate and both Worker-backed repositories. Development Worker use
+remains possible only through an explicitly configured URL; there is no
+silent local fallback.
+
+Production build preflight must supply `VITE_BACKEND_KIND=firestore`,
+`VITE_FILES_BACKEND=worker`, the approved `VITE_FILES_WORKER_URL`, and all six
+Firebase web values: `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`,
+`VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`,
+`VITE_FIREBASE_MESSAGING_SENDER_ID`, and `VITE_FIREBASE_APP_ID`. Real values
+remain in ignored environment files or the future deployment environment,
+never committed. The built artifact must be rejected if it contains a local
+Worker endpoint or any server credential marker.
+
+Public tracking remains production-disabled and unavailable for this
+staff-only rollout. A missing `VITE_PUBLIC_TRACKING_WORKER_URL` now returns
+the existing unavailable result instead of falling back to localhost. No
+public Worker route, issuance flow, or rate-limit configuration was enabled or
+changed.
+
+The production Worker CORS change adding the approved frontend origin remains
+pending separate approval, as does the Firebase Hosting deployment. No data
+migration is required. F5d-61 Phase 2 performs no Worker/Firebase/Auth/Rules/
+IAM/R2/Cron/DNS mutation and does not deploy the frontend.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Each new repository's backend swap (Customer, Service Job, Search, Registered Products) gets the same doc-plus-approval treatment Product Master got, not a silent bulk migration.

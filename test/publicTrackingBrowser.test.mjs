@@ -6,8 +6,12 @@ import { createServer } from 'vite';
 const vite = await createServer({ appType: 'custom', server: { middlewareMode: true } });
 after(() => vite.close());
 
-const { createPublicTrackingGateway, getPublicTrackingGateway, parsePublicTrackingDto } =
-  await vite.ssrLoadModule('/src/features/tracking/publicTracking.ts');
+const {
+  createPublicTrackingGateway,
+  getPublicTrackingGateway,
+  parsePublicTrackingDto,
+  resolvePublicTrackingWorkerUrl,
+} = await vite.ssrLoadModule('/src/features/tracking/publicTracking.ts');
 const { capturePublicTrackingToken } = await vite.ssrLoadModule(
   '/src/features/tracking/publicTrackingFragment.ts'
 );
@@ -118,6 +122,30 @@ test('malformed DTOs and generic backend failures fail closed alike', async () =
   );
 });
 
+test('staff-only production public tracking has no implicit local Worker fallback', () => {
+  assert.equal(resolvePublicTrackingWorkerUrl(undefined, true), null);
+  assert.equal(resolvePublicTrackingWorkerUrl('', true), null);
+  assert.equal(resolvePublicTrackingWorkerUrl('http://127.0.0.1:8787', true), null);
+  assert.equal(resolvePublicTrackingWorkerUrl('https://localhost:8787', true), null);
+});
+
+test('public tracking accepts an explicit local URL only in development', () => {
+  assert.equal(
+    resolvePublicTrackingWorkerUrl('http://127.0.0.1:8787/', false),
+    'http://127.0.0.1:8787'
+  );
+  assert.equal(resolvePublicTrackingWorkerUrl(undefined, false), null);
+});
+
+test('public tracking production configuration requires a valid non-local HTTPS origin', () => {
+  assert.equal(resolvePublicTrackingWorkerUrl('not a url', true), null);
+  assert.equal(resolvePublicTrackingWorkerUrl('http://tracking.example.com', true), null);
+  assert.equal(
+    resolvePublicTrackingWorkerUrl('https://tracking.example.com/', true),
+    'https://tracking.example.com'
+  );
+});
+
 test('public browser source does not use Firestore, storage, or staff/file transport', async () => {
   const sources = await Promise.all(
     [
@@ -133,4 +161,5 @@ test('public browser source does not use Firestore, storage, or staff/file trans
     /firestore|localStorage|sessionStorage|fetchWithWorkerToken|attachments|customerPhone|customerEmail|customerName|brandId/
   );
   assert.match(source, /public\/tracking/);
+  assert.doesNotMatch(source, /configured\s*\|\|\s*['"]http:\/\//);
 });
