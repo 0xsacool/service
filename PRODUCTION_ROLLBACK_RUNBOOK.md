@@ -217,6 +217,35 @@ config/` pattern) and must never be committed; this repository records
 - No Rules, IAM, Auth, R2, Cron, or frontend change occurred as part of
   Gate 7.
 
+## F5d-60/F5d-60A production deployment and Gate 7.1 evidence
+
+- `service-tech-files-worker` is live at F5d-60 version
+  `55d9120c-af26-416b-bd68-1b3a4a3d271a`, deployment message
+  `F5d-60 production rollout`, with 100% traffic. The retained rollback target
+  is `5b6c1278-630f-4fed-9973-cc04b9eeb1ad`; if rollback is separately
+  approved, shift traffic to that captured version without deleting version
+  history.
+- Gate 7.1 is **PASS**. Exactly one production Gate attempt ran after visibly
+  confirming the `FIRESTORE + WORKER` runtime path. It completed without HTTP
+  500 and created Service Job `BRN-2026-000002` with Service Request number
+  `SR-2026-000001`.
+- Post-Gate verification found `BRN-2026-000002` at update time
+  `2026-08-14T08:22:42.834387Z`, exactly one `serviceJobIntakeKeys` document
+  mapped to that Service Job, Bruno Thailand 2026 tracking sequence `2`, and
+  Bruno Thailand 2026 `service_request` sequence `1`.
+- Protected legacy Service Job `BRN-2026-000001` remained present and
+  unchanged at update time `2026-08-08T06:19:09.065089Z`. The retained F5d-60
+  Worker tail contained no `[ServiceJob Allocator]` diagnostics for the
+  successful attempt.
+- The previous failed Gate attempt produced zero durable production writes.
+  Its historical canonical Firestore status was not captured;
+  `ALREADY_EXISTS` remains a strong source-supported explanation only, not
+  observed historical production evidence.
+- No Rules, IAM, Auth, R2, Cron, or frontend mutation accompanied this Worker
+  rollout or Gate verification. A production frontend rollout remains a
+  separate future gate with its own preflight, authorization, verification,
+  and rollback evidence.
+
 ## Deferred test improvement
 
 The Rules emulator suite covers legacy updates and hash immutability. A future

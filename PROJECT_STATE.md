@@ -2306,10 +2306,13 @@ Gate 7.1 remains **PAUSED**. Production durable writes = ZERO. No
 production deployment, mutation, or Rules/Worker/IAM/Auth change
 occurred.
 
-## F5d-60 — Firestore commit status discrimination and legacy-safe collision probing
+## F5d-60/F5d-60A — Allocator remediation and production verification closeout
 
-F5d-60 is a **source-only remediation**. Gate 7.1 remains paused; no
-production request, deployment, or mutation was performed.
+F5d-60 remediation is deployed to `service-tech-files-worker` as production
+version `55d9120c-af26-416b-bd68-1b3a4a3d271a` with 100% traffic. The
+deployment message was `F5d-60 production rollout`; rollback target
+`5b6c1278-630f-4fed-9973-cc04b9eeb1ad` remains available. Gate 7.1 is
+**PASS**.
 
 Two source defects were confirmed. First, the Worker previously converted
 every Firestore commit HTTP `409` or `412` into `TransactionConflictError`,
@@ -2347,13 +2350,33 @@ modules without `vite/client`; the same strict command with `vite/client`
 added as a non-persistent command-line type input passes, with no F5d-60
 errors.
 
-The retained production diagnostic was
-`firestore-commit: transaction-retries-exhausted`, and read-only production
-verification after that attempt found zero durable writes. The source defects
-make an `ALREADY_EXISTS` create-only collision a strong, source-supported
-incident explanation, but the historical Firestore response body was not
-retained, so its exact live canonical status is **not proven**. Independent
-source/diff audit is required before any deployment or Gate 7.1 retry.
+The earlier failed Gate attempt retained
+`firestore-commit: transaction-retries-exhausted`; read-only verification
+proved it produced zero durable production writes. The two confirmed source
+defects explain that allocator incident and are resolved by F5d-60. An
+`ALREADY_EXISTS` create-only collision remains a strong, source-supported
+explanation, but the historical Firestore response body was not retained, so
+its exact live canonical status is **not proven** and must not be described as
+observed production evidence.
+
+Gate 7.1 visibly confirmed the `FIRESTORE + WORKER` runtime path and performed
+exactly one production Gate attempt. It completed without HTTP 500 and created
+Service Job `BRN-2026-000002` with Service Request number
+`SR-2026-000001`. The new document update time is
+`2026-08-14T08:22:42.834387Z`. The protected legacy Service Job
+`BRN-2026-000001` remained present and unchanged at update time
+`2026-08-08T06:19:09.065089Z`.
+
+Post-Gate verification found exactly one `serviceJobIntakeKeys` document, and
+that intake key maps to `BRN-2026-000002`. Bruno Thailand's 2026 tracking
+sequence is `2`, and its 2026 `service_request` sequence is `1`. The retained
+F5d-60 Worker tail contained no `[ServiceJob Allocator]` diagnostic for the
+successful attempt.
+
+The next logical development task is a separately reviewed production
+frontend rollout scope and preflight, since the privileged Worker allocation
+path is now production-verified. F5d-60A does not authorize or implement that
+rollout.
 
 ## Development Principles
 

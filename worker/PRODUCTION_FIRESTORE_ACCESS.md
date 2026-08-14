@@ -3323,10 +3323,15 @@ performed as part of Gate 7.
 No Rules, IAM, Auth, R2, Cron, or frontend change occurred as part of
 Gate 7.
 
-## F5d-60 source-only allocator remediation
+## F5d-60/F5d-60A allocator remediation and production closeout
 
-F5d-60 changes no IAM requirement and performs no production operation. The
-Worker's Firestore commit transport no longer treats HTTP status alone as
+F5d-60 changes no IAM requirement. Its source was subsequently deployed to
+`service-tech-files-worker` as version
+`55d9120c-af26-416b-bd68-1b3a4a3d271a` with 100% production traffic and
+deployment message `F5d-60 production rollout`. The retained rollback target
+is `5b6c1278-630f-4fed-9973-cc04b9eeb1ad`.
+
+The Worker's Firestore commit transport no longer treats HTTP status alone as
 proof of transaction contention. It reads a non-OK commit response body once,
 extracts only `.error.status` through the existing closed allow-list, and
 creates `TransactionConflictError` only for canonical `ABORTED` paired with
@@ -3348,10 +3353,28 @@ four writes atomically: create-only `serviceJobIntakeKeys`, create-only
 `MAX_TRANSACTION_RETRIES` remains `5`; numbering, Bangkok-year ownership,
 staff authorization, and client-facing generic failures are unchanged.
 
-Offline validation passes all 338 Worker checks. This status is source-only:
-no Worker/Rules deployment, IAM/Auth/R2/Cron/configuration change, production
-Firestore read or write, or Gate 7.1 retry occurred. The previous production
-attempt's exact canonical Firestore status was not retained. An
-`ALREADY_EXISTS` collision is strongly supported as a mechanism by the source
-defects and protected legacy record shape, but it is not claimed as observed
-live. Gate 7.1 remains paused pending independent audit and separate approval.
+Offline validation passed all 338 Worker checks. Gate 7.1 then visibly
+confirmed the `FIRESTORE + WORKER` runtime path and performed exactly one
+production Gate attempt. It completed successfully without HTTP 500, creating
+Service Job `BRN-2026-000002` and Service Request number
+`SR-2026-000001`. The new Service Job update time is
+`2026-08-14T08:22:42.834387Z`.
+
+Post-Gate verification found exactly one `serviceJobIntakeKeys` document,
+mapped to `BRN-2026-000002`; Bruno Thailand's 2026 tracking sequence is `2`,
+and its 2026 `service_request` sequence is `1`. Protected legacy Service Job
+`BRN-2026-000001` remained present and unchanged at update time
+`2026-08-08T06:19:09.065089Z`. The retained F5d-60 Worker tail contained no
+`[ServiceJob Allocator]` diagnostics for the successful attempt. Gate 7.1 is
+**PASS**.
+
+The prior failed Gate attempt produced zero durable production writes. Its
+exact canonical Firestore status was not retained. `ALREADY_EXISTS` remains a
+strong source-supported incident explanation based on the confirmed defects
+and protected legacy document shape, but it was not directly observed and is
+not claimed as historical production evidence.
+
+No Rules, IAM, Auth, R2, Cron, or configuration change accompanied the
+F5d-60 production rollout or Gate 7.1 verification. The next logical work is
+a separately scoped production frontend rollout preflight; it is not
+authorized by this closeout.
