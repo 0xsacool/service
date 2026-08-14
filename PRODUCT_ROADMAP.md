@@ -41,6 +41,10 @@ Features that exist and work in the running app today, not just on paper — see
   Firestore repository path; file bytes use the authenticated Worker/R2 path.
   Firebase Email/Password plus staff-profile/brand checks protect the staff
   surface. Mock remains a development mode, not the production runtime.
+- **Production Trust & Thai-first staff slice** — F5d-63 is live with
+  deterministic Asia/Bangkok date/time presentation, THB quotes,
+  product-neutral Thai warranty language, truthful Dashboard aggregation,
+  canonical brand context, and removal of fabricated or inert operational UI.
 
 ## Planned
 
@@ -53,7 +57,10 @@ Not yet built. Listed in roughly the order the current sprint trajectory (F-seri
   broader presentation and any customer-visible attachment policy remain.
 - **Quote & warranty approval flow** — customer approves/declines a repair quote before work proceeds.
 - **Remaining printable documents** — Repair Report and Return Form (Service Request printing is already implemented — see Implemented above).
-- **Thai-first localization & accessibility** — the F5d-63 source-only trust slice prepares deterministic THB/DD-MM-YYYY/Asia-Bangkok presentation, retains B.E. dates for customer documents, removes misleading production UI, and adds canonical text-only brand context. It is awaiting independent review and a separately approved deployment; the broader ARIA/keyboard and responsive-content pass remains open (see [DECISIONS.md](DECISIONS.md) #003).
+- **Remaining localization & accessibility work** — F5d-63's bounded
+  Thai-first production trust slice is live; the broader ARIA/keyboard,
+  screen-reader, responsive-content, and remaining Thai-copy pass remains open
+  (see [DECISIONS.md](DECISIONS.md) #003).
 - **Technician workload view** — who's assigned what, to help staff balance the queue.
 - **Customer service history** — repeat-customer view showing all of a customer's past service jobs across their product instances.
 - **Product service history** — for a specific physical unit, a full repair timeline across every service job it's ever had.

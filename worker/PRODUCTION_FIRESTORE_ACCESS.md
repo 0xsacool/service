@@ -1,17 +1,18 @@
 # Production Firestore Access — Setup and Rollout Record
 
-> **Current status as of F5d-62A (2026-08-14): production staff frontend and
+> **Current status as of F5d-63C (2026-08-14): production staff frontend and
 > Worker rollout verified.** `service-tech-files-worker` is live at version
 > `06bc88e9-1437-4708-b68e-07f82caaf916`, 100% traffic, with
 > `ALLOWED_ORIGINS=http://localhost:5173,https://luxace-service.web.app`.
 > F5d-60 version `55d9120c-af26-416b-bd68-1b3a4a3d271a` is the rollback target
 > for that CORS-only change. The staff frontend is live at
-> `https://luxace-service.web.app`; its 21-file approved artifact and the
-> independent read-only verification are recorded in the F5d-62/F5d-62A
-> section at the end of this document. Gate 7.1 completed the authenticated
-> production allocation `BRN-2026-000002` / `SR-2026-000001`. Public Tracking
-> and Cron remain disabled, and `deletionExecutor` remains unwired. Earlier
-> status blocks below are retained as labeled historical checkpoints.
+> `https://luxace-service.web.app`; the current F5d-63 21-file approved
+> artifact and independent read-only verification are recorded in the
+> F5d-63/F5d-63C section at the end of this document. Gate 7.1 completed the
+> authenticated production allocation `BRN-2026-000002` / `SR-2026-000001`.
+> Public Tracking and Cron remain disabled, and `deletionExecutor` remains
+> unwired. Earlier status blocks below are retained as labeled historical
+> checkpoints.
 >
 > **Status as of F5d-17 (2026-08-09): Firestore post-delete lifecycle
 > IMPLEMENTED — executor still UNWIRED.** F5d-16's Option C was approved
@@ -3409,3 +3410,29 @@ was required. Future gates must use resolved-root prefix verification plus
 substring removal and run validation plus deployment as one fail-closed,
 non-interactive process. No production write was used for rollout
 verification.
+
+## F5d-63/F5d-63C production frontend closeout
+
+The Worker was not changed by F5d-63. It remains deployment
+`57cf2207-af36-4af1-a77c-ca1f2d5a7c09`, version
+`06bc88e9-1437-4708-b68e-07f82caaf916`, at 100% traffic with the same CORS,
+Firestore project, R2, secrets, Public Tracking, Cron, and IAM state recorded
+above. Read-only verification returned `GET /health` 200 and
+`OPTIONS /health` 204 with `https://luxace-service.web.app` accepted.
+
+Reviewed frontend source `a8caf3811199e6de158ab4e0251b59032c3b7f14`
+(`f5d-63`) is live on Firebase Hosting release
+`projects/luxace-service/sites/luxace-service/channels/live/releases/1786723383971000`
+and version
+`projects/luxace-service/sites/luxace-service/versions/b9e59a97e9ded5cc`.
+The independently verified artifact has 21 user files, 1,116,259 bytes, and
+aggregate SHA-256
+`5682d24b635ae2c32b4849d306836e6878b980d6e3ce2059d44d835913b98eab`.
+All 21 live user files and the approved SPA routes matched. Public Tracking
+remains unavailable and its production Worker URL remains unset.
+
+The first read-only artifact verifier's size mismatch came from its manifest
+lookup logic; direct diagnostics and the corrected verifier matched the
+approved bytes and all 21/21 files. No redeployment followed. F5d-63B made one
+Hosting deployment with zero retries and made zero Service Job, attachment,
+Worker, Firestore/Auth/Rules/IAM/R2 writes or mutations.

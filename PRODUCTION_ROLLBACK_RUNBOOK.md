@@ -324,6 +324,45 @@ config/` pattern) and must never be committed; this repository records
   mutation accompanied Hosting verification. No production write smoke test
   ran.
 
+## F5d-63/F5d-63C Production Trust & Thai-first Hosting evidence
+
+- Reviewed source checkpoint `a8caf3811199e6de158ab4e0251b59032c3b7f14`
+  (`f5d-63`) was deployed in exactly one separately approved, Hosting-only
+  attempt with zero retries. The pre-deployment gate verified the exact source,
+  clean tree, 21 filenames, every byte size and SHA-256, 1,116,259 total bytes,
+  and aggregate manifest SHA-256
+  `5682d24b635ae2c32b4849d306836e6878b980d6e3ce2059d44d835913b98eab`
+  before making the deploy command reachable.
+- The live-channel release is
+  `projects/luxace-service/sites/luxace-service/channels/live/releases/1786723383971000`
+  (`DEPLOY`, `2026-08-14T16:03:03.971Z`) on finalized version
+  `projects/luxace-service/sites/luxace-service/versions/b9e59a97e9ded5cc`.
+  The version API reports the 21 approved user files plus Firebase's reserved
+  `/__/firebase/init.js` and `/__/firebase/init.json`.
+- All 21 decoded live user files returned HTTP 200 and matched the approved
+  byte sizes and SHA-256 values. `/`, `/login`, `/dashboard`,
+  `/service-jobs`, and `/service-jobs/new` returned the approved SPA shell;
+  direct routes, Thai-first presentation, `FIRESTORE + WORKER`, and protected
+  staff-route behavior passed read-only verification. Public Tracking remains
+  unavailable with its production Worker URL unset.
+- The first post-deploy read-only verifier reported a size mismatch caused by
+  its manifest lookup logic. Direct diagnostic verification returned the
+  expected bytes/hash, and the corrected verifier then matched all 21/21
+  files. This was not an artifact defect and caused no redeployment.
+- The Worker was outside deployment scope and remains deployment
+  `57cf2207-af36-4af1-a77c-ca1f2d5a7c09`, version
+  `06bc88e9-1437-4708-b68e-07f82caaf916`, at 100% traffic. Read-only
+  verification returned `GET /health` 200 and `OPTIONS /health` 204 with
+  `https://luxace-service.web.app` accepted.
+- The retained Hosting rollback baseline is F5d-62 release
+  `projects/luxace-service/sites/luxace-service/channels/live/releases/1786711638834000`
+  and version
+  `projects/luxace-service/sites/luxace-service/versions/ba65c4997440c3c4`.
+  Any rollback is a separate production mutation requiring approval; do not
+  alter the Worker for a Hosting-only rollback.
+- F5d-63B made zero Service Job writes, attachment mutations, Worker
+  mutations, or Firestore/Auth/Rules/IAM/R2 mutations.
+
 ## Deferred test improvement
 
 The Rules emulator suite covers legacy updates and hash immutability. A future

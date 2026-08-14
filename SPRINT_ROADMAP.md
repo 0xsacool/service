@@ -140,18 +140,19 @@ verification, and the first staff-only Firebase Hosting rollout. The current
 production record is in `PROJECT_STATE.md`; `@supabase/supabase-js` remains an
 unused, orphaned dependency.
 
-### Sprint 2 — UX, Accessibility & Thai-First Pass *(in progress; F5d-63 source slice prepared)*
+### Sprint 2 — UX, Accessibility & Thai-First Pass *(in progress; F5d-63 production slice live)*
 
 **Objective:** Bring the UI up to a real, launch-shaped standard: usable by screen readers/keyboard, and dressed in Thai-market conventions instead of English/placeholder content. (Note: the intake form itself is no longer non-functional — that part of the original Sprint 2 scope was delivered early, during the Search/Intake phases above.)
 
-**F5d-63 source-only slice prepared:** fabricated Dashboard facts and staff
+**F5d-63 production slice delivered:** fabricated Dashboard facts and staff
 identity are removed; production technician reassignment is read-only and
 cannot add a mock technician to an update patch; inert controls and
 unsupported search surfaces are removed; staff date/time, THB, warranty, and
 auth/config presentation are Thai/Thailand-correct; and canonical text-only
-brand context is visible. This slice has not been deployed, so production
-remains on the verified F5d-62 Hosting release. Public Tracking remains
-unavailable.
+brand context is visible. The reviewed `f5d-63` source is live on Firebase
+Hosting release `1786723383971000`, version `b9e59a97e9ded5cc`, with its
+21-file artifact independently verified byte-for-byte. Public Tracking
+remains unavailable.
 
 **Remaining deliverables:**
 - Accessible chip/toggle groups (`aria-pressed`/`role="radiogroup"`), `aria-current="step"` on timeline, focus trap + `Escape` handling on the mobile drawer, and the broader keyboard/screen-reader pass.

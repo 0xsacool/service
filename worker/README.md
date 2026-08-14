@@ -372,7 +372,7 @@ Cloudflare Worker secrets; their values are not stored in this repository
   Rate limiting is explicitly not implemented this sprint (see the F5
   proposal's Risks section) — flagged, not solved.
 
-## Current production status — F5d-62/F5d-62A (2026-08-14)
+## Current production status — F5d-63/F5d-63C (2026-08-14)
 
 The real R2 bucket (`service-tech-attachments-prod`) and the GCP service
 account/custom IAM role are installed and working. The Worker is live at
@@ -383,10 +383,12 @@ for this CORS-only rollout. Cron remains deliberately disabled, the default
 `wrangler.toml` has no `[triggers]`, and Public Tracking remains disabled
 (`PUBLIC_TRACKING_ENABLED` absent).
 
-The staff frontend is live at `https://luxace-service.web.app`. Gate 7.1
-already completed one authenticated production allocation, creating
-`BRN-2026-000002` / `SR-2026-000001`; F5d-62 post-deploy verification used
-read-only checks only. See
+The F5d-63 staff frontend is live at `https://luxace-service.web.app` on
+Hosting release `1786723383971000`, version `b9e59a97e9ded5cc`. Its approved
+21-file, 1,116,259-byte artifact was independently matched live; Public
+Tracking remains unavailable. Gate 7.1 already completed one authenticated
+production allocation, creating `BRN-2026-000002` / `SR-2026-000001`;
+F5d-63 post-deploy verification used read-only checks only. See
 [`PRODUCTION_FIRESTORE_ACCESS.md`](PRODUCTION_FIRESTORE_ACCESS.md) and
 [`../PROJECT_STATE.md`](../PROJECT_STATE.md) for the audited deployment and
 artifact records.

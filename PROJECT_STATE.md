@@ -138,7 +138,7 @@ This differs from the CLAUDE.md target in small naming details only (e.g. `maste
 | `/`                         | [TrackHome.tsx](src/features/tracking/pages/TrackHome.tsx)                     | Customer    | Tracking UI; production lookup remains unavailable while Public Tracking is disabled                                                        |
 | `/track/:trackingNumber`    | [TrackResult.tsx](src/features/tracking/pages/TrackResult.tsx)                 | Customer    | Tracking result UI; production lookup remains unavailable while Public Tracking is disabled                                                 |
 | `/login`                    | [Login.tsx](src/features/auth/pages/Login.tsx)                                 | Staff/Admin | Firebase Email/Password staff sign-in                                                                                                        |
-| `/dashboard`                | [Dashboard.tsx](src/features/dashboard/pages/Dashboard.tsx)                    | Staff/Admin | Stat cards, weekly intake chart, status breakdown, recent activity                                                                           |
+| `/dashboard`                | [Dashboard.tsx](src/features/dashboard/pages/Dashboard.tsx)                    | Staff/Admin | Truthful current-status counts and breakdown, recent activity, and awaiting-parts callout                                                     |
 | `/service-jobs`             | [ServiceJobsList.tsx](src/features/service-jobs/pages/ServiceJobsList.tsx)     | Staff/Admin | Filterable/searchable list of all service jobs                                                                                               |
 | `/service-jobs/new`         | [NewServiceJob.tsx](src/features/service-jobs/pages/NewServiceJob.tsx)         | Staff/Admin | Full intake flow: universal customer/product search → product identity → problem/accessories → service intake → save & print Service Request |
 | `/service-jobs/:id`         | [ServiceJobDetails.tsx](src/features/service-jobs/pages/ServiceJobDetails.tsx) | Staff/Admin | Single record view — status, timeline, notes, photos, customer/product/assignment info                                                       |
@@ -2524,7 +2524,7 @@ phase is selected by this closeout; the next roadmap-listed incomplete work is
 the UX/accessibility/Thai-first and brand-identity hardening scope, subject to
 separate approval.
 
-## F5d-63 Phase 2 — Production Trust & Thai-first (source only)
+## F5d-63 Phase 2 — Production Trust & Thai-first (historical source checkpoint)
 
 F5d-63 removes fabricated operational content from the Dashboard, removes
 inert notification/sort/assignment controls, and limits the staff-shell search
@@ -2542,12 +2542,55 @@ profile or durable Service Job `brandId`; no tracking-prefix inference or new
 authorization behavior was added. Existing save/sign-in in-flight states now
 disable their corresponding actions.
 
-This is a source-only implementation prepared for independent review. No
-Worker, repository, Firebase configuration, Firestore Rules, schema,
-migration, package, lockfile, dependency, or environment change is part of
-F5d-63. No production mutation or deployment occurred. Production therefore
-remains on the verified F5d-62 Firebase Hosting release recorded above until a
-separate deployment is approved. Public Tracking remains unavailable.
+At this Phase 2 checkpoint, the implementation was source-only and prepared
+for independent review. No Worker, repository, Firebase configuration,
+Firestore Rules, schema, migration, package, lockfile, dependency, or
+environment change was part of the source patch, and no production mutation
+or deployment had yet occurred. Production therefore still remained on the
+verified F5d-62 Firebase Hosting release at that checkpoint. The production
+state from this historical checkpoint is superseded by the closeout below.
+
+## F5d-63/F5d-63C — Production Trust & Thai-first deployment closeout
+
+Reviewed source checkpoint `a8caf3811199e6de158ab4e0251b59032c3b7f14`
+(`f5d-63`) is live at `https://luxace-service.web.app`. The separately
+approved Hosting-only deployment created live-channel release
+`projects/luxace-service/sites/luxace-service/channels/live/releases/1786723383971000`
+at `2026-08-14T16:03:03.971Z` on finalized version
+`projects/luxace-service/sites/luxace-service/versions/b9e59a97e9ded5cc`.
+The previous F5d-62 release `1786711638834000` and version
+`ba65c4997440c3c4` are the captured Hosting rollback baseline.
+
+The approved user artifact contains 21 files totaling 1,116,259 bytes. Its
+canonical aggregate SHA-256 is
+`5682d24b635ae2c32b4849d306836e6878b980d6e3ce2059d44d835913b98eab`.
+Independent post-deploy verification matched all 21 decoded live files to
+their approved byte sizes and SHA-256 values. `/`, `/login`, `/dashboard`,
+`/service-jobs`, and `/service-jobs/new` returned HTTP 200 with the approved
+SPA shell; direct deep links passed, the Thai-first frontend rendered, the
+runtime reported `FIRESTORE + WORKER`, and unauthenticated staff routes
+remained protected.
+
+The Worker was not part of this deployment. It remains at deployment
+`57cf2207-af36-4af1-a77c-ca1f2d5a7c09`, version
+`06bc88e9-1437-4708-b68e-07f82caaf916`, with 100% traffic. Read-only checks
+returned `GET /health` 200 and `OPTIONS /health` 204 with
+`https://luxace-service.web.app` accepted by CORS. Public Tracking remains
+unavailable and its production Worker URL remains unset.
+
+The first post-deploy read-only artifact verifier reported a size mismatch
+caused by its manifest lookup logic. A direct diagnostic returned the expected
+bytes and SHA-256, and the corrected read-only verifier subsequently matched
+all 21/21 files. This caused no redeployment and was not a production artifact
+defect.
+
+F5d-63B performed exactly one Hosting deployment with zero retries. It made
+zero Service Job writes, attachment mutations, Worker mutations, or
+Firestore/Auth/Rules/IAM/R2 mutations. No documentation-closeout production
+mutation occurred. The next roadmap-listed work remains the broader
+accessibility pass, remaining Thai/responsive-content QA, and broader brand
+identity work described in `SPRINT_ROADMAP.md`; none is authorized by this
+closeout.
 
 ## Development Principles
 
