@@ -25,39 +25,103 @@ const MAX_SERVICE_JOB_COLLISION_CHECKS = 32;
 const MAX_SEQUENCE_VALUE = 999999;
 
 function nextSequence(value: number): number {
-  if (!Number.isInteger(value) || value < 0 || value >= MAX_SEQUENCE_VALUE) throw new Error('Service Job number sequence is malformed or exhausted');
+  if (!Number.isInteger(value) || value < 0 || value >= MAX_SEQUENCE_VALUE)
+    throw new Error('Service Job number sequence is malformed or exhausted');
   return value + 1;
 }
 function formatSequence(prefix: string, year: number, sequence: number): string {
-  if (!Number.isInteger(year) || !Number.isInteger(sequence) || sequence < 1 || sequence > MAX_SEQUENCE_VALUE) throw new Error('Service Job number is malformed');
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(sequence) ||
+    sequence < 1 ||
+    sequence > MAX_SEQUENCE_VALUE
+  )
+    throw new Error('Service Job number is malformed');
   return `${prefix}-${year}-${String(sequence).padStart(6, '0')}`;
 }
-function brandCode(brandId: BrandId): string { return brandId === 'bruno-thailand' ? 'BRN' : 'JLC'; }
+function brandCode(brandId: BrandId): string {
+  return brandId === 'bruno-thailand' ? 'BRN' : 'JLC';
+}
 // F5d-33/F5d-34 B-7: date reused bangkokIsoDate's own math inline (harmless
 // duplication) but time used toLocaleTimeString with no timeZone, which
 // resolves to the Workers runtime's default (UTC) rather than Bangkok —
 // wrong by up to 7 hours, and specifically wrong across the Bangkok
 // midnight boundary where `date` and `time` would disagree on the day.
 // Both now derive from the same explicit Asia/Bangkok zone.
-function buildServerJob(brandId: BrandId, intake: ServiceJobIntakePayload, now: Date): Omit<ServiceJob, 'id' | 'serviceRequestNumber'> {
+function buildServerJob(
+  brandId: BrandId,
+  intake: ServiceJobIntakePayload,
+  now: Date
+): Omit<ServiceJob, 'id' | 'serviceRequestNumber'> {
   const createdAt = bangkokIsoDate(now);
-  const time = now.toLocaleTimeString('th-TH', { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Bangkok' });
+  const time = now.toLocaleTimeString('th-TH', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'Asia/Bangkok',
+  });
   const chips = intake.problemChips.join(', ');
-  const issue = chips || intake.problemDescription.trim().slice(0, 80) || 'Reported issue';
-  const description = intake.problemDescription.trim() || chips || 'No additional description provided.';
-  return { brandId, customerName: intake.customerName, customerPhone: intake.customerPhone, customerEmail: intake.customerEmail, product: intake.product, productCategory: intake.productCategory, serialNumber: intake.serialNumber, issue, description, status: 'Received', priority: 'Normal', createdAt, updatedAt: createdAt, technician: 'Unassigned', estimatedCompletion: '—', warranty: intake.warranty, photos: intake.photos, accessories: intake.accessories, timeline: [{ status: 'Received', title: 'Claim received', description: 'Product received at the service counter and logged into the system.', date: createdAt, time, done: true, current: true }], notes: intake.internalNotes.trim() ? [{ author: 'Staff', date: createdAt, text: intake.internalNotes.trim() }] : [], closedAt: null, publicTrackingTokenHash: null, publicTrackingCodeHash: null };
+  const issue =
+    chips || intake.problemDescription.trim().slice(0, 80) || 'Reported issue';
+  const description =
+    intake.problemDescription.trim() || chips || 'No additional description provided.';
+  return {
+    brandId,
+    customerName: intake.customerName,
+    customerPhone: intake.customerPhone,
+    customerEmail: intake.customerEmail,
+    product: intake.product,
+    productCategory: intake.productCategory,
+    serialNumber: intake.serialNumber,
+    issue,
+    description,
+    status: 'Received',
+    priority: 'Normal',
+    createdAt,
+    updatedAt: createdAt,
+    technician: 'Unassigned',
+    estimatedCompletion: '—',
+    warranty: intake.warranty,
+    photos: intake.photos,
+    accessories: intake.accessories,
+    timeline: [
+      {
+        status: 'Received',
+        title: 'Claim received',
+        description:
+          'Product received at the service counter and logged into the system.',
+        date: createdAt,
+        time,
+        done: true,
+        current: true,
+      },
+    ],
+    notes: intake.internalNotes.trim()
+      ? [{ author: 'Staff', date: createdAt, text: intake.internalNotes.trim() }]
+      : [],
+    closedAt: null,
+    publicTrackingTokenHash: null,
+    publicTrackingCodeHash: null,
+  };
 }
 
 type UnknownRecord = Record<string, unknown>;
 function record(value: unknown): UnknownRecord | null {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as UnknownRecord : null;
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as UnknownRecord)
+    : null;
 }
 function string(value: unknown, max: number, required = true): string | null {
-  return typeof value === 'string' && value.length <= max && (!required || value.trim().length > 0) ? value : null;
+  return typeof value === 'string' &&
+    value.length <= max &&
+    (!required || value.trim().length > 0)
+    ? value
+    : null;
 }
 function strings(value: unknown, maxItems: number, maxLength: number): string[] | null {
   if (!Array.isArray(value) || value.length > maxItems) return null;
-  return value.every((entry) => typeof entry === 'string' && entry.length <= maxLength) ? value : null;
+  return value.every((entry) => typeof entry === 'string' && entry.length <= maxLength)
+    ? value
+    : null;
 }
 // Bounds both each photo individually and the sum across all of them, so
 // the aggregate stays inside MAX_PHOTOS_TOTAL_BYTES regardless of how the
@@ -80,10 +144,24 @@ function photoDataUrls(
 
 export function parseServiceJobIntake(value: unknown): ServiceJobIntakePayload | null {
   const body = record(value);
-  if (!body || Object.keys(body).length !== 1 || !Object.hasOwn(body, 'intake')) return null;
+  if (!body || Object.keys(body).length !== 1 || !Object.hasOwn(body, 'intake'))
+    return null;
   const intake = record(body.intake);
   if (!intake) return null;
-  const allowed = ['customerName', 'customerPhone', 'customerEmail', 'product', 'productCategory', 'serialNumber', 'problemDescription', 'problemChips', 'accessories', 'internalNotes', 'photos', 'warranty'];
+  const allowed = [
+    'customerName',
+    'customerPhone',
+    'customerEmail',
+    'product',
+    'productCategory',
+    'serialNumber',
+    'problemDescription',
+    'problemChips',
+    'accessories',
+    'internalNotes',
+    'photos',
+    'warranty',
+  ];
   if (Object.keys(intake).some((key) => !allowed.includes(key))) return null;
   const customerName = string(intake.customerName, 200);
   const customerPhone = string(intake.customerPhone, 64);
@@ -95,26 +173,87 @@ export function parseServiceJobIntake(value: unknown): ServiceJobIntakePayload |
   const problemChips = strings(intake.problemChips, 20, 160);
   const accessories = strings(intake.accessories, 50, 160);
   const internalNotes = string(intake.internalNotes, 4000, false);
-  const photos = photoDataUrls(intake.photos, 10, MAX_PHOTO_DATA_URL_BYTES, MAX_PHOTOS_TOTAL_BYTES);
-  if (customerName === null || customerPhone === null || customerEmail === null || product === null || productCategory === null || serialNumber === null || problemDescription === null || problemChips === null || accessories === null || internalNotes === null || photos === null || typeof intake.warranty !== 'boolean') return null;
-  return { customerName, customerPhone, customerEmail, product, productCategory, serialNumber, problemDescription, problemChips, accessories, internalNotes, photos, warranty: intake.warranty };
+  const photos = photoDataUrls(
+    intake.photos,
+    10,
+    MAX_PHOTO_DATA_URL_BYTES,
+    MAX_PHOTOS_TOTAL_BYTES
+  );
+  if (
+    customerName === null ||
+    customerPhone === null ||
+    customerEmail === null ||
+    product === null ||
+    productCategory === null ||
+    serialNumber === null ||
+    problemDescription === null ||
+    problemChips === null ||
+    accessories === null ||
+    internalNotes === null ||
+    photos === null ||
+    typeof intake.warranty !== 'boolean'
+  )
+    return null;
+  return {
+    customerName,
+    customerPhone,
+    customerEmail,
+    product,
+    productCategory,
+    serialNumber,
+    problemDescription,
+    problemChips,
+    accessories,
+    internalNotes,
+    photos,
+    warranty: intake.warranty,
+  };
 }
 
 export function isValidIdempotencyKey(value: string | null): value is string {
-  return value !== null && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  return (
+    value !== null &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  );
 }
 
-export interface AllocationTransaction { readonly id: string; }
+export interface AllocationTransaction {
+  readonly id: string;
+}
 export interface ServiceJobCreationDataAccess {
   beginServiceJobTransaction(): Promise<AllocationTransaction>;
   getIntakeKey(transaction: AllocationTransaction, key: string): Promise<string | null>;
-  getSequence(transaction: AllocationTransaction, brandId: BrandId, type: 'tracking_number' | 'service_request', year: number): Promise<number | null>;
-  getServiceJob(transaction: AllocationTransaction, id: string): Promise<ServiceJob | null>;
-  commitServiceJobCreation(transaction: AllocationTransaction, input: { key: string; job: ServiceJob; trackingSequence: number; serviceRequestSequence: number; year: number }): Promise<void>;
+  getSequence(
+    transaction: AllocationTransaction,
+    brandId: BrandId,
+    type: 'tracking_number' | 'service_request',
+    year: number
+  ): Promise<number | null>;
+  getServiceJob(
+    transaction: AllocationTransaction,
+    id: string
+  ): Promise<ServiceJob | null>;
+  serviceJobExists(transaction: AllocationTransaction, id: string): Promise<boolean>;
+  commitServiceJobCreation(
+    transaction: AllocationTransaction,
+    input: {
+      key: string;
+      job: ServiceJob;
+      trackingSequence: number;
+      serviceRequestSequence: number;
+      year: number;
+    }
+  ): Promise<void>;
 }
 export class TransactionConflictError extends Error {}
 
-export async function allocateServiceJob(input: { brandId: BrandId; key: string; intake: ServiceJobIntakePayload; dataAccess: ServiceJobCreationDataAccess; now?: () => Date }): Promise<ServiceJob> {
+export async function allocateServiceJob(input: {
+  brandId: BrandId;
+  key: string;
+  intake: ServiceJobIntakePayload;
+  dataAccess: ServiceJobCreationDataAccess;
+  now?: () => Date;
+}): Promise<ServiceJob> {
   const now = input.now ?? (() => new Date());
   for (let attempt = 0; attempt < MAX_TRANSACTION_RETRIES; attempt += 1) {
     const transaction = await input.dataAccess.beginServiceJobTransaction();
@@ -126,22 +265,53 @@ export async function allocateServiceJob(input: { brandId: BrandId; key: string;
     }
     const current = now();
     const year = bangkokNumberingYear(current);
-    const trackingStart = nextSequence(await input.dataAccess.getSequence(transaction, input.brandId, 'tracking_number', year) ?? 0);
-    const serviceRequestSequence = nextSequence(await input.dataAccess.getSequence(transaction, input.brandId, 'service_request', year) ?? 0);
+    const trackingStart = nextSequence(
+      (await input.dataAccess.getSequence(
+        transaction,
+        input.brandId,
+        'tracking_number',
+        year
+      )) ?? 0
+    );
+    const serviceRequestSequence = nextSequence(
+      (await input.dataAccess.getSequence(
+        transaction,
+        input.brandId,
+        'service_request',
+        year
+      )) ?? 0
+    );
     let trackingSequence = trackingStart;
     let id: string | null = null;
     for (let probe = 0; probe < MAX_SERVICE_JOB_COLLISION_CHECKS; probe += 1) {
       const candidate = formatSequence(brandCode(input.brandId), year, trackingSequence);
-      if (!(await input.dataAccess.getServiceJob(transaction, candidate))) { id = candidate; break; }
+      if (!(await input.dataAccess.serviceJobExists(transaction, candidate))) {
+        id = candidate;
+        break;
+      }
       trackingSequence = nextSequence(trackingSequence);
     }
     if (!id) throw new Error('Service Job tracking collision limit reached');
-    const job: ServiceJob = { ...buildServerJob(input.brandId, input.intake, current), id, serviceRequestNumber: formatSequence('SR', year, serviceRequestSequence) };
+    const job: ServiceJob = {
+      ...buildServerJob(input.brandId, input.intake, current),
+      id,
+      serviceRequestNumber: formatSequence('SR', year, serviceRequestSequence),
+    };
     try {
-      await input.dataAccess.commitServiceJobCreation(transaction, { key: input.key, job, trackingSequence, serviceRequestSequence, year });
+      await input.dataAccess.commitServiceJobCreation(transaction, {
+        key: input.key,
+        job,
+        trackingSequence,
+        serviceRequestSequence,
+        year,
+      });
       return job;
     } catch (error) {
-      if (error instanceof TransactionConflictError && attempt + 1 < MAX_TRANSACTION_RETRIES) continue;
+      if (
+        error instanceof TransactionConflictError &&
+        attempt + 1 < MAX_TRANSACTION_RETRIES
+      )
+        continue;
       // F5d-59: reached only when every allowed retry attempt has been
       // exhausted with a TransactionConflictError still occurring on the
       // last one (the loop's own condition above already ruled out "will
@@ -153,7 +323,8 @@ export async function allocateServiceJob(input: { brandId: BrandId; key: string;
       // Fires at most once per allocateServiceJob() call, only here, never
       // on a retryable attempt. The original error is rethrown completely
       // unchanged immediately after.
-      if (error instanceof TransactionConflictError) logAllocatorTransactionRetriesExhausted();
+      if (error instanceof TransactionConflictError)
+        logAllocatorTransactionRetriesExhausted();
       throw error;
     }
   }

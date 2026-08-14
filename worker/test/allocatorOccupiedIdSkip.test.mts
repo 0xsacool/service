@@ -64,7 +64,6 @@ let txnSequence = 0;
 const occupiedDocument = {
   name: `${RESOURCE_NAME_PREFIX}serviceJobs/${OCCUPIED_ID}`,
   fields: {
-    brandId: { stringValue: 'bruno-thailand' },
     customerName: { stringValue: 'Legacy Customer' },
     status: { stringValue: 'Received' },
   },
@@ -105,7 +104,7 @@ try {
   });
 
   check(
-    'the allocator selects BRN-2026-000002, skipping the occupied 000001',
+    'the allocator selects BRN-2026-000002, skipping the occupied unbranded legacy 000001',
     job.id === 'BRN-2026-000002'
   );
   check(

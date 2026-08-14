@@ -3322,3 +3322,36 @@ performed as part of Gate 7.
 
 No Rules, IAM, Auth, R2, Cron, or frontend change occurred as part of
 Gate 7.
+
+## F5d-60 source-only allocator remediation
+
+F5d-60 changes no IAM requirement and performs no production operation. The
+Worker's Firestore commit transport no longer treats HTTP status alone as
+proof of transaction contention. It reads a non-OK commit response body once,
+extracts only `.error.status` through the existing closed allow-list, and
+creates `TransactionConflictError` only for canonical `ABORTED` paired with
+HTTP `409`. `ALREADY_EXISTS`, `FAILED_PRECONDITION`, malformed/empty/unknown
+or inconsistent `409`, and all `412` responses fail immediately through the
+existing sanitized diagnostic path. No raw Firestore body, message, resource
+path, UUID, token, secret, or intake data is logged or returned.
+
+Candidate tracking IDs now use a transaction-bound existence read rather than
+canonical Service Job parsing. Any successfully read legacy document occupies
+its ID even when modern fields such as `brandId` are absent. Canonical parsing
+is still required for idempotency replay, so malformed records are never cast
+or fabricated into Service Jobs.
+
+The privileged transaction is otherwise unchanged and still commits exactly
+four writes atomically: create-only `serviceJobIntakeKeys`, create-only
+`serviceJobs`, tracking `numberSequences`, and Service Request
+`numberSequences`. Both create writes retain `currentDocument.exists=false`;
+`MAX_TRANSACTION_RETRIES` remains `5`; numbering, Bangkok-year ownership,
+staff authorization, and client-facing generic failures are unchanged.
+
+Offline validation passes all 338 Worker checks. This status is source-only:
+no Worker/Rules deployment, IAM/Auth/R2/Cron/configuration change, production
+Firestore read or write, or Gate 7.1 retry occurred. The previous production
+attempt's exact canonical Firestore status was not retained. An
+`ALREADY_EXISTS` collision is strongly supported as a mechanism by the source
+defects and protected legacy record shape, but it is not claimed as observed
+live. Gate 7.1 remains paused pending independent audit and separate approval.

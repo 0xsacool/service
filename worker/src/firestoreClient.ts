@@ -25,6 +25,7 @@ import {
   logAllocatorStageFailure,
   markAsLocalValidationError,
   runAllocatorStage,
+  sanitizedGoogleErrorStatus,
   type AllocatorStage,
 } from './allocatorDiagnostics.ts';
 
@@ -434,8 +435,20 @@ export function createFirestoreClient(env: Env): FirestoreClient {
       });
     },
 
+    async serviceJobExists(transaction, id) {
+      const doc = await getDocument(
+        env,
+        baseUrl,
+        'serviceJobs',
+        id,
+        transaction,
+        'occupied-id-read'
+      );
+      return doc !== null;
+    },
+
     // F5d-56B (Objective 6): the full body after token acquisition —
-    // request construction, fetch(), the 409/412 conflict check, and the
+    // request construction, fetch(), canonical-status discrimination, and the
     // not-ok check — is one runAllocatorStage('firestore-commit', ...)
     // unit. A rejected fetch is now attributed too, not just a non-OK
     // response. The commit's request body is JSON.stringify'd over values
@@ -508,18 +521,15 @@ export function createFirestoreClient(env: Env): FirestoreClient {
             ],
           }),
         });
-        // A 409/412 is expected, retried optimistic-concurrency behavior
-        // (allocateServiceJob() retries it up to MAX_TRANSACTION_RETRIES) —
-        // not a genuine failure to diagnose. logAllocatorStageFailure()
-        // itself skips logging a TransactionConflictError unconditionally,
-        // so this stays silent no matter how deeply it's wrapped.
-        if (response.status === 409 || response.status === 412)
-          throw new TransactionConflictError();
         if (!response.ok) {
+          const body = await response.text();
+          if (response.status === 409 && sanitizedGoogleErrorStatus(body) === 'ABORTED') {
+            throw new TransactionConflictError();
+          }
           throw new FirestoreRequestError(
             'commitServiceJobCreation',
             response.status,
-            await response.text()
+            body
           );
         }
       });

@@ -12,8 +12,8 @@ import type { ServiceJobIntakePayload } from '../../src/services/serviceJobCreat
 import type { ServiceJob } from '../../src/types/serviceJob.ts';
 
 // F5d-59. Terra's background finding: TransactionConflictError is
-// intentionally never logged by logAllocatorStageFailure() (a 409/412 is
-// expected, retried optimistic-concurrency behavior, not a genuine
+// intentionally never logged by logAllocatorStageFailure() (canonical
+// ABORTED is expected, retried optimistic-concurrency behavior, not a genuine
 // failure) — but that same unconditional skip also silences the FINAL
 // attempt's TransactionConflictError once allocateServiceJob()'s retry
 // loop gives up and rethrows it unchanged, so genuine retry exhaustion
@@ -87,6 +87,9 @@ class FakeStore implements ServiceJobCreationDataAccess {
   }
   async getServiceJob(): Promise<ServiceJob | null> {
     return null;
+  }
+  async serviceJobExists(): Promise<boolean> {
+    return false;
   }
   async commitServiceJobCreation(): Promise<void> {
     this.commitAttempts += 1;
@@ -189,14 +192,17 @@ function runAllocation(
     'C: zero partial writes — commitServiceJobCreation never recorded a successful commit',
     !store.committed
   );
-  const allocatorLines = logged.filter((line) => line.startsWith('[ServiceJob Allocator]'));
+  const allocatorLines = logged.filter((line) =>
+    line.startsWith('[ServiceJob Allocator]')
+  );
   check(
     'C: exactly ONE [ServiceJob Allocator] diagnostic line is emitted for the whole exhausted sequence',
     allocatorLines.length === 1
   );
   check(
     'C: the one line is attributed to stage firestore-commit with code transaction-retries-exhausted',
-    allocatorLines[0] === '[ServiceJob Allocator] firestore-commit: transaction-retries-exhausted'
+    allocatorLines[0] ===
+      '[ServiceJob Allocator] firestore-commit: transaction-retries-exhausted'
   );
 }
 
@@ -223,7 +229,8 @@ function runAllocation(
   check(
     'D: the exhaustion diagnostic is the fixed literal string alone, with no document path, token, request body, PII, or intake UUID',
     logged.length === 1 &&
-      logged[0] === '[ServiceJob Allocator] firestore-commit: transaction-retries-exhausted' &&
+      logged[0] ===
+        '[ServiceJob Allocator] firestore-commit: transaction-retries-exhausted' &&
       !logged[0].includes(secretPhone) &&
       !logged[0].includes(secretUuid) &&
       !logged[0].includes(secretToken) &&
@@ -237,7 +244,7 @@ function runAllocation(
 // through the actual createFirestoreClient()/createWorkerHandler() stack —
 // not just the in-memory FakeStore above — and that exactly
 // MAX_TRANSACTION_RETRIES `:commit` REST calls occur against Firestore, no
-// more, no fewer, each rejected with 409.
+// more, no fewer, each rejected with canonical ABORTED over HTTP 409.
 {
   const env: Env = {
     ATTACHMENTS_BUCKET: {} as R2Bucket,
@@ -276,7 +283,16 @@ function runAllocation(
     }
     if (url.pathname.endsWith(':commit')) {
       commitAttempts += 1;
-      return new Response('', { status: 409 });
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: 409,
+            status: 'ABORTED',
+            message: 'transaction contention',
+          },
+        }),
+        { status: 409 }
+      );
     }
     return new Response('', { status: 404 }); // every read: nothing recorded yet
   }) as typeof fetch;
@@ -313,12 +329,116 @@ function runAllocation(
     'E2E: exactly MAX_TRANSACTION_RETRIES :commit attempts occurred against the real Firestore REST layer, no more',
     commitAttempts === MAX_TRANSACTION_RETRIES
   );
-  const allocatorLines = logged.filter((line) => line.startsWith('[ServiceJob Allocator]'));
+  const allocatorLines = logged.filter((line) =>
+    line.startsWith('[ServiceJob Allocator]')
+  );
   check(
     'E2E: exactly one allocator diagnostic line is emitted server-side, attributed to firestore-commit: transaction-retries-exhausted',
     allocatorLines.length === 1 &&
       allocatorLines[0] ===
         '[ServiceJob Allocator] firestore-commit: transaction-retries-exhausted'
+  );
+}
+
+// --- E2E fail-fast: canonical ALREADY_EXISTS is not retryable ---------------
+{
+  const env: Env = {
+    ATTACHMENTS_BUCKET: {} as R2Bucket,
+    ALLOWED_ORIGINS: 'http://localhost:5173',
+    FIRESTORE_PROJECT_ID: 'test-project',
+    FIRESTORE_EMULATOR_HOST: '127.0.0.1:8080',
+  };
+  const dependencies: WorkerDependencies = {
+    tokenVerifier: {
+      async verify() {
+        return { uid: 'staff-1' };
+      },
+    },
+    createFirestoreClient: (e) => createFirestoreClient(e),
+  };
+  const handler = createWorkerHandler(dependencies);
+  const { logged, restore } = captureConsoleError();
+  let commitAttempts = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = new URL(typeof input === 'string' ? input : input.toString());
+    if (url.pathname.includes('/staffProfiles/')) {
+      return new Response(
+        JSON.stringify({
+          name: 'projects/test-project/databases/(default)/documents/staffProfiles/staff-1',
+          fields: { brandId: { stringValue: 'bruno-thailand' } },
+        }),
+        { status: 200 }
+      );
+    }
+    if (url.pathname.endsWith(':beginTransaction')) {
+      return new Response(JSON.stringify({ transaction: 'txn-already-exists' }), {
+        status: 200,
+      });
+    }
+    if (url.pathname.endsWith(':commit')) {
+      commitAttempts += 1;
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: 409,
+            status: 'ALREADY_EXISTS',
+            message: 'hostile customers/0899999999 Bearer secret-value',
+          },
+        }),
+        { status: 409 }
+      );
+    }
+    return new Response('', { status: 404 });
+  }) as typeof fetch;
+  let response: Response;
+  try {
+    response = await handler.fetch(
+      new Request('https://worker.example/service-jobs', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer test-token',
+          'Content-Type': 'application/json',
+          'Idempotency-Key': '66666666-6666-4666-8666-666666666666',
+        },
+        body: JSON.stringify({ intake }),
+      }),
+      env,
+      {} as ExecutionContext
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+  const body = (await response!.json()) as { error?: string };
+  check(
+    'E2E ALREADY_EXISTS: the existing generic client failure is preserved',
+    response!.status === 500 && body.error === 'Unable to create Service Job'
+  );
+  check(
+    'E2E ALREADY_EXISTS: exactly one commit attempt occurs, with no retry',
+    commitAttempts === 1
+  );
+  const allocatorLines = logged.filter((line) =>
+    line.startsWith('[ServiceJob Allocator]')
+  );
+  check(
+    'E2E ALREADY_EXISTS: one sanitized fail-fast diagnostic is emitted',
+    allocatorLines.length === 1 &&
+      allocatorLines[0] === '[ServiceJob Allocator] firestore-commit: ALREADY_EXISTS'
+  );
+  check(
+    'E2E ALREADY_EXISTS: transaction-retries-exhausted is never emitted',
+    !logged.some((line) => line.includes('transaction-retries-exhausted'))
+  );
+  check(
+    'E2E ALREADY_EXISTS: hostile response text and request identifiers are absent from logs',
+    !logged.some(
+      (line) =>
+        line.includes('0899999999') ||
+        line.includes('secret-value') ||
+        line.includes('66666666-6666-4666-8666-666666666666')
+    )
   );
 }
 

@@ -44,6 +44,39 @@ const intake: ServiceJobIntakePayload = {
   warranty: false,
 };
 
+const commitInput = {
+  key: '11111111-1111-4111-8111-111111111111',
+  job: {
+    id: 'BRN-2026-000001',
+    serviceRequestNumber: 'SR-2026-000001',
+    brandId: 'bruno-thailand' as const,
+    customerName: 'x',
+    customerPhone: '',
+    customerEmail: '',
+    product: '',
+    productCategory: '',
+    serialNumber: '',
+    issue: '',
+    description: '',
+    status: 'Received' as const,
+    priority: 'Normal' as const,
+    createdAt: '2026-01-01',
+    updatedAt: '2026-01-01',
+    technician: '',
+    estimatedCompletion: '',
+    warranty: false,
+    photos: [],
+    timeline: [],
+    notes: [],
+    closedAt: null,
+    publicTrackingTokenHash: null,
+    publicTrackingCodeHash: null,
+  },
+  trackingSequence: 1,
+  serviceRequestSequence: 1,
+  year: 2026,
+};
+
 function captureConsoleError(): { logged: string[]; restore: () => void } {
   const original = console.error;
   const logged: string[] = [];
@@ -219,41 +252,7 @@ for (const scenario of readScenarios) {
       url.pathname.endsWith(':commit') ? new Response('boom', { status: 500 }) : null,
     async () => {
       try {
-        await client.commitServiceJobCreation(
-          { id: 'txn-1' },
-          {
-            key: '11111111-1111-4111-8111-111111111111',
-            job: {
-              id: 'BRN-2026-000001',
-              serviceRequestNumber: 'SR-2026-000001',
-              brandId: 'bruno-thailand',
-              customerName: 'x',
-              customerPhone: '',
-              customerEmail: '',
-              product: '',
-              productCategory: '',
-              serialNumber: '',
-              issue: '',
-              description: '',
-              status: 'Received',
-              priority: 'Normal',
-              createdAt: '2026-01-01',
-              updatedAt: '2026-01-01',
-              technician: '',
-              estimatedCompletion: '',
-              warranty: false,
-              photos: [],
-              timeline: [],
-              notes: [],
-              closedAt: null,
-              publicTrackingTokenHash: null,
-              publicTrackingCodeHash: null,
-            },
-            trackingSequence: 1,
-            serviceRequestSequence: 1,
-            year: 2026,
-          }
-        );
+        await client.commitServiceJobCreation({ id: 'txn-1' }, commitInput);
       } catch {
         threw = true;
       }
@@ -267,65 +266,168 @@ for (const scenario of readScenarios) {
   );
 }
 
-// --- a 409/412 transaction conflict is NOT logged (expected, retried behavior, not a genuine failure)
-{
+// --- canonical commit-status discrimination --------------------------------
+const hostileMessage =
+  'customers/0899999999 intake=11111111-1111-4111-8111-111111111111 Bearer secret-token';
+const commitErrorScenarios: {
+  label: string;
+  response: () => Response;
+  expectConflict: boolean;
+  expectedDiagnostic: string | null;
+}[] = [
+  {
+    label: 'canonical ABORTED over HTTP 409',
+    response: () =>
+      new Response(
+        JSON.stringify({
+          error: { code: 409, status: 'ABORTED', message: hostileMessage },
+        }),
+        { status: 409 }
+      ),
+    expectConflict: true,
+    expectedDiagnostic: null,
+  },
+  {
+    label: 'canonical ALREADY_EXISTS over HTTP 409',
+    response: () =>
+      new Response(
+        JSON.stringify({
+          error: { code: 409, status: 'ALREADY_EXISTS', message: hostileMessage },
+        }),
+        { status: 409 }
+      ),
+    expectConflict: false,
+    expectedDiagnostic: '[ServiceJob Allocator] firestore-commit: ALREADY_EXISTS',
+  },
+  {
+    label: 'canonical FAILED_PRECONDITION',
+    response: () =>
+      new Response(
+        JSON.stringify({
+          error: { code: 400, status: 'FAILED_PRECONDITION', message: hostileMessage },
+        }),
+        { status: 400 }
+      ),
+    expectConflict: false,
+    expectedDiagnostic: '[ServiceJob Allocator] firestore-commit: FAILED_PRECONDITION',
+  },
+  {
+    label: 'empty HTTP 409',
+    response: () => new Response('', { status: 409 }),
+    expectConflict: false,
+    expectedDiagnostic: '[ServiceJob Allocator] firestore-commit: http-409',
+  },
+  {
+    label: 'malformed HTTP 409',
+    response: () => new Response('{not-json', { status: 409 }),
+    expectConflict: false,
+    expectedDiagnostic: '[ServiceJob Allocator] firestore-commit: http-409',
+  },
+  {
+    label: 'unknown canonical status over HTTP 409',
+    response: () =>
+      new Response(
+        JSON.stringify({
+          error: { status: 'SOMETHING_MADE_UP', message: hostileMessage },
+        }),
+        { status: 409 }
+      ),
+    expectConflict: false,
+    expectedDiagnostic: '[ServiceJob Allocator] firestore-commit: http-409',
+  },
+  {
+    label: 'inconsistent FAILED_PRECONDITION over HTTP 409',
+    response: () =>
+      new Response(
+        JSON.stringify({
+          error: { status: 'FAILED_PRECONDITION', message: hostileMessage },
+        }),
+        { status: 409 }
+      ),
+    expectConflict: false,
+    expectedDiagnostic: '[ServiceJob Allocator] firestore-commit: FAILED_PRECONDITION',
+  },
+  {
+    label: 'canonical ABORTED over HTTP 412',
+    response: () =>
+      new Response(
+        JSON.stringify({
+          error: { status: 'ABORTED', message: hostileMessage },
+        }),
+        { status: 412 }
+      ),
+    expectConflict: false,
+    expectedDiagnostic: '[ServiceJob Allocator] firestore-commit: ABORTED',
+  },
+];
+
+for (const scenario of commitErrorScenarios) {
   const client = createFirestoreClient(emulatorEnv);
   const { logged, restore } = captureConsoleError();
-  let threwConflict = false;
+  let caughtError: unknown;
   await withStubbedFetch(
-    (url) =>
-      url.pathname.endsWith(':commit') ? new Response('', { status: 409 }) : null,
+    (url) => (url.pathname.endsWith(':commit') ? scenario.response() : null),
     async () => {
       try {
-        await client.commitServiceJobCreation(
-          { id: 'txn-1' },
-          {
-            key: '11111111-1111-4111-8111-111111111111',
-            job: {
-              id: 'BRN-2026-000001',
-              serviceRequestNumber: 'SR-2026-000001',
-              brandId: 'bruno-thailand',
-              customerName: 'x',
-              customerPhone: '',
-              customerEmail: '',
-              product: '',
-              productCategory: '',
-              serialNumber: '',
-              issue: '',
-              description: '',
-              status: 'Received',
-              priority: 'Normal',
-              createdAt: '2026-01-01',
-              updatedAt: '2026-01-01',
-              technician: '',
-              estimatedCompletion: '',
-              warranty: false,
-              photos: [],
-              timeline: [],
-              notes: [],
-              closedAt: null,
-              publicTrackingTokenHash: null,
-              publicTrackingCodeHash: null,
-            },
-            trackingSequence: 1,
-            serviceRequestSequence: 1,
-            year: 2026,
-          }
-        );
+        await client.commitServiceJobCreation({ id: 'txn-1' }, commitInput);
       } catch (error) {
-        threwConflict = error instanceof TransactionConflictError;
+        caughtError = error;
       }
     }
   );
   restore();
   check(
-    'a 409 commit response still throws TransactionConflictError unchanged',
-    threwConflict
+    `${scenario.label}: retry classification is correct`,
+    caughtError instanceof TransactionConflictError === scenario.expectConflict
+  );
+  const allocatorLines = logged.filter((line) =>
+    line.startsWith('[ServiceJob Allocator]')
   );
   check(
-    'a 409/412 transaction conflict (expected retry, not a genuine failure) is not stage-logged',
-    logged.length === 0
+    `${scenario.label}: diagnostic behavior is correct`,
+    scenario.expectedDiagnostic === null
+      ? allocatorLines.length === 0
+      : allocatorLines.length === 1 && allocatorLines[0] === scenario.expectedDiagnostic
   );
+  check(
+    `${scenario.label}: hostile response content never appears in logs`,
+    !logged.some(
+      (line) =>
+        line.includes('0899999999') ||
+        line.includes('11111111-1111-4111-8111-111111111111') ||
+        line.includes('secret-token')
+    )
+  );
+}
+
+// A non-OK commit body may contain sensitive server text. The transport reads
+// it once, then shares that one string between retry discrimination and the
+// existing sanitized diagnostic path.
+{
+  const client = createFirestoreClient(emulatorEnv);
+  const response = new Response(
+    JSON.stringify({ error: { status: 'ALREADY_EXISTS', message: hostileMessage } }),
+    { status: 409 }
+  );
+  const originalText = response.text.bind(response);
+  let bodyReads = 0;
+  response.text = async () => {
+    bodyReads += 1;
+    return await originalText();
+  };
+  const { restore } = captureConsoleError();
+  await withStubbedFetch(
+    (url) => (url.pathname.endsWith(':commit') ? response : null),
+    async () => {
+      try {
+        await client.commitServiceJobCreation({ id: 'txn-1' }, commitInput);
+      } catch {
+        // expected fail-fast response
+      }
+    }
+  );
+  restore();
+  check('a non-OK commit response body is read exactly once', bodyReads === 1);
 }
 
 // --- successful allocation logs nothing -------------------------------------

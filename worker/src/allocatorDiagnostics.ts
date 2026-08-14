@@ -80,7 +80,7 @@ const KNOWN_GOOGLE_ERROR_STATUSES: ReadonlySet<string> = new Set([
 // Only `.error.status` (a short, safe, documented enum value) is ever
 // extracted — `.error.message` is never read here, since it can echo back
 // request content, including a Firestore document path.
-function sanitizedGoogleErrorStatus(rawBody: string): string | null {
+export function sanitizedGoogleErrorStatus(rawBody: string): string | null {
   try {
     const parsed = JSON.parse(rawBody) as { error?: { status?: unknown } };
     const status = parsed?.error?.status;
@@ -254,9 +254,10 @@ const alreadyLoggedErrors = new WeakSet<object>();
 // permission-denied". Intentionally log-only — no Firestore write, no
 // persisted diagnostic record, nothing that could contribute a partial
 // allocator footprint (Objective 6). A TransactionConflictError is never
-// logged here — a 409/412 is expected, retried optimistic-concurrency
-// behavior (allocateServiceJob() retries it), not a genuine failure to
-// diagnose; logging it on every retry attempt would be noise, not signal.
+// logged here — canonical Firestore ABORTED is expected, retried optimistic-
+// concurrency behavior (allocateServiceJob() retries it), not a genuine
+// failure to diagnose; logging it on every retry attempt would be noise,
+// not signal.
 export function logAllocatorStageFailure(stage: AllocatorStage, error: unknown): void {
   if (error instanceof TransactionConflictError) {
     return;

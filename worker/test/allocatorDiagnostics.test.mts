@@ -1,6 +1,7 @@
 import {
   classifyAllocatorError,
   logAllocatorStageFailure,
+  sanitizedGoogleErrorStatus,
   ServiceJobAllocatorStageError,
 } from '../src/allocatorDiagnostics.ts';
 
@@ -23,6 +24,59 @@ function check(label: string, condition: boolean): void {
 }
 
 console.log('Running allocator stage diagnostics regression test');
+
+// --- sanitizedGoogleErrorStatus --------------------------------------------
+
+for (const status of [
+  'ABORTED',
+  'ALREADY_EXISTS',
+  'FAILED_PRECONDITION',
+  'PERMISSION_DENIED',
+]) {
+  check(
+    `the canonical-status parser returns allow-listed ${status}`,
+    sanitizedGoogleErrorStatus(
+      JSON.stringify({ error: { status, message: 'arbitrary server text' } })
+    ) === status
+  );
+}
+
+check(
+  'the canonical-status parser rejects malformed JSON',
+  sanitizedGoogleErrorStatus('{not-json') === null
+);
+check(
+  'the canonical-status parser rejects a missing status',
+  sanitizedGoogleErrorStatus(JSON.stringify({ error: { code: 409 } })) === null
+);
+check(
+  'the canonical-status parser rejects an unknown status',
+  sanitizedGoogleErrorStatus(
+    JSON.stringify({ error: { status: 'SOMETHING_MADE_UP' } })
+  ) === null
+);
+check(
+  'the canonical-status parser is case-sensitive and rejects lowercase values',
+  sanitizedGoogleErrorStatus(JSON.stringify({ error: { status: 'aborted' } })) === null
+);
+{
+  const hostilePath = 'customers/0899999999';
+  const hostileToken = 'Bearer secret-token';
+  const parsed = sanitizedGoogleErrorStatus(
+    JSON.stringify({
+      error: {
+        status: 'ALREADY_EXISTS',
+        message: `${hostilePath} ${hostileToken}`,
+      },
+    })
+  );
+  check(
+    'the canonical-status parser returns only the safe status and never hostile message content',
+    parsed === 'ALREADY_EXISTS' &&
+      !parsed.includes(hostilePath) &&
+      !parsed.includes(hostileToken)
+  );
+}
 
 // --- classifyAllocatorError -------------------------------------------------
 

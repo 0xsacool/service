@@ -2306,6 +2306,55 @@ Gate 7.1 remains **PAUSED**. Production durable writes = ZERO. No
 production deployment, mutation, or Rules/Worker/IAM/Auth change
 occurred.
 
+## F5d-60 — Firestore commit status discrimination and legacy-safe collision probing
+
+F5d-60 is a **source-only remediation**. Gate 7.1 remains paused; no
+production request, deployment, or mutation was performed.
+
+Two source defects were confirmed. First, the Worker previously converted
+every Firestore commit HTTP `409` or `412` into `TransactionConflictError`,
+even though only canonical `ABORTED` is allocator-retryable. The commit path
+now reads a non-OK body exactly once and reuses the existing closed
+Google-status parser. Only an allow-listed `ABORTED` envelope paired with
+HTTP `409` becomes `TransactionConflictError`. `ALREADY_EXISTS`,
+`FAILED_PRECONDITION`, empty/malformed/unknown/inconsistent `409` responses,
+and every `412` fail immediately through the existing
+`FirestoreRequestError` plus sanitized allocator diagnostic path. Retry
+policy remains in `allocateServiceJob()`, and `MAX_TRANSACTION_RETRIES`
+remains exactly `5`.
+
+Second, candidate collision probing previously called `getServiceJob()`,
+whose canonical parser returns `null` for a successfully read legacy
+document missing required modern fields such as `brandId`. A separate
+transaction-bound `serviceJobExists()` read now treats **any** document at a
+candidate ID as occupied without fabricating it into a `ServiceJob`.
+`getServiceJob()` remains unchanged for idempotency replay, where a valid
+canonical job is required. The regression fixture now represents the real
+protected legacy shape by omitting `brandId`; it proves
+`BRN-2026-000001` is read-only/occupied, `BRN-2026-000002` is selected,
+tracking sequence becomes `2`, Service Request sequence becomes `1`, and
+the protected document is absent from the four-write commit.
+
+The transaction invariants are unchanged: one atomic commit still contains
+exactly the intake-key create-only write, Service Job create-only write,
+tracking sequence write, and Service Request sequence write; both create
+writes retain `currentDocument.exists=false`; Bangkok year, independent
+counters, idempotency replay, authorization, and the generic client failure
+remain unchanged. The full Worker suite passes 338 checks across its 19 test
+programs. The normal Worker typecheck command still reports the pre-existing
+six `ImportMeta.env` errors caused by its config traversing frontend Vite
+modules without `vite/client`; the same strict command with `vite/client`
+added as a non-persistent command-line type input passes, with no F5d-60
+errors.
+
+The retained production diagnostic was
+`firestore-commit: transaction-retries-exhausted`, and read-only production
+verification after that attempt found zero durable writes. The source defects
+make an `ALREADY_EXISTS` create-only collision a strong, source-supported
+incident explanation, but the historical Firestore response body was not
+retained, so its exact live canonical status is **not proven**. Independent
+source/diff audit is required before any deployment or Gate 7.1 retry.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Each new repository's backend swap (Customer, Service Job, Search, Registered Products) gets the same doc-plus-approval treatment Product Master got, not a silent bulk migration.

@@ -1,33 +1,159 @@
-import { allocateServiceJob, isValidIdempotencyKey, MAX_INTAKE_BYTES, MAX_PHOTOS_TOTAL_BYTES, MAX_PHOTO_DATA_URL_BYTES, parseServiceJobIntake, TransactionConflictError, type AllocationTransaction, type ServiceJobCreationDataAccess } from '../src/serviceJobCreation.ts';
+import {
+  allocateServiceJob,
+  isValidIdempotencyKey,
+  MAX_INTAKE_BYTES,
+  MAX_PHOTOS_TOTAL_BYTES,
+  MAX_PHOTO_DATA_URL_BYTES,
+  parseServiceJobIntake,
+  TransactionConflictError,
+  type AllocationTransaction,
+  type ServiceJobCreationDataAccess,
+} from '../src/serviceJobCreation.ts';
 import { bangkokIsoDate } from '../../src/services/bangkokTime.ts';
 import type { ServiceJob } from '../../src/types/serviceJob.ts';
 
 let failures = 0;
-function check(name: string, value: boolean) { if (value) console.log(`  PASS  ${name}`); else { failures += 1; console.error(`  FAIL  ${name}`); } }
+function check(name: string, value: boolean) {
+  if (value) console.log(`  PASS  ${name}`);
+  else {
+    failures += 1;
+    console.error(`  FAIL  ${name}`);
+  }
+}
 const key = '11111111-1111-4111-8111-111111111111';
-const raw = { intake: { customerName: 'QA', customerPhone: '1', customerEmail: '', product: 'Product', productCategory: 'Other', serialNumber: 'S', problemDescription: '', problemChips: [], accessories: [], internalNotes: '', photos: [], warranty: false } };
+const raw = {
+  intake: {
+    customerName: 'QA',
+    customerPhone: '1',
+    customerEmail: '',
+    product: 'Product',
+    productCategory: 'Other',
+    serialNumber: 'S',
+    problemDescription: '',
+    problemChips: [],
+    accessories: [],
+    internalNotes: '',
+    photos: [],
+    warranty: false,
+  },
+};
 const intake = parseServiceJobIntake(raw);
-check('only bounded intake payload is accepted', intake !== null && parseServiceJobIntake({ ...raw, brandId: 'bruno-thailand' }) === null);
-check('UUID v4 idempotency key is required', isValidIdempotencyKey(key) && !isValidIdempotencyKey('bad'));
+check(
+  'only bounded intake payload is accepted',
+  intake !== null && parseServiceJobIntake({ ...raw, brandId: 'bruno-thailand' }) === null
+);
+check(
+  'UUID v4 idempotency key is required',
+  isValidIdempotencyKey(key) && !isValidIdempotencyKey('bad')
+);
 
 class FakeStore implements ServiceJobCreationDataAccess {
-  jobs = new Map<string, ServiceJob>(); keys = new Map<string, string>(); tracking = 0; requests = 0; conflicts = 0; writes = 0;
-  async beginServiceJobTransaction(): Promise<AllocationTransaction> { return { id: crypto.randomUUID() }; }
-  async getIntakeKey(_: AllocationTransaction, id: string) { return this.keys.get(id) ?? null; }
-  async getSequence(_: AllocationTransaction, __: 'bruno-thailand' | 'join-lux-club', type: 'tracking_number' | 'service_request') { return type === 'tracking_number' ? this.tracking : this.requests; }
-  async getServiceJob(_: AllocationTransaction, id: string) { return this.jobs.get(id) ?? null; }
-  async commitServiceJobCreation(_: AllocationTransaction, input: { key: string; job: ServiceJob; trackingSequence: number; serviceRequestSequence: number }) { if (this.conflicts-- > 0) throw new TransactionConflictError(); if (this.jobs.has(input.job.id) || this.keys.has(input.key)) throw new TransactionConflictError(); this.jobs.set(input.job.id, input.job); this.keys.set(input.key, input.job.id); this.tracking = input.trackingSequence; this.requests = input.serviceRequestSequence; this.writes += 1; }
+  jobs = new Map<string, ServiceJob>();
+  keys = new Map<string, string>();
+  tracking = 0;
+  requests = 0;
+  conflicts = 0;
+  writes = 0;
+  async beginServiceJobTransaction(): Promise<AllocationTransaction> {
+    return { id: crypto.randomUUID() };
+  }
+  async getIntakeKey(_: AllocationTransaction, id: string) {
+    return this.keys.get(id) ?? null;
+  }
+  async getSequence(
+    _: AllocationTransaction,
+    __: 'bruno-thailand' | 'join-lux-club',
+    type: 'tracking_number' | 'service_request'
+  ) {
+    return type === 'tracking_number' ? this.tracking : this.requests;
+  }
+  async getServiceJob(_: AllocationTransaction, id: string) {
+    return this.jobs.get(id) ?? null;
+  }
+  async serviceJobExists(_: AllocationTransaction, id: string) {
+    return this.jobs.has(id);
+  }
+  async commitServiceJobCreation(
+    _: AllocationTransaction,
+    input: {
+      key: string;
+      job: ServiceJob;
+      trackingSequence: number;
+      serviceRequestSequence: number;
+    }
+  ) {
+    if (this.conflicts-- > 0) throw new TransactionConflictError();
+    if (this.jobs.has(input.job.id) || this.keys.has(input.key))
+      throw new TransactionConflictError();
+    this.jobs.set(input.job.id, input.job);
+    this.keys.set(input.key, input.job.id);
+    this.tracking = input.trackingSequence;
+    this.requests = input.serviceRequestSequence;
+    this.writes += 1;
+  }
 }
 if (!intake) throw new Error('test intake malformed');
 const store = new FakeStore();
-store.jobs.set('BRN-2026-000001', { id: 'BRN-2026-000001', serviceRequestNumber: 'SR-2026-000001', brandId: 'bruno-thailand', customerName: 'legacy', customerPhone: '', customerEmail: '', product: '', productCategory: '', serialNumber: '', issue: '', description: '', status: 'Received', priority: 'Normal', createdAt: '2026-01-01', updatedAt: '2026-01-01', technician: '', estimatedCompletion: '', warranty: false, photos: [], timeline: [], notes: [], closedAt: null, publicTrackingTokenHash: null, publicTrackingCodeHash: null });
-const first = await allocateServiceJob({ brandId: 'bruno-thailand', key, intake, dataAccess: store, now: () => new Date('2025-12-31T17:00:00.000Z') });
-check('Bangkok year and occupied legacy ID are handled safely', first.id === 'BRN-2026-000002' && first.serviceRequestNumber === 'SR-2026-000001' && store.jobs.has('BRN-2026-000001'));
-const replay = await allocateServiceJob({ brandId: 'bruno-thailand', key, intake, dataAccess: store });
-check('idempotent replay returns canonical job without advancing counters', replay.id === first.id && store.writes === 1);
+store.jobs.set('BRN-2026-000001', {
+  id: 'BRN-2026-000001',
+  serviceRequestNumber: 'SR-2026-000001',
+  brandId: 'bruno-thailand',
+  customerName: 'legacy',
+  customerPhone: '',
+  customerEmail: '',
+  product: '',
+  productCategory: '',
+  serialNumber: '',
+  issue: '',
+  description: '',
+  status: 'Received',
+  priority: 'Normal',
+  createdAt: '2026-01-01',
+  updatedAt: '2026-01-01',
+  technician: '',
+  estimatedCompletion: '',
+  warranty: false,
+  photos: [],
+  timeline: [],
+  notes: [],
+  closedAt: null,
+  publicTrackingTokenHash: null,
+  publicTrackingCodeHash: null,
+});
+const first = await allocateServiceJob({
+  brandId: 'bruno-thailand',
+  key,
+  intake,
+  dataAccess: store,
+  now: () => new Date('2025-12-31T17:00:00.000Z'),
+});
+check(
+  'Bangkok year and occupied legacy ID are handled safely',
+  first.id === 'BRN-2026-000002' &&
+    first.serviceRequestNumber === 'SR-2026-000001' &&
+    store.jobs.has('BRN-2026-000001')
+);
+const replay = await allocateServiceJob({
+  brandId: 'bruno-thailand',
+  key,
+  intake,
+  dataAccess: store,
+});
+check(
+  'idempotent replay returns canonical job without advancing counters',
+  replay.id === first.id && store.writes === 1
+);
 store.conflicts = 1;
-const next = await allocateServiceJob({ brandId: 'bruno-thailand', key: '22222222-2222-4222-8222-222222222222', intake, dataAccess: store });
-check('transaction conflict retries without partial writes', next.id === 'BRN-2026-000003' && store.writes === 2);
+const next = await allocateServiceJob({
+  brandId: 'bruno-thailand',
+  key: '22222222-2222-4222-8222-222222222222',
+  intake,
+  dataAccess: store,
+});
+check(
+  'transaction conflict retries without partial writes',
+  next.id === 'BRN-2026-000003' && store.writes === 2
+);
 
 // F5d-33/F5d-34 B-7 — a moment just before Bangkok midnight in UTC (Bangkok
 // = UTC+7, so 2026-01-01T18:30Z is 2026-01-02T01:30 in Bangkok). The date
@@ -76,7 +202,8 @@ check(
 );
 check(
   'a single photo one byte over the per-photo cap is rejected',
-  parseServiceJobIntake(intakeWithPhotos(['x'.repeat(MAX_PHOTO_DATA_URL_BYTES + 1)])) === null
+  parseServiceJobIntake(intakeWithPhotos(['x'.repeat(MAX_PHOTO_DATA_URL_BYTES + 1)])) ===
+    null
 );
 {
   const perPhoto = Math.floor(MAX_PHOTOS_TOTAL_BYTES / 3) - 1;
