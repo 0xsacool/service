@@ -1694,6 +1694,618 @@ Gate 7.1 remains **PAUSED**. Production durable writes = ZERO. No
 production deployment, mutation, or Rules/Worker/IAM/Auth change
 occurred.
 
+## F5d-59 — Transaction retry exhaustion diagnostic closure
+
+**Latest approved Gate 7.1 reproduction.** The browser again showed
+`Worker Service Job creation failed (500)`. Independent production
+verification confirmed the same clean, no-op outcome as every prior
+attempt: `BRN-2026-000002` absent, zero acceptance Service Jobs, zero
+intake-key mappings, both Bruno sequences absent/logically 0, the
+protected `BRN-2026-000001` unchanged — **durable production writes =
+ZERO.** The F5d-56/56B/56D diagnostics Worker was active for this
+reproduction, but the already-running `wrangler tail` stdout was not
+retained in a form the verification task could inspect afterward, so
+**the exact failing stage still could not be read back.** This document
+does not claim the live failure was transaction-retry exhaustion
+specifically — that remains one possibility among several the F5d-56
+family of diagnostics can now distinguish, not a confirmed cause.
+
+**Blind spot found by source review, independent of the above.**
+`logAllocatorStageFailure()` (F5d-56) intentionally never logs a
+`TransactionConflictError` — a 409/412 is expected, retried
+optimistic-concurrency behavior, not a genuine failure, and logging it on
+every retry would be noise. But `allocateServiceJob()`'s retry loop
+(`worker/src/serviceJobCreation.ts`) rethrows the **final** attempt's
+`TransactionConflictError` exactly the same way it rethrows a retryable
+one — so that unconditional skip also silenced genuine exhaustion, which
+could then reach the client as an unattributed generic 500 exactly like
+the gaps F5d-56/56B/56D closed elsewhere.
+
+**Retry loop, traced from source (Objective 1).** `MAX_TRANSACTION_RETRIES
+= 5`. `allocateServiceJob()` loops `attempt = 0..4` (5 attempts total);
+each attempt calls `dataAccess.commitServiceJobCreation()` once. Firestore
+REST returns `409`/`412` on an optimistic-concurrency conflict against the
+`:commit` request, which `firestoreClient.ts`'s `commitServiceJobCreation`
+turns into `throw new TransactionConflictError()`. The loop's catch:
+`if (error instanceof TransactionConflictError && attempt + 1 <
+MAX_TRANSACTION_RETRIES) continue;` — i.e. only continues when there is at
+least one attempt left; otherwise it falls through to `throw error`,
+rethrowing the **original, unmodified** `TransactionConflictError`. One
+correction to this ticket's own background: the terminal `throw new
+Error('Service Job transaction retries exhausted')` after the loop (line 148) is source-confirmed **unreachable** given this control flow — every
+loop iteration always either `return`s (success/idempotent replay) or
+`throw`s (a non-conflict error immediately, or the final attempt's
+`TransactionConflictError`) from inside the loop body itself, so the loop
+can never fall through to its own end. This diagnostic therefore targets
+the real exhaustion path (the final attempt's rethrown
+`TransactionConflictError`), not the dead "retries exhausted" `Error`
+literal the background section describes — the dead code itself was left
+completely untouched, since removing it is out of this ticket's
+diagnostics-only scope.
+
+**Terminal exhaustion diagnostic (Objective 2).** A new
+`logAllocatorTransactionRetriesExhausted()` in `allocatorDiagnostics.ts`
+logs the fixed literal `[ServiceJob Allocator] firestore-commit:
+transaction-retries-exhausted` — no error object, no interpolated content,
+so nothing to sanitize by construction. It is called from exactly one
+place: `allocateServiceJob()`'s catch block, only when a
+`TransactionConflictError` reaches the point the loop has already decided
+not to retry (i.e. `attempt + 1 >= MAX_TRANSACTION_RETRIES`). A retryable
+conflict (any attempt before the last) hits `continue` first and never
+reaches this call — normal retries stay completely silent, exactly one
+line is emitted for genuine exhaustion, and the existing generic
+client-facing 500 is unchanged.
+
+**Retry semantics preserved exactly (Objective 3).** Attempt count (5),
+`TransactionConflictError` `instanceof` behavior, idempotency (intake-key
+replay), the transaction boundary, the four-write atomic commit,
+occupied-ID collision handling, and sequence allocation are all completely
+unmodified — confirmed by `serviceJobCreation.test.mts`'s unchanged
+conflict/idempotency tests still passing. No new Firestore call and no
+diagnostic write were added; the new call is a single `console.error`.
+
+**Original/terminal error preserved (Objective 4).** The rethrown error at
+exhaustion is the same `TransactionConflictError` instance the last
+attempt threw — not wrapped, not replaced, not the dead "retries
+exhausted" `Error`. The diagnostic call sits immediately before the
+existing `throw error`, purely observing the transition; it does not
+create a different HTTP contract (the client still receives the existing
+generic `500` / `{"error":"Unable to create Service Job"}`).
+
+**Tests (Objective 5), new file
+`allocatorTransactionRetryExhaustion.test.mts` — 16/16.** Scenario A
+(single retried conflict then success): no `[ServiceJob Allocator]` line,
+normal success. Scenario B (`MAX_TRANSACTION_RETRIES - 1` conflicts, then
+success on the last allowed attempt): still no diagnostic line, normal
+success. Scenario C (every one of `MAX_TRANSACTION_RETRIES` attempts
+conflicts): exactly one diagnostic line, `firestore-commit:
+transaction-retries-exhausted`, the original `TransactionConflictError`
+rethrown unchanged, and zero partial writes (the fake store's
+`committed` flag never set). Scenario D: the logged line is the fixed
+literal alone — proven to contain none of a synthetic phone number,
+idempotency UUID, bearer-token-shaped string, or document path. A fifth
+end-to-end block reruns scenario C against the real
+`createFirestoreClient()` + `createWorkerHandler()` stack with only
+`fetch` stubbed, confirming exactly `MAX_TRANSACTION_RETRIES` `:commit`
+REST calls occur, the client response stays the existing generic 500, and
+the same one diagnostic line is emitted server-side. **Necessity proven
+directly**: temporarily reverting the new call site in
+`serviceJobCreation.ts` and rerunning reproduced 4 genuine failures (no
+diagnostic line / wrong content on scenarios C, D, and the E2E block);
+restoring the fix reconfirmed all 16 passing.
+
+**Regression (Objectives 5/9).** `serviceJobCreation.test.mts`'s existing
+conflict/idempotency tests unchanged and passing. All five prior
+allocator-diagnostics files re-run unmodified: `allocatorDiagnostics.test.mts`
+16/16, `allocatorStageAttribution.test.mts` 20/20,
+`allocatorFullBoundaryAttribution.test.mts` 46/46,
+`allocatorOccupiedIdParserAttribution.test.mts` 7/7,
+`allocatorOccupiedIdSkip.test.mts` 9/9 — zero regressions. Full Worker
+suite (19 files, `npm test` exits 0): **301 total `PASS` lines, 0 `FAIL`
+lines** (285 prior + 16 new), counted the same deterministic
+`grep -c '  PASS'`/`'  FAIL'` way. `worker: npx tsc --noEmit` produces the
+identical 6 pre-existing `ImportMeta.env` errors both before and after —
+zero new errors, including from the new `serviceJobCreation.ts` ↔
+`allocatorDiagnostics.ts` circular import (confirmed safe: neither module
+uses the other's binding at top-level module-evaluation time, only inside
+function bodies called later at runtime).
+
+**Log capture procedure — superseded by F5d-59B (Terra F5d-59A
+blocker).** The original procedure above (F5d-59) did not guarantee an
+explicit Worker name, an explicit deployed-version target, guaranteed
+directory creation, guaranteed stderr capture, a known retained file path
+before submit, or a documented way to verify retention was actually
+happening before the click. Terra blocked F5d-59 on this gap alone — the
+F5d-59 source remediation itself (retry-loop tracing, the terminal
+diagnostic, sanitization, tests) passed audit unchanged. See ### F5d-59B
+below for the corrected, verified procedure; do not use the version that
+was here.
+
+### F5d-59B — reliable Wrangler tail retention procedure (Terra F5d-59A blocker)
+
+**What was verified before documenting this, and how.** `npx wrangler
+tail --help` was run against the actually-installed CLI
+(`wrangler 4.120.0`, from `worker/package.json`'s devDependency) to
+confirm every flag below is real, not guessed: `[worker]` is a
+positional argument (not a flag), and `--version-id` is a supported
+option. `npx.cmd` (not the bare `npx` shim) was confirmed to resolve on
+this machine (`C:\Program Files\nodejs\npx.cmd`) — using the `.cmd`
+explicitly avoids PowerShell's separate `npx.ps1` execution-policy path.
+The chosen log directory, `C:\service\.runtime-logs`, does **not** need a
+`.gitignore` change: `git check-ignore -v` confirms its `*.log` files are
+already matched by the existing root `.gitignore`'s unqualified `*.log`
+rule (line 2) — verified directly with a throwaway probe file, which was
+then deleted; `.gitignore` itself was not touched. The live-view +
+retention mechanism (`2>&1 | Tee-Object -FilePath ...`) was validated
+with a safe, local, non-production PowerShell probe (a background job
+writing to stdout and stderr with delays between lines, never touching
+the Worker or Firestore) — confirmed the target file already contained
+line 1 while the job's `State` was still `Running` (proving Tee-Object
+writes incrementally, not just at process exit), and confirmed the final
+file contained every stdout and stderr line after completion. No
+`wrangler tail` connection was opened against the real Worker and no
+Service Job was created by this verification.
+
+**Approved diagnostics Worker/version to target.** Worker
+`service-tech-files-worker`, version-id
+`a3261063-2b5c-48e8-8b69-2f3e252ae265` — the future reproduction must
+target this exact version unless a later approved deployment changes it.
+
+**The procedure, run from `C:\service` in PowerShell:**
+
+```powershell
+# 1. Local, already-gitignored runtime-log directory (created fresh each
+#    time; safe to re-run). Outside worker/src and worker/test — never a
+#    tracked source location.
+$logDir = "C:\service\.runtime-logs"
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+
+# 2. The exact retained file path is known BEFORE the tail is started,
+#    and therefore before the Gate 7.1 submit.
+$stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$tailLog = Join-Path $logDir "gate71-worker-tail-$stamp.log"
+Write-Output "Tail log will be retained at: $tailLog"
+
+# 3. Start tail BEFORE the browser submit, in its own dedicated terminal
+#    window (this command blocks that window for the duration of the
+#    session). Explicit Worker name + explicit --version-id pin this to
+#    the approved diagnostics deployment, never "whatever is live now."
+#    2>&1 merges Wrangler's own stderr (connection errors, auth failures)
+#    into the same stream Tee-Object captures; Tee-Object writes both to
+#    the console (live view) and to $tailLog (retained) as each line
+#    arrives, not only when the process exits.
+npx.cmd wrangler tail service-tech-files-worker `
+  --format pretty `
+  --version-id a3261063-2b5c-48e8-8b69-2f3e252ae265 `
+  2>&1 | Tee-Object -FilePath $tailLog
+```
+
+**Pre-submit retention check — superseded by F5d-59D (Terra F5d-59C
+finding).** The check above assumed Terminal 2 could simply reuse
+`$tailLog` — but `$tailLog` is a PowerShell _variable_, scoped to
+Terminal 1's own session. Terminal 1 is occupied for the whole tail
+duration by the long-running `wrangler tail | Tee-Object` pipeline, so a
+genuinely separate Terminal 2 (a different PowerShell process, as any
+real second terminal window is) never inherits `$tailLog` and cannot run
+`Test-Path $tailLog` against the intended file — it would either error on
+an undefined variable or silently check the wrong thing. Terra caught
+this before it could cause a false "capture confirmed" read on the live
+operator machine. See ### F5d-59D below for the corrected, persisted-
+pointer-based procedure; do not rely on a bare `$tailLog` variable across
+terminals.
+
+This procedure captures only `console.log`/`console.error` output and
+request metadata (method/URL/status/outcome) that `wrangler tail` reports
+by default — it never logs Authorization headers, ID tokens,
+service-account keys, or request/response bodies, because no code path in
+this Worker logs those today (see the sanitization guarantees documented
+throughout F5d-56/56B/56D). No production reproduction, `wrangler tail`
+connection to the real Worker, or Service Job creation was performed by
+F5d-59, F5d-59B, or F5d-59D — only local, non-production mechanics were
+ever verified.
+
+### F5d-59D — cross-terminal tail path remediation (Terra F5d-59C finding)
+
+**The defect.** F5d-59B's Terminal 1 created `$tailLog` and immediately
+occupied that terminal with the long-running tail pipeline. Its
+documented Terminal 2 checks (`Test-Path $tailLog`, `Get-Item $tailLog`,
+`Get-Content $tailLog -Tail 5`) assumed `$tailLog` would be available
+there too — it is not, since PowerShell variables are per-session.
+Terra's F5d-59C finding blocked the procedure on exactly this gap; no
+Worker source concern was involved.
+
+**Fix: a persisted pointer file.** Terminal 1 now also writes the
+resolved log path, as plain text, to a second well-known file —
+`gate71-active-tail-path.log` — in the same already-ignored
+`C:\service\.runtime-logs` directory. Terminal 2 reads that fixed,
+well-known pointer path (never a variable) to resolve the real log path,
+with no dependency on Terminal 1's session state.
+
+**Terminal 1 (start tail, before the browser submit) — superseded by
+F5d-59F (Terra F5d-59E finding).** The `npx.cmd wrangler` invocation below
+relies on ambient `npx` resolution, which Terra found unreliable from
+`C:\service` (no `node_modules\.bin\wrangler.cmd` at the repo root, no
+npm workspace config resolving the Worker package). See ### F5d-59F below
+for the corrected procedure, which pins the exact reviewed
+`worker\node_modules\.bin\wrangler.cmd` binary; do not use the
+`npx.cmd`-based command shown here.
+
+```powershell
+$logDir = "C:\service\.runtime-logs"
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+
+$stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$tailLog = Join-Path $logDir "gate71-worker-tail-$stamp.log"
+$tailPointer = Join-Path $logDir "gate71-active-tail-path.log"
+
+# Persist the resolved path to disk — Terminal 2 reads this file, never
+# a PowerShell variable, so it has no dependency on Terminal 1's session.
+Set-Content -Path $tailPointer -Value $tailLog -Encoding utf8
+
+Write-Host "Tail log:"
+Write-Host $tailLog
+Write-Host "Tail pointer:"
+Write-Host $tailPointer
+
+# Explicit Worker name + explicit --version-id pin this to the approved
+# diagnostics deployment. 2>&1 merges Wrangler's stderr into the same
+# stream Tee-Object captures; Tee-Object writes both to the console
+# (live view) and to $tailLog (retained) as each line arrives.
+npx.cmd wrangler tail service-tech-files-worker `
+  --format pretty `
+  --version-id a3261063-2b5c-48e8-8b69-2f3e252ae265 `
+  2>&1 | Tee-Object -FilePath $tailLog
+```
+
+**Terminal 2 (a genuinely separate PowerShell process/window — run before
+clicking anything in the browser), including fail-closed path-safety
+validation (Objective 5):**
+
+```powershell
+$logDir = "C:\service\.runtime-logs"
+$tailPointer = Join-Path $logDir "gate71-active-tail-path.log"
+
+if (-not (Test-Path $tailPointer)) {
+    throw "Gate 7.1 tail pointer not found. DO NOT SUBMIT."
+}
+$tailLog = (Get-Content -Path $tailPointer -Raw).Trim()
+
+# Fail closed rather than trust the pointer's content blindly: the
+# resolved path must sit directly inside the expected runtime-log
+# directory and match the exact filename pattern Terminal 1 produces —
+# never execute/read an arbitrary path from the pointer file.
+$resolvedParent = Split-Path -Parent $tailLog
+$resolvedName = Split-Path -Leaf $tailLog
+if ($resolvedParent -ne $logDir) {
+    throw "Resolved tail log directory ($resolvedParent) does not match expected $logDir. DO NOT SUBMIT."
+}
+if ($resolvedName -notmatch '^gate71-worker-tail-\d{8}-\d{6}\.log$') {
+    throw "Resolved tail log filename ($resolvedName) does not match the expected pattern. DO NOT SUBMIT."
+}
+
+Write-Host "Resolved tail log (validated):"
+Write-Host $tailLog
+
+Test-Path $tailLog
+Get-Item $tailLog
+Get-Content $tailLog -Tail 5
+```
+
+`Test-Path $tailLog` must return `True`, and `Get-Content $tailLog -Tail
+5` must show Wrangler's connection/subscription output actually received
+by the active tail — before Save & Print is allowed. **Do not submit** if
+the pointer is missing, the resolved path fails validation, the tail log
+is missing, the tail file is not receiving Wrangler output, a Wrangler
+startup warning/error creates any uncertainty (a non-fatal debug-log
+warning seen in a sandboxed test run must **not** be assumed harmless on
+the live operator machine — treat any live startup ambiguity as
+no-submit), the Worker/version target doesn't match, the tail process has
+exited, or capture status is otherwise unclear.
+
+**Two-session local test — actually run, not assumed.** Validated with
+two genuinely separate `powershell.exe` OS processes (not PowerShell jobs
+or scriptblocks sharing a session) and a safe, non-production,
+non-Wrangler command — no Worker invocation, no Firestore/R2 access.
+Session A (a real detached child process) wrote the pointer file, then
+produced output incrementally over ~10 seconds via
+`2>&1 | Tee-Object -FilePath`. Session B — a freshly started, completely
+independent `powershell.exe` process with zero access to any of Session
+A's variables — was launched partway through Session A's run, and:
+resolved `$tailLog` purely from the fixed pointer path, passed the
+path-safety validation above, `Test-Path $tailLog` returned `True`, and
+`Get-Content $tailLog -Tail 5` showed the partial output written so far
+(only the first line — proving it read genuinely live, in-progress data,
+not a finished file). `Get-Process -Id <Session A's PID>` was checked
+independently at that exact moment and confirmed Session A was still
+running. All probe files (`gate71-worker-tail-*.log`,
+`gate71-active-tail-path.log`, and the two throwaway driver `.ps1`
+scripts) were deleted immediately afterward; `C:\service\.runtime-logs`
+was confirmed empty. No `.gitignore` change was needed — both the tail
+log and the pointer file end in `.log`, already covered by the existing
+root `.gitignore`'s unqualified `*.log` rule.
+
+**Stop/retention policy, unchanged from F5d-59B.** Terminal 1: `Ctrl+C`
+only after enough post-submit output has arrived. Terminal 2: verify the
+retained file still exists afterward. Neither the tail log nor the
+pointer file is ever deleted automatically — both are kept until incident
+analysis is complete. After exactly one future Gate 7.1 attempt
+(success, another 500, timeout, or browser crash alike): never retry;
+read the retained tail and independently verify production state first.
+
+**Post-submit safe extraction, from Terminal 2's resolved `$tailLog`:**
+
+```powershell
+Select-String -Path $tailLog -Pattern '\[ServiceJob Allocator\]'
+```
+
+The full raw tail file is never pasted or shared — only these sanitized
+allocator lines are reported.
+
+### F5d-59F — deterministic Worker-local Wrangler invocation (Terra F5d-59E finding)
+
+**The defect.** F5d-59D's Terminal 1 (like F5d-59B before it) invoked
+`npx.cmd wrangler tail ...` from `C:\service`. `npx` resolves a package by
+walking up from the current directory looking for
+`node_modules\.bin\wrangler.cmd` (or falling back to a temporary
+download) — but `C:\service` has no such `node_modules\.bin` entry and no
+npm workspace configuration linking it to `worker/`'s own
+`node_modules`. The reviewed, version-pinned Wrangler install actually
+lives at `C:\service\worker\node_modules\.bin\wrangler.cmd`
+(`wrangler@4.120.0`, from `worker/package.json`'s devDependency). An
+ambient `npx` resolution could silently fall back to a different
+installed/cached/downloaded Wrangler version, which was never the
+reviewed binary this procedure's flag verification (F5d-59B) was actually
+checked against. Terra's F5d-59E finding caught this before any live
+reproduction relied on it; no Worker source concern was involved.
+
+**Fix: pin the exact reviewed binary, verified before every use.** Both
+terminals now reference `$wrangler =
+"C:\service\worker\node_modules\.bin\wrangler.cmd"` as an absolute path —
+never `npx`, never a bare `wrangler` relying on `PATH`, never a
+global/cached/downloaded fallback. Terminal 1 fails closed if the binary
+is missing, and explicitly checks its reported version before starting
+any tail.
+
+**Verified locally before documenting this (not assumed).** Via
+PowerShell, from `C:\service` (the documented working directory):
+`Test-Path "C:\service\worker\node_modules\.bin\wrangler.cmd"` →
+`True`; `& $wrangler --version` → exactly `4.120.0`; `& $wrangler tail
+--help`, invoked through this exact binary, confirmed it accepts the
+positional `[worker]` name plus `--format` and `--version-id` — the same
+three things the documented tail command uses. No production tail
+connection was opened and no Worker route was invoked to verify any of
+this.
+
+**Terminal 1 version check — superseded by F5d-59H (Terra F5d-59G
+finding).** The check below merges stdout and stderr with `2>&1` before
+matching, then only checks that the combined text _contains_ `4.120.0`
+via `-notmatch`. That is not fail-closed: the real Wrangler process can
+exit `0`, print the approved version, and _also_ emit unrelated
+diagnostic/warning text on stderr (an update notice, a deprecation
+warning, anything) — the regex still matches, and the check still
+passes, even though the invocation was not actually clean. See
+
+### F5d-59H below for the corrected strict preflight; do not use the
+
+`2>&1`/`-notmatch` version shown here for the version check (the tail
+command itself further below is unaffected and unchanged — see F5d-59H's
+own note on that).
+
+```powershell
+$wrangler = "C:\service\worker\node_modules\.bin\wrangler.cmd"
+
+if (-not (Test-Path $wrangler)) {
+    throw "Reviewed Worker-local Wrangler not found. DO NOT SUBMIT."
+}
+
+# Superseded — see F5d-59H.
+$wranglerVersionOutput = (& $wrangler --version 2>&1 | Out-String).Trim()
+if ($wranglerVersionOutput -notmatch '4\.120\.0') {
+    throw "Wrangler version mismatch (got '$wranglerVersionOutput', expected 4.120.0). DO NOT SUBMIT."
+}
+Write-Host "Wrangler version confirmed: $wranglerVersionOutput"
+
+$logDir = "C:\service\.runtime-logs"
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+
+$stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$tailLog = Join-Path $logDir "gate71-worker-tail-$stamp.log"
+$tailPointer = Join-Path $logDir "gate71-active-tail-path.log"
+
+Set-Content -Path $tailPointer -Value $tailLog -Encoding utf8
+
+Write-Host "Tail log:"
+Write-Host $tailLog
+Write-Host "Tail pointer:"
+Write-Host $tailPointer
+
+& $wrangler tail service-tech-files-worker `
+  --format pretty `
+  --version-id a3261063-2b5c-48e8-8b69-2f3e252ae265 `
+  2>&1 | Tee-Object -FilePath $tailLog
+```
+
+**Terminal 2 — unchanged from F5d-59D.** The cross-terminal pointer
+mechanism, path-safety validation (expected directory + filename
+pattern), `Test-Path`/`Get-Item`/`Get-Content -Tail 5` checks, and the
+fail-closed no-submit conditions are all identical to ### F5d-59D above —
+Terminal 2 never invokes Wrangler itself, so it has no dependency on
+which binary Terminal 1 used. The absolute `C:\service\.runtime-logs` log
+location is unchanged and remains independent of either terminal's
+current working directory.
+
+**Fail-closed policy, extended.** In addition to every F5d-59D no-submit
+condition, also **do not submit** if: the exact
+`worker\node_modules\.bin\wrangler.cmd` path is missing; its reported
+version is anything other than `4.120.0`; `tail --help` through that
+exact binary is missing the expected `[worker]`/`--format`/`--version-id`
+support; or the tail startup produces any error. Do not install, update,
+or otherwise modify Wrangler tooling during the reproduction gate to make
+a check pass.
+
+### F5d-59H — strict Wrangler version preflight (Terra F5d-59G finding)
+
+**The defect.** F5d-59F's version check ran `& $wrangler --version 2>&1
+| Out-String`, merging stdout and stderr into one string before matching
+it with `-notmatch '4\.120\.0'` — a substring search, not an exact
+comparison. A real Wrangler invocation can exit `0`, print the approved
+version on stdout, and _also_ write unrelated diagnostic or warning text
+to stderr (an update notice, a deprecation warning, anything Wrangler or
+Node itself decides to emit); merging the streams and substring-matching
+means that contaminated invocation still passes. Terra's F5d-59G finding
+demanded the streams be evaluated independently and exactly, not
+combined and searched. No Worker source concern was involved.
+
+**Fix: independently evaluate exit code, exact stdout, and empty
+stderr — all three must pass.** Stdout and stderr are captured
+separately (stderr redirected to its own file under
+`C:\service\.runtime-logs`, never merged with `2>&1`, for this check
+only). The preflight passes only when: the exit code is `0`; stdout,
+trimmed, is an exact (case-sensitive, whole-string) match for the
+reviewed clean output — not a substring/regex search; and stderr,
+trimmed, is empty. Any one of those three failing is a hard "DO NOT
+SUBMIT," including a `0` exit code with a clean version string
+accompanied by any stderr text at all — the exact case Terra found F5d-59F
+would have silently accepted.
+
+**Exact reviewed clean output, determined locally (not assumed).**
+Invoking `C:\service\worker\node_modules\.bin\wrangler.cmd --version`
+from `C:\service` with stdout and stderr genuinely separated: exit code
+`0`; stdout is a single line, trimmed value exactly `4.120.0` (no
+`wrangler` prefix, no extra text); stderr file created empty (0 bytes).
+This exact clean profile is what the preflight below requires bit for
+bit.
+
+**Terminal 1 version preflight — corrected, replaces the F5d-59F block
+above:**
+
+```powershell
+$wrangler = "C:\service\worker\node_modules\.bin\wrangler.cmd"
+
+if (-not (Test-Path $wrangler)) {
+    throw "Reviewed Worker-local Wrangler not found. DO NOT SUBMIT."
+}
+
+$logDir = "C:\service\.runtime-logs"
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+
+# Stdout and stderr for THIS check only are captured separately — never
+# 2>&1 — so a clean version string cannot mask unrelated stderr text.
+$versionErrFile = Join-Path $logDir "wrangler-version-check.stderr.log"
+
+$versionStdoutLines = @( & $wrangler --version 2> $versionErrFile )
+$versionExitCode = $LASTEXITCODE
+$versionStdout = ($versionStdoutLines -join "`n").Trim()
+$versionStderr = if (Test-Path $versionErrFile) {
+    (Get-Content -Path $versionErrFile -Raw -ErrorAction SilentlyContinue)
+} else { $null }
+if ($null -eq $versionStderr) { $versionStderr = "" }
+
+# Exact (case-sensitive) whole-string comparison against the reviewed
+# clean output — never a substring/regex search. All three conditions
+# must hold; any failure is a hard stop.
+$expectedVersionStdout = "4.120.0"
+if ($versionExitCode -ne 0) {
+    throw "Wrangler version check exited $versionExitCode (expected 0). DO NOT SUBMIT."
+}
+if ($versionStdout -cne $expectedVersionStdout) {
+    throw "Wrangler stdout was '$versionStdout', not an exact match for '$expectedVersionStdout'. DO NOT SUBMIT."
+}
+if ($versionStderr.Trim().Length -ne 0) {
+    throw "Wrangler version check produced stderr output — even alongside a correct version string, this is not a clean invocation. DO NOT SUBMIT. (See $versionErrFile for local diagnosis; do not paste it into chat.)"
+}
+
+Write-Host "Wrangler version preflight passed: exact clean '$versionStdout', no stderr."
+Remove-Item -Path $versionErrFile -Force -ErrorAction SilentlyContinue
+
+# ... proceed with $logDir/$tailLog/$tailPointer setup and the tail
+# command exactly as shown in the F5d-59F block above — unchanged.
+```
+
+**The long-running tail itself is intentionally unchanged.** `2>&1 |
+Tee-Object -FilePath $tailLog` is still correct and required for the
+actual tail capture — both streams must be retained together there for
+incident evidence. The strict stdout/stderr separation above applies
+**only** to this one-shot version preflight, never to the tail command.
+
+**Version-error file handling.** `wrangler-version-check.stderr.log`
+lives under `C:\service\.runtime-logs`, already covered by the existing
+root `.gitignore`'s unqualified `*.log` rule — no `.gitignore` change.
+Removed automatically on a clean pass; left in place for local operator
+diagnosis on failure. Never pasted into chat automatically — only
+sanitized allocator lines are ever meant to be reported, per the existing
+Objective 6/7 extraction policy.
+
+**Success condition, explicit.** The preflight passes only if: the exact
+reviewed binary exists; its exit code is `0`; its stdout, trimmed,
+exactly equals `4.120.0`; its stderr, trimmed, is empty; and no other
+invocation ambiguity exists. Otherwise: do not start Wrangler tail, do
+not submit Gate 7.1. Do not install, update, or reconfigure Wrangler
+during the gate to force a pass.
+
+**Test matrix — actually run against fake local binaries, not
+assumed.** Five throwaway `.cmd` files (outside the repository, in the
+session scratchpad — never committed) simulated each case, invoked
+through the exact same separated-stream capture logic as the real check:
+
+| Scenario                                    | exit | stdout                          | stderr    | Verdict                 |
+| ------------------------------------------- | ---- | ------------------------------- | --------- | ----------------------- |
+| A: clean                                    | 0    | `4.120.0`                       | empty     | **PASS**                |
+| B: nonzero exit                             | 1    | `4.120.0`                       | empty     | FAIL (exit code)        |
+| C: contaminated stderr (Terra's exact case) | 0    | `4.120.0`                       | non-empty | FAIL (stderr not empty) |
+| D: wrong version                            | 0    | `4.119.0`                       | empty     | FAIL (stdout mismatch)  |
+| E: extra stdout lines                       | 0    | `wrangler 4.120.0` + extra line | empty     | FAIL (stdout mismatch)  |
+
+All five matched their expected verdict, and the real reviewed binary
+(`C:\service\worker\node_modules\.bin\wrangler.cmd`) independently passed
+the same logic (exit `0`, stdout exactly `4.120.0`, empty stderr).
+Scenario C is exactly the case F5d-59F's `2>&1`/`-notmatch` check would
+have silently accepted — it now correctly fails. All fake binaries and
+the test-generated stderr file were deleted immediately afterward; no
+Wrangler tail connection to the real Worker was opened, and no Worker
+route was invoked.
+
+**Underlying defect status: still UNKNOWN.** F5d-59, like F5d-56/56B/56D
+before it, fixes nothing about the live Worker 500 itself — it closes one
+more diagnostic blind spot (genuine transaction-retry exhaustion). Its
+source remediation passed Terra audit and was never touched again by
+F5d-59B/C/D. F5d-59A was blocked solely on the tail-retention procedure
+being unreliable. F5d-59B corrected explicit Worker/version targeting,
+guaranteed directory creation, and guaranteed stderr capture, but its
+Terminal 2 checks depended on a `$tailLog` PowerShell variable that a
+genuinely separate terminal never inherits — Terra's F5d-59C finding
+caught this before it could produce a false "capture confirmed" read on
+the live machine. F5d-59D replaces the variable dependency with a
+persisted pointer file (`gate71-active-tail-path.log`), validated
+fail-closed against the expected directory/filename pattern, and proved
+working end to end with a genuine two-process local test. F5d-59E then
+found that both terminals' `npx.cmd wrangler` invocation depended on
+ambient `npx` resolution, which has no valid target from `C:\service`
+(no root-level `node_modules\.bin\wrangler.cmd`, no workspace config) —
+an unverified fallback could silently run a different Wrangler build
+than the one this procedure's flags were ever checked against. F5d-59F
+pins both terminals to the exact reviewed
+`worker\node_modules\.bin\wrangler.cmd` (`4.120.0`), verified present and
+version-matched immediately before every tail start, with no
+global/cached/downloaded fallback permitted. F5d-59G then found F5d-59F's
+version check itself was not genuinely fail-closed — it merged stdout and
+stderr with `2>&1` and only substring-matched the result, so a `0` exit
+with the correct version string _and_ unrelated stderr text would have
+silently passed. F5d-59H separates stdout and stderr, requires exit code
+`0`, an exact (not substring) stdout match, and empty stderr — all
+three, or no submit — verified against a five-scenario local test matrix
+including the exact contaminated-stderr case Terra identified. The next
+controlled, separately-approved reproduction — this time with tail output
+reliably retained, independently verifiable from a second terminal,
+started through a deterministically-pinned Wrangler binary, and gated by
+a genuinely strict version preflight per F5d-59D/F/H — has the best
+chance yet of pinpointing the real cause. Diagnostics remain
+**undeployed**.
+
+Gate 7.1 remains **PAUSED**. Production durable writes = ZERO. No
+production deployment, mutation, or Rules/Worker/IAM/Auth change
+occurred.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Each new repository's backend swap (Customer, Service Job, Search, Registered Products) gets the same doc-plus-approval treatment Product Master got, not a silent bulk migration.

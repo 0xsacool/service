@@ -2,6 +2,7 @@ import type { ServiceJobIntakePayload } from '../../src/services/serviceJobCreat
 import { bangkokIsoDate, bangkokNumberingYear } from '../../src/services/bangkokTime.ts';
 import type { ServiceJob } from '../../src/types/serviceJob.ts';
 import type { BrandId } from './brands.ts';
+import { logAllocatorTransactionRetriesExhausted } from './allocatorDiagnostics.ts';
 
 // F5d-33/F5d-34 B-8: intake photos are stored as base64 data URLs directly
 // on the ServiceJob document — there is no separate attachment/R2 path for
@@ -141,6 +142,18 @@ export async function allocateServiceJob(input: { brandId: BrandId; key: string;
       return job;
     } catch (error) {
       if (error instanceof TransactionConflictError && attempt + 1 < MAX_TRANSACTION_RETRIES) continue;
+      // F5d-59: reached only when every allowed retry attempt has been
+      // exhausted with a TransactionConflictError still occurring on the
+      // last one (the loop's own condition above already ruled out "will
+      // retry"). logAllocatorStageFailure()'s unconditional
+      // TransactionConflictError skip (see allocatorDiagnostics.ts) means
+      // this exact case would otherwise stay completely unattributed, no
+      // matter how deeply firestore-commit's own wrap sees it — this is the
+      // one call site that actually knows "this was the last attempt."
+      // Fires at most once per allocateServiceJob() call, only here, never
+      // on a retryable attempt. The original error is rethrown completely
+      // unchanged immediately after.
+      if (error instanceof TransactionConflictError) logAllocatorTransactionRetriesExhausted();
       throw error;
     }
   }

@@ -274,6 +274,22 @@ export function logAllocatorStageFailure(stage: AllocatorStage, error: unknown):
   console.error(diagnostic.message);
 }
 
+// F5d-59: allocateServiceJob()'s retry loop (serviceJobCreation.ts) rethrows
+// the final attempt's TransactionConflictError exactly the same way it
+// rethrows a retryable one — so logAllocatorStageFailure()'s deliberate
+// TransactionConflictError skip (above) silences the truly-exhausted case
+// too, and it escapes to the client as an unattributed generic 500. Only
+// allocateServiceJob() itself knows the attempt count, so this function is
+// called from there — exactly once, only at the exact point it decides NOT
+// to retry a TransactionConflictError (i.e. genuine exhaustion, never a
+// retryable attempt). The message is a fixed literal with no error object
+// and no interpolated content, so there is nothing to sanitize by
+// construction — no document path, token, request body, PII, or intake
+// UUID can ever reach it.
+export function logAllocatorTransactionRetriesExhausted(): void {
+  console.error('[ServiceJob Allocator] firestore-commit: transaction-retries-exhausted');
+}
+
 // F5d-56B (Terra F5d-56A blocker, Objective 1): the smallest helper that
 // covers the FULL non-OAuth operation boundary — network transport,
 // HTTP-status handling, response/body parsing, and any local
