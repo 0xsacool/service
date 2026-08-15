@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useOutletContext } from 'react-router-dom';
+import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { Plus, Upload, Download, FileDown, ChevronRight } from 'lucide-react';
 import type { ProductMasterEntry, ProductStatus } from '../../../../types';
 import { useProductMaster } from '../../../../hooks/useProductMaster';
@@ -36,6 +36,19 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'model', label: 'รุ่น' },
   { value: 'warrantyMonths', label: 'เดือนประกัน' },
 ];
+
+export function ProductMasterDetailLink({ id, model }: { id: string; model: string }) {
+  return (
+    <Link
+      to={ROUTES.masterDataProductDetail(id)}
+      onClick={(event) => event.stopPropagation()}
+      className="rounded text-ink underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
+      aria-label={`เปิดรายละเอียดสินค้ารุ่น ${model}`}
+    >
+      {model}
+    </Link>
+  );
+}
 
 export function ProductsPage() {
   const navigate = useNavigate();
@@ -159,6 +172,7 @@ export function ProductsPage() {
           <button
             key={f}
             onClick={() => setStatusFilter(f)}
+            aria-pressed={statusFilter === f}
             className={`rounded-full px-4 py-2 text-sm font-medium transition-all ${
               statusFilter === f
                 ? 'bg-brand-500 text-white shadow-sm'
@@ -172,6 +186,7 @@ export function ProductsPage() {
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
+          aria-label="กรองตามหมวดหมู่สินค้า"
           className="rounded-full bg-white/70 px-4 py-2 text-sm font-medium text-neutral-600 ring-1 ring-black/5 backdrop-blur hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-400"
         >
           <option value="All">ทุกหมวดหมู่</option>
@@ -183,8 +198,11 @@ export function ProductsPage() {
         </select>
 
         <div className="relative ml-auto flex items-center gap-2">
-          <span className="text-sm text-neutral-400">เรียงลำดับ</span>
+          <label htmlFor="product-sort-order" className="text-sm text-neutral-400">
+            เรียงลำดับ
+          </label>
           <select
+            id="product-sort-order"
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as SortKey)}
             className="rounded-full bg-white/70 px-4 py-2 text-sm font-medium text-neutral-600 ring-1 ring-black/5 backdrop-blur hover:bg-white focus:outline-none focus:ring-2 focus:ring-brand-400"
@@ -223,7 +241,9 @@ export function ProductsPage() {
                 <td className="px-5 py-4 text-xs font-medium uppercase tracking-wide text-neutral-400">
                   {p.brand}
                 </td>
-                <td className="px-5 py-4 font-medium text-ink">{p.model}</td>
+                <td className="px-5 py-4 font-medium">
+                  <ProductMasterDetailLink id={p.id} model={p.model} />
+                </td>
                 <td className="px-5 py-4 text-neutral-600">{p.sku ?? '—'}</td>
                 <td className="px-5 py-4 text-neutral-600">{p.name}</td>
                 <td className="px-5 py-4 text-neutral-600">

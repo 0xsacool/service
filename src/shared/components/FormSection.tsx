@@ -9,11 +9,13 @@ export function FormSection({
   title,
   subtitle,
   children,
+  headingId,
 }: {
   icon: ComponentType<{ className?: string; strokeWidth?: number }>;
   title: string;
   subtitle: string;
   children: ReactNode;
+  headingId?: string;
 }) {
   return (
     <GlassCard className="p-6 animate-[rise_0.5s_cubic-bezier(0.22,1,0.36,1)_both]">
@@ -22,7 +24,9 @@ export function FormSection({
           <Icon className="h-5 w-5" strokeWidth={2} />
         </div>
         <div>
-          <h2 className="font-semibold tracking-tight text-ink">{title}</h2>
+          <h2 id={headingId} className="font-semibold tracking-tight text-ink">
+            {title}
+          </h2>
           <p className="text-sm text-neutral-500">{subtitle}</p>
         </div>
       </div>

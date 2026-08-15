@@ -106,7 +106,7 @@ export function PhotoEvidenceSection({
         </button>
       ) : (
         <div className="flex flex-wrap gap-3">
-          {photos.map((photo) => (
+          {photos.map((photo, index) => (
             <div
               key={photo.id}
               className="relative h-24 w-24 overflow-hidden rounded-2xl ring-1 ring-black/10"
@@ -119,6 +119,7 @@ export function PhotoEvidenceSection({
               <button
                 type="button"
                 onClick={() => removePhoto(photo.id)}
+                aria-label={`ลบรูป ${photo.fileName} รูปที่ ${index + 1}`}
                 className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur"
               >
                 <X className="h-3.5 w-3.5" />

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -37,6 +37,7 @@ import {
   ProgressBar,
   EmptyState,
   PageContainer,
+  AsyncErrorAlert,
 } from '../../../shared/components';
 import { DeliveryNotePrintPreview, ServiceReportsSection } from '../components';
 import {
@@ -53,6 +54,7 @@ import {
   buildCustomerNotificationMessage,
   shareCustomerNotification,
 } from '../../../services/customerNotificationShare';
+import { serviceJobUpdateErrorMessage } from '../serviceJobErrorMessages';
 
 export function ServiceJobDetails() {
   const navigate = useNavigate();
@@ -114,6 +116,14 @@ function ServiceJobDetailsView({
     tone: 'success' | 'error';
     message: string;
   } | null>(null);
+  const deliveryNoteTriggerRef = useRef<HTMLButtonElement>(null);
+  const shouldRestoreDeliveryNoteFocus = useRef(false);
+
+  useEffect(() => {
+    if (showDeliveryNotePreview || !shouldRestoreDeliveryNoteFocus.current) return;
+    shouldRestoreDeliveryNoteFocus.current = false;
+    deliveryNoteTriggerRef.current?.focus();
+  }, [showDeliveryNotePreview]);
 
   const saveChanges = async () => {
     if (isSaving) return;
@@ -127,9 +137,7 @@ function ServiceJobDetailsView({
       });
       onDone();
     } catch (error) {
-      setSaveError(
-        error instanceof Error ? error.message : 'ไม่สามารถบันทึกงานบริการได้'
-      );
+      setSaveError(serviceJobUpdateErrorMessage(error));
     } finally {
       setIsSaving(false);
     }
@@ -171,7 +179,10 @@ function ServiceJobDetailsView({
     return (
       <DeliveryNotePrintPreview
         job={claim}
-        onClose={() => setShowDeliveryNotePreview(false)}
+        onClose={() => {
+          shouldRestoreDeliveryNoteFocus.current = true;
+          setShowDeliveryNotePreview(false);
+        }}
       />
     );
   }
@@ -205,6 +216,7 @@ function ServiceJobDetailsView({
         </div>
         <div className="flex flex-wrap gap-2">
           <SecondaryButton
+            ref={deliveryNoteTriggerRef}
             onClick={() => setShowDeliveryNotePreview(true)}
             className="px-4 py-2.5 text-sm"
           >
@@ -251,21 +263,32 @@ function ServiceJobDetailsView({
               </h2>
               <StatusBadge status={status} size="sm" />
             </div>
-            <div className="flex flex-wrap gap-2">
-              {SERVICE_JOB_STATUSES.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setStatus(s)}
-                  className={`rounded-full px-4 py-2 text-sm font-medium transition-all ${
-                    status === s
-                      ? 'bg-brand-500 text-white shadow-sm'
-                      : 'bg-white/70 text-neutral-600 ring-1 ring-black/5 hover:bg-white'
-                  }`}
-                >
-                  {statusLabel(s)}
-                </button>
-              ))}
-            </div>
+            <fieldset>
+              <legend className="sr-only">เลือกสถานะงานบริการ</legend>
+              <div className="flex flex-wrap gap-2">
+                {SERVICE_JOB_STATUSES.map((s) => (
+                  <label key={s} className="cursor-pointer">
+                    <input
+                      type="radio"
+                      name="service-job-status"
+                      value={s}
+                      checked={status === s}
+                      onChange={() => setStatus(s)}
+                      className="peer sr-only"
+                    />
+                    <span
+                      className={`block rounded-full px-4 py-2 text-sm font-medium transition-all peer-focus-visible:ring-2 peer-focus-visible:ring-brand-400 peer-focus-visible:ring-offset-2 ${
+                        status === s
+                          ? 'bg-brand-500 text-white shadow-sm'
+                          : 'bg-white/70 text-neutral-600 ring-1 ring-black/5 hover:bg-white'
+                      }`}
+                    >
+                      {statusLabel(s)}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
           </GlassCard>
 
           {/* Timeline */}
@@ -299,7 +322,11 @@ function ServiceJobDetailsView({
               )}
             </div>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <label htmlFor="service-job-team-note" className="sr-only">
+                เพิ่มหมายเหตุสำหรับทีม
+              </label>
               <input
+                id="service-job-team-note"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addNote()}
@@ -416,7 +443,7 @@ function ServiceJobDetailsView({
           {isSaving ? 'กำลังบันทึก…' : 'บันทึกการเปลี่ยนแปลง'}
         </PrimaryButton>
       </div>
-      {saveError ? <p className="pb-4 text-sm text-red-600">{saveError}</p> : null}
+      <AsyncErrorAlert message={saveError} className="pb-4" />
     </PageContainer>
   );
 }

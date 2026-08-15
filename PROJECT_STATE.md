@@ -178,12 +178,20 @@ Grouped by what shipped, not by exact sprint label (many sprints predate a forma
   `product_instances` were never migrated — DECISIONS.md #038) and return no
   match rather than fabricated data.
 - **Orphaned dependency** — `@supabase/supabase-js` remains in `package.json` from the original prototype but is called nowhere; the actual backend direction taken (F0–F2.1) is Firebase/Firestore, not Supabase. This divergence from the original [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) target (which is Postgres/Supabase-flavored) has not been formally reconciled — see that document's new "Implementation Status" section and this sprint's Remaining Gaps.
-- **`StaffShell.tsx` appears superseded by `StaffLayout.tsx`** — `App.tsx`'s router uses `StaffLayout` exclusively; `StaffShell` still exists in `src/shared/layouts/` but nothing imports it. Worth a cleanup pass, not urgent.
-- **Localization/accessibility are incomplete** — the live staff UI includes
-  the existing Thai-first layer, but broader content translation and the
-  dedicated accessibility pass remain open.
+- **Staff layout composition** — `StaffLayout.tsx` owns outlet state and renders
+  `StaffShell.tsx`; the shell is the active navigation, landmark, search, and
+  responsive-drawer implementation.
+- **Localization/accessibility remain incomplete in production** — F5d-64's
+  approved P0/P1 keyboard and screen-reader hardening is prepared as a
+  source-only patch, while production remains on F5d-63. Broader content
+  translation and the explicitly deferred P2/P3 accessibility work remain
+  open.
 - **No brand identity** — visuals remain generic/placeholder, not Bruno Thailand or Join Lux Club branding ([DECISIONS.md](DECISIONS.md) #008 — still open).
-- **No accessibility pass** — icon-only buttons, chip/toggle groups, and the mobile drawer have not had a dedicated ARIA/focus-management pass.
+- **Accessibility follow-up remains** — the F5d-64 source patch addresses the
+  audited P0/P1 table, drawer, dialog, route, form, selection, error, and focus
+  defects. Timeline/progress semantics, PhotoGallery, DownloadMenu, the import
+  chooser, broader ProductFieldsForm cleanup, contrast, reduced motion, and
+  other P2/P3 polish remain separately gated.
 - **Public Tracking is unavailable in production.** Its Worker binding,
   issuance flow, and fail-closed rate-limit scope remain separately gated.
 - **Limited app test coverage** — Service Job retention-anchor regression tests run through Vite and Node’s built-in test runner; broader application test coverage remains to be established.
@@ -2591,6 +2599,36 @@ mutation occurred. The next roadmap-listed work remains the broader
 accessibility pass, remaining Thai/responsive-content QA, and broader brand
 identity work described in `SPRINT_ROADMAP.md`; none is authorized by this
 closeout.
+
+## F5d-64 — P0/P1 accessibility hardening (approved source checkpoint)
+
+The approved F5d-64 patch removes the two audited desktop keyboard blockers
+by adding native detail links to the Service Jobs and Product Master tables.
+The active mobile staff drawer and shared modal now expose labelled modal
+semantics, contain focus, close with Escape, isolate background interaction,
+and restore focus. Staff routes have route-specific document titles, a
+skip-to-main boundary, and conservative route focus that explicitly leaves
+New Service Job's customer-search autofocus in control.
+
+Intake chips expose pressed state, Service Job status selection uses native
+radio semantics, and Product Detail implements a complete tab relationship
+with arrow/Home/End keyboard behavior. Core Service Job fields and Product
+Master filters have accessible names; login/create/update failures use alert
+semantics; photo removal actions identify their files. Public locale selection
+updates the root document language and restores Thai when leaving the public
+surface without enabling Public Tracking. Successful Service Job creation and
+delivery-note preview transitions gain bounded focus handling while the
+existing automatic `window.print()` behavior remains in place.
+
+Final independent review passed with 19/19 focused tests and 260/260 complete
+non-emulator application tests. The approved F5d-64 patch is source-checkpointed
+and remains undeployed. Production remains the verified F5d-63 Hosting release
+and unchanged `FIRESTORE + WORKER` runtime; Public Tracking remains unavailable.
+No Worker/API, repository, Auth authorization, Rules, schema, migration,
+attachment transport, numbering, idempotency, package, lockfile, environment,
+or production-state change is part of F5d-64. The audit's P2/P3 items remain
+intentionally deferred. The next step is a separate F5d-64 production deployment
+gate.
 
 ## Development Principles
 

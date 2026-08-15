@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { Search } from 'lucide-react';
 import { GlassCard } from '../GlassCard';
 import { backendKind } from '../../../config/backend';
@@ -22,25 +23,37 @@ export function SearchInput({
   onChange,
   placeholder = DEFAULT_PLACEHOLDER,
   autoFocus = true,
+  label = 'ค้นหาลูกค้า',
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   autoFocus?: boolean;
+  label?: string;
 }) {
+  const inputId = useId();
+  const captionId = useId();
+
   return (
     <div>
       <GlassCard className="flex items-center gap-3 px-5 py-4 sm:px-6 sm:py-5">
         <Search className="h-6 w-6 shrink-0 text-neutral-400" strokeWidth={2} />
+        <label htmlFor={inputId} className="sr-only">
+          {label}
+        </label>
         <input
+          id={inputId}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           autoFocus={autoFocus}
+          aria-describedby={captionId}
           className="w-full bg-transparent text-lg text-ink placeholder:text-neutral-400 focus:outline-none sm:text-xl"
         />
       </GlassCard>
-      <p className="mt-3 text-center text-sm text-neutral-400">{CAPTION}</p>
+      <p id={captionId} className="mt-3 text-center text-sm text-neutral-400">
+        {CAPTION}
+      </p>
     </div>
   );
 }

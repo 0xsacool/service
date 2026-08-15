@@ -18,18 +18,25 @@ export function ProblemSection({
   onChipsChange: (chips: string[]) => void;
 }) {
   return (
-    <FormSection icon={AlertTriangle} title="อาการปัญหา" subtitle="สินค้าเกิดปัญหาอะไร">
+    <FormSection
+      icon={AlertTriangle}
+      title="อาการปัญหา"
+      subtitle="สินค้าเกิดปัญหาอะไร"
+      headingId="service-job-problem-heading"
+    >
       <textarea
         value={description}
         onChange={(e) => onDescriptionChange(e.target.value)}
         rows={4}
         placeholder="บันทึกอาการที่ลูกค้าแจ้ง…"
         className={inputClass('resize-none')}
+        aria-labelledby="service-job-problem-heading"
       />
       <ChipToggleGroup
         options={PROBLEM_CHIPS}
         selected={chips}
         onChange={onChipsChange}
+        ariaLabelledBy="service-job-problem-heading"
       />
     </FormSection>
   );

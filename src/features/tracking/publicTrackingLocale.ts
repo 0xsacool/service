@@ -3,6 +3,10 @@ import type { ServiceJobStatus } from '../../types';
 export const PUBLIC_TRACKING_LOCALES = ['th', 'en', 'ja', 'zh-CN'] as const;
 export type PublicTrackingLocale = (typeof PUBLIC_TRACKING_LOCALES)[number];
 
+export function publicTrackingDocumentLanguage(locale: PublicTrackingLocale): string {
+  return locale;
+}
+
 export const PUBLIC_TRACKING_LOCALE_STORAGE_KEY = 'publicTrackingLocale';
 
 const LOCALE_TAGS: Record<PublicTrackingLocale, string> = {

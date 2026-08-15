@@ -7,10 +7,12 @@ export function ChipToggleGroup({
   options,
   selected,
   onChange,
+  ariaLabelledBy,
 }: {
   options: readonly string[];
   selected: string[];
   onChange: (selected: string[]) => void;
+  ariaLabelledBy: string;
 }) {
   const toggle = (option: string) => {
     onChange(
@@ -21,7 +23,7 @@ export function ChipToggleGroup({
   };
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-2" role="group" aria-labelledby={ariaLabelledBy}>
       {options.map((option) => {
         const isSelected = selected.includes(option);
         return (
@@ -29,6 +31,7 @@ export function ChipToggleGroup({
             key={option}
             type="button"
             onClick={() => toggle(option)}
+            aria-pressed={isSelected}
             className={`rounded-full px-4 py-2.5 text-sm font-medium transition-all ${
               isSelected
                 ? 'bg-brand-500 text-white shadow-sm'

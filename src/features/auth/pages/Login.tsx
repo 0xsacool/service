@@ -8,6 +8,7 @@ import {
   Field,
   inputClass,
   RuntimeModeIndicator,
+  AsyncErrorAlert,
 } from '../../../shared/components';
 import { ROUTES } from '../../../constants';
 import { useAuthSession } from '../../../auth/authSessionContext';
@@ -41,7 +42,11 @@ export function Login() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 py-12">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 py-12 focus:outline-none"
+    >
       <div className="w-full max-w-md animate-[scale-in_0.4s_cubic-bezier(0.22,1,0.36,1)_both]">
         <div className="mb-4 flex justify-center">
           <RuntimeModeIndicator />
@@ -89,15 +94,16 @@ export function Login() {
               <ArrowRight className="h-5 w-5" />
             </PrimaryButton>
           </form>
-          {signInError || (status === 'unavailable' ? error : null) ? (
-            <p className="mt-4 text-sm text-red-600">{signInError ?? error}</p>
-          ) : null}
+          <AsyncErrorAlert
+            message={signInError ?? (status === 'unavailable' ? error : null)}
+            className="mt-4"
+          />
         </GlassCard>
 
         <p className="mt-6 text-center text-sm text-neutral-400">
           ต้องการสิทธิ์ใช้งานหรือไม่ ติดต่อผู้จัดการศูนย์บริการ
         </p>
       </div>
-    </div>
+    </main>
   );
 }

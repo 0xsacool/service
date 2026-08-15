@@ -5,7 +5,11 @@ import { ROUTES } from '../../constants';
 
 export function NotFoundPage() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center focus:outline-none"
+    >
       <div className="flex h-16 w-16 items-center justify-center rounded-full bg-neutral-100 text-neutral-400">
         <SearchX className="h-8 w-8" />
       </div>
@@ -16,6 +20,6 @@ export function NotFoundPage() {
       <Link to={ROUTES.home}>
         <PrimaryButton>กลับหน้าหลัก</PrimaryButton>
       </Link>
-    </div>
+    </main>
   );
 }

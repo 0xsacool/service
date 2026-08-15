@@ -58,9 +58,14 @@ Not yet built. Listed in roughly the order the current sprint trajectory (F-seri
 - **Quote & warranty approval flow** — customer approves/declines a repair quote before work proceeds.
 - **Remaining printable documents** — Repair Report and Return Form (Service Request printing is already implemented — see Implemented above).
 - **Remaining localization & accessibility work** — F5d-63's bounded
-  Thai-first production trust slice is live; the broader ARIA/keyboard,
-  screen-reader, responsive-content, and remaining Thai-copy pass remains open
-  (see [DECISIONS.md](DECISIONS.md) #003).
+  Thai-first production trust slice is live. F5d-64's audited P0/P1 keyboard,
+  focus, dialog, route, form, and screen-reader hardening passed final
+  independent review (19/19 focused and 260/260 complete non-emulator tests)
+  and is source-checkpointed. It remains undeployed: production is still F5d-63,
+  Public Tracking remains unavailable, and the next step is a separate F5d-64
+  production deployment gate. The explicitly deferred P2/P3 accessibility
+  work, responsive-content QA, and remaining Thai-copy pass remain open (see
+  [DECISIONS.md](DECISIONS.md) #003).
 - **Technician workload view** — who's assigned what, to help staff balance the queue.
 - **Customer service history** — repeat-customer view showing all of a customer's past service jobs across their product instances.
 - **Product service history** — for a specific physical unit, a full repair timeline across every service job it's ever had.

@@ -5,7 +5,7 @@ import { APP_NAME } from '../../../constants';
 import { formatThaiDate } from '../../../utils/formatDate';
 import { statusLabel } from '../../../services/serviceJobPresentation';
 import { normalizePublicTrackingCodeInput } from '../../../services/publicTrackingCode';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 function DeliveryNoteField({ label, value }: { label: string; value: string }) {
   return (
@@ -35,6 +35,7 @@ export function DeliveryNotePrintPreview({
   onClose: () => void;
   publicTrackingCode?: string;
 }) {
+  const backButtonRef = useRef<HTMLButtonElement>(null);
   const accessories = job.accessories?.filter((accessory) => accessory.trim()) ?? [];
   const normalizedTrackingCode = publicTrackingCode
     ? normalizePublicTrackingCodeInput(publicTrackingCode)
@@ -42,6 +43,7 @@ export function DeliveryNotePrintPreview({
 
   useEffect(() => {
     document.body.classList.add('delivery-note-print-mode');
+    backButtonRef.current?.focus({ preventScroll: true });
     return () => document.body.classList.remove('delivery-note-print-mode');
   }, []);
 
@@ -50,6 +52,7 @@ export function DeliveryNotePrintPreview({
       <div className="delivery-note-preview-toolbar flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <button
+            ref={backButtonRef}
             type="button"
             onClick={onClose}
             className="mb-2 flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium text-brand-600 hover:bg-brand-50"

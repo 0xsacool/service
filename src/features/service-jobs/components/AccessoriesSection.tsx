@@ -15,11 +15,13 @@ export function AccessoriesSection({
       icon={PackageCheck}
       title="อุปกรณ์ที่นำมาด้วย"
       subtitle="ลูกค้านำอุปกรณ์ใดมาพร้อมสินค้า"
+      headingId="service-job-accessories-heading"
     >
       <ChipToggleGroup
         options={ACCESSORY_CHIPS}
         selected={accessories}
         onChange={onChange}
+        ariaLabelledBy="service-job-accessories-heading"
       />
     </FormSection>
   );

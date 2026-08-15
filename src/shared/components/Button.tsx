@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { forwardRef, type ReactNode } from 'react';
 
 export function PrimaryButton({
   children,
@@ -25,19 +25,18 @@ export function PrimaryButton({
   );
 }
 
-export function SecondaryButton({
-  children,
-  onClick,
-  className = '',
-  disabled = false,
-}: {
-  children: ReactNode;
-  onClick?: () => void;
-  className?: string;
-  disabled?: boolean;
-}) {
+export const SecondaryButton = forwardRef<
+  HTMLButtonElement,
+  {
+    children: ReactNode;
+    onClick?: () => void;
+    className?: string;
+    disabled?: boolean;
+  }
+>(function SecondaryButton({ children, onClick, className = '', disabled = false }, ref) {
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onClick}
       disabled={disabled}
@@ -46,4 +45,4 @@ export function SecondaryButton({
       {children}
     </button>
   );
-}
+});

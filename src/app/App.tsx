@@ -17,6 +17,7 @@ import { backendConfiguration, combineBackendConfigurations } from '../config/ba
 import { filesBackendConfiguration } from '../config/filesBackend';
 import { filesWorkerUrlConfiguration } from '../config/workerUrl';
 import { BackendConfigurationGate } from './BackendConfigurationGate';
+import { RouteAccessibility } from './RouteAccessibility';
 
 const appConfiguration = combineBackendConfigurations(
   backendConfiguration,
@@ -29,6 +30,7 @@ export default function App() {
     <BackendConfigurationGate configuration={appConfiguration}>
       <AuthSessionProvider>
         <BrowserRouter>
+          <RouteAccessibility />
           <Routes>
             {/* Public */}
             <Route path={ROUTE_PATTERNS.home} element={<TrackHome />} />

@@ -140,7 +140,7 @@ verification, and the first staff-only Firebase Hosting rollout. The current
 production record is in `PROJECT_STATE.md`; `@supabase/supabase-js` remains an
 unused, orphaned dependency.
 
-### Sprint 2 — UX, Accessibility & Thai-First Pass *(in progress; F5d-63 production slice live)*
+### Sprint 2 — UX, Accessibility & Thai-First Pass *(in progress; F5d-63 live, F5d-64 P0/P1 source checkpoint approved)*
 
 **Objective:** Bring the UI up to a real, launch-shaped standard: usable by screen readers/keyboard, and dressed in Thai-market conventions instead of English/placeholder content. (Note: the intake form itself is no longer non-functional — that part of the original Sprint 2 scope was delivered early, during the Search/Intake phases above.)
 
@@ -154,8 +154,21 @@ Hosting release `1786723383971000`, version `b9e59a97e9ded5cc`, with its
 21-file artifact independently verified byte-for-byte. Public Tracking
 remains unavailable.
 
+**F5d-64 P0/P1 source checkpoint approved:** native desktop table links, mobile
+drawer/shared-dialog focus containment, route titles and skip/main focus,
+public document-language synchronization, selected-state semantics, Product
+Detail keyboard tabs, core form names, async error alerts, and bounded focus
+for creation/delivery-preview transitions passed final independent review with
+19/19 focused tests and 260/260 complete non-emulator application tests. The
+source is checkpointed but not deployed; production remains F5d-63 on the
+unchanged `FIRESTORE + WORKER` runtime, and Public Tracking remains unavailable.
+
 **Remaining deliverables:**
-- Accessible chip/toggle groups (`aria-pressed`/`role="radiogroup"`), `aria-current="step"` on timeline, focus trap + `Escape` handling on the mobile drawer, and the broader keyboard/screen-reader pass.
+- A separately approved F5d-64 production deployment gate; it has not started.
+- Deferred P2/P3 accessibility work: `aria-current="step"` timeline and
+  progress semantics, PhotoGallery and DownloadMenu improvements, import
+  chooser and broader ProductFieldsForm cleanup, contrast, reduced motion,
+  and optional polish.
 - Remaining Thai copy and responsive/content QA beyond the bounded F5d-63 trust surfaces.
 - Any broader brand visual identity work beyond the canonical text badges delivered in F5d-63 ([DECISIONS.md](DECISIONS.md) #008).
 

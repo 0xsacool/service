@@ -19,5 +19,6 @@ export { PageContainer } from './PageContainer';
 export { FormSection } from './FormSection';
 export { Modal } from './Modal';
 export { RuntimeModeIndicator } from './RuntimeModeIndicator';
+export { AsyncErrorAlert } from './AsyncErrorAlert';
 export { UniversalSearch, CustomerSummaryCard } from './search';
 export { ProductSelection, ProductSummaryCard } from './product';

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useOutletContext } from 'react-router-dom';
+import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { Plus, ChevronDown } from 'lucide-react';
 import type { ServiceJobStatus } from '../../../types';
 import { useServiceJobs } from '../../../hooks/useServiceJobs';
@@ -17,6 +17,19 @@ import { ROUTES, SERVICE_JOB_STATUSES } from '../../../constants';
 import { statusLabel } from '../../../services/serviceJobPresentation';
 
 const statusFilters: (ServiceJobStatus | 'All')[] = ['All', ...SERVICE_JOB_STATUSES];
+
+export function ServiceJobDetailLink({ id }: { id: string }) {
+  return (
+    <Link
+      to={ROUTES.serviceJobDetails(id)}
+      onClick={(event) => event.stopPropagation()}
+      className="rounded text-ink underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
+      aria-label={`เปิดรายละเอียดงานบริการ ${id}`}
+    >
+      {id}
+    </Link>
+  );
+}
 
 export function ServiceJobsList() {
   const navigate = useNavigate();
@@ -88,7 +101,9 @@ export function ServiceJobsList() {
                 className="cursor-pointer transition-colors hover:bg-neutral-50/70"
               >
                 <td className="px-5 py-4">
-                  <span className="font-medium text-ink">{c.id}</span>
+                  <span className="font-medium">
+                    <ServiceJobDetailLink id={c.id} />
+                  </span>
                 </td>
                 <td className="px-5 py-4 text-neutral-600">{c.customerName}</td>
                 <td className="px-5 py-4">

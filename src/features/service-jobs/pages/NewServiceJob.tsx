@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Printer } from 'lucide-react';
 import type {
@@ -15,12 +15,14 @@ import {
   FormSection,
   PrimaryButton,
   PageContainer,
+  AsyncErrorAlert,
 } from '../../../shared/components';
 import { ServiceIntakeSection, ServiceRequestPrintPreview } from '../components';
 import { ROUTES, createEmptyServiceIntake } from '../../../constants';
 import { isServiceIntakeComplete } from '../../../validation';
 import { useCreateServiceJob } from '../../../hooks/useCreateServiceJob';
 import { backendKind } from '../../../config/backend';
+import { serviceJobCreateErrorMessage } from '../serviceJobErrorMessages';
 
 // F5d-49D (Terra P2 UX honesty follow-up): same rationale as SearchInput.tsx
 // — Firestore mode has no marketplace username/order number backing data
@@ -42,12 +44,14 @@ export function NewServiceJob() {
   const [savedJob, setSavedJob] = useState<ServiceJob | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const successPreviewRef = useRef<HTMLDivElement>(null);
 
   // Fires once right after a save, once the print preview has actually
   // committed to the DOM — matches "Save & Print" being one action, with
   // "Print Again" below for any reprint after this first automatic one.
   useEffect(() => {
     if (savedJob) {
+      successPreviewRef.current?.focus({ preventScroll: true });
       window.print();
     }
   }, [savedJob]);
@@ -82,9 +86,7 @@ export function NewServiceJob() {
       });
       setSavedJob(job);
     } catch (error) {
-      setSaveError(
-        error instanceof Error ? error.message : 'ไม่สามารถบันทึกงานบริการได้'
-      );
+      setSaveError(serviceJobCreateErrorMessage(error));
     } finally {
       setIsSaving(false);
     }
@@ -120,11 +122,18 @@ export function NewServiceJob() {
       </div>
 
       {savedJob ? (
-        <ServiceRequestPrintPreview
-          job={savedJob}
-          onPrintAgain={() => window.print()}
-          onNewServiceJob={startNewServiceJob}
-        />
+        <div
+          ref={successPreviewRef}
+          tabIndex={-1}
+          aria-label={`สร้างงานบริการ ${savedJob.id} แล้ว`}
+          className="focus:outline-none"
+        >
+          <ServiceRequestPrintPreview
+            job={savedJob}
+            onPrintAgain={() => window.print()}
+            onNewServiceJob={startNewServiceJob}
+          />
+        </div>
       ) : (
         <div className="space-y-6">
           {selectedCustomer ? (
@@ -167,9 +176,7 @@ export function NewServiceJob() {
                 <Printer className="h-5 w-5" />
                 {isSaving ? 'กำลังบันทึก…' : 'บันทึกและพิมพ์'}
               </PrimaryButton>
-              {saveError ? (
-                <p className="mt-3 text-sm text-red-600">{saveError}</p>
-              ) : null}
+              <AsyncErrorAlert message={saveError} className="mt-3" />
             </FormSection>
           )}
         </div>
