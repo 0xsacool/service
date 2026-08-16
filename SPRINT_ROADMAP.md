@@ -140,7 +140,7 @@ verification, and the first staff-only Firebase Hosting rollout. The current
 production record is in `PROJECT_STATE.md`; `@supabase/supabase-js` remains an
 unused, orphaned dependency.
 
-### Sprint 2 — UX, Accessibility & Thai-First Pass *(in progress; F5d-63 live, F5d-64 P0/P1 source checkpoint approved)*
+### Sprint 2 — UX, Accessibility & Thai-First Pass *(in progress; F5d-64 P0/P1 live)*
 
 **Objective:** Bring the UI up to a real, launch-shaped standard: usable by screen readers/keyboard, and dressed in Thai-market conventions instead of English/placeholder content. (Note: the intake form itself is no longer non-functional — that part of the original Sprint 2 scope was delivered early, during the Search/Intake phases above.)
 
@@ -154,17 +154,26 @@ Hosting release `1786723383971000`, version `b9e59a97e9ded5cc`, with its
 21-file artifact independently verified byte-for-byte. Public Tracking
 remains unavailable.
 
-**F5d-64 P0/P1 source checkpoint approved:** native desktop table links, mobile
+**F5d-64 P0/P1 production slice delivered:** native desktop table links, mobile
 drawer/shared-dialog focus containment, route titles and skip/main focus,
 public document-language synchronization, selected-state semantics, Product
 Detail keyboard tabs, core form names, async error alerts, and bounded focus
 for creation/delivery-preview transitions passed final independent review with
 19/19 focused tests and 260/260 complete non-emulator application tests. The
-source is checkpointed but not deployed; production remains F5d-63 on the
-unchanged `FIRESTORE + WORKER` runtime, and Public Tracking remains unavailable.
+production gate repeated both suites, lint, and build successfully, then made
+exactly one Hosting deployment with zero retries. Release
+`1786857261574000`, version `fd13206179cf6474`, went live at
+`2026-08-16T05:14:21.574Z`. Its 21 user files total 1,127,214 bytes and have
+canonical aggregate SHA-256
+`95b8d499946daa707f0f833e65ed9f866a7fd78945b2a5ba985055f22dbee0a1`;
+all 21/21 live files and all five approved SPA routes matched. The Worker is
+unchanged at `06bc88e9-1437-4708-b68e-07f82caaf916`, 100% traffic, with zero
+production data writes or backend mutations. Public Tracking remains
+unavailable. Unauthenticated Login/protected-route accessibility smoke passed;
+authenticated StaffShell/list/link/drawer smoke was unavailable because neither
+safe browser surface had an existing staff session.
 
 **Remaining deliverables:**
-- A separately approved F5d-64 production deployment gate; it has not started.
 - Deferred P2/P3 accessibility work: `aria-current="step"` timeline and
   progress semantics, PhotoGallery and DownloadMenu improvements, import
   chooser and broader ProductFieldsForm cleanup, contrast, reduced motion,

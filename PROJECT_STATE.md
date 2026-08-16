@@ -182,10 +182,9 @@ Grouped by what shipped, not by exact sprint label (many sprints predate a forma
   `StaffShell.tsx`; the shell is the active navigation, landmark, search, and
   responsive-drawer implementation.
 - **Localization/accessibility remain incomplete in production** — F5d-64's
-  approved P0/P1 keyboard and screen-reader hardening is prepared as a
-  source-only patch, while production remains on F5d-63. Broader content
-  translation and the explicitly deferred P2/P3 accessibility work remain
-  open.
+  approved P0/P1 keyboard and screen-reader hardening is live in production.
+  Broader content translation and the explicitly deferred P2/P3 accessibility
+  work remain open.
 - **No brand identity** — visuals remain generic/placeholder, not Bruno Thailand or Join Lux Club branding ([DECISIONS.md](DECISIONS.md) #008 — still open).
 - **Accessibility follow-up remains** — the F5d-64 source patch addresses the
   audited P0/P1 table, drawer, dialog, route, form, selection, error, and focus
@@ -2600,7 +2599,7 @@ accessibility pass, remaining Thai/responsive-content QA, and broader brand
 identity work described in `SPRINT_ROADMAP.md`; none is authorized by this
 closeout.
 
-## F5d-64 — P0/P1 accessibility hardening (approved source checkpoint)
+## F5d-64 — P0/P1 accessibility hardening (Production, 2026-08-16)
 
 The approved F5d-64 patch removes the two audited desktop keyboard blockers
 by adding native detail links to the Service Jobs and Product Master tables.
@@ -2621,14 +2620,42 @@ delivery-note preview transitions gain bounded focus handling while the
 existing automatic `window.print()` behavior remains in place.
 
 Final independent review passed with 19/19 focused tests and 260/260 complete
-non-emulator application tests. The approved F5d-64 patch is source-checkpointed
-and remains undeployed. Production remains the verified F5d-63 Hosting release
-and unchanged `FIRESTORE + WORKER` runtime; Public Tracking remains unavailable.
-No Worker/API, repository, Auth authorization, Rules, schema, migration,
-attachment transport, numbering, idempotency, package, lockfile, environment,
-or production-state change is part of F5d-64. The audit's P2/P3 items remain
-intentionally deferred. The next step is a separate F5d-64 production deployment
-gate.
+non-emulator application tests. The production gate repeated those results by
+native process exit code, along with lint, build, and `git diff --check`, before
+executing exactly one Firebase Hosting deployment with zero retries.
+
+F5d-64 is live on Hosting release
+`projects/769692662603/sites/luxace-service/channels/live/releases/1786857261574000`,
+finalized version
+`projects/769692662603/sites/luxace-service/versions/fd13206179cf6474`, released
+at `2026-08-16T05:14:21.574Z`. The approved artifact contains 21 user files,
+totals 1,127,214 bytes, and has canonical aggregate SHA-256
+`95b8d499946daa707f0f833e65ed9f866a7fd78945b2a5ba985055f22dbee0a1`.
+All 21/21 decoded live user files matched their approved size and SHA-256, and
+the live canonical aggregate matched exactly. `/`, `/login`, `/dashboard`,
+`/service-jobs`, and `/service-jobs/new` returned HTTP 200 with the approved SPA
+shell. The live runtime remained `FIRESTORE + WORKER` with only the approved
+Worker origin, and Public Tracking remained unavailable.
+
+Read-only browser smoke confirmed that Login renders with Thai document
+language, a route-specific Thai title and heading, one main landmark, and the
+production runtime label; an unauthenticated `/dashboard` visit redirected to
+`/login` as required. Neither the isolated browser nor the connected Chrome
+surface had an existing authenticated staff session, so StaffShell, the live
+Service Jobs list, native desktop detail-link traversal, drawer interaction,
+and authenticated route-focus behavior were not exercised in production. No
+credentials were fabricated or entered.
+
+The Worker remained unchanged at version
+`06bc88e9-1437-4708-b68e-07f82caaf916` with 100% traffic; health returned 200
+and Hosting-origin CORS returned 204. F5d-64 made zero Service Job, attachment,
+or Firestore writes and zero Worker, Auth, Rules, IAM, or R2 mutations. The
+verified F5d-63 rollback baseline is Hosting release
+`projects/769692662603/sites/luxace-service/channels/live/releases/1786723383971000`
+and version
+`projects/769692662603/sites/luxace-service/versions/b9e59a97e9ded5cc`.
+Rollback remains a separately approved production mutation. The audit's P2/P3
+items remain intentionally deferred.
 
 ## Development Principles
 
