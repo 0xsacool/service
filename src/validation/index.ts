@@ -6,6 +6,7 @@ export {
 } from './serviceJobValidation';
 export { isServiceIntakeComplete } from './serviceIntakeValidation';
 export { validateNewProductInput } from './productMasterValidation';
+export { validateNewCustomerInput } from './customerValidation';
 export {
   validateNewAccessoryInput,
   validateNewCommonProblemInput,

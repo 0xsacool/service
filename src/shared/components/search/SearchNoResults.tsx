@@ -2,17 +2,14 @@ import { SearchX, UserPlus } from 'lucide-react';
 import { GlassCard } from '../GlassCard';
 import { backendKind } from '../../../config/backend';
 
-// F5d-49B (Terra P2 UX honesty). Two independent gaps:
-// 1. Search-dimension wording - same rationale as SearchInput.tsx/
-//    SearchEmptyState.tsx: Firestore mode has no marketplace/order data.
-// 2. "+ New Customer" - customer creation is intentionally unwired in every
-//    backend (NewServiceJob.tsx never passes onCreateNewCustomer at all, so
-//    this has always been a silent no-op), but presenting it as a live
-//    action specifically misleads a Firestore-mode staff member into
-//    thinking they can register a walk-in customer right now. Hidden
-//    (never disabled-but-visible, which would still invite a click) behind
-//    an honest inline note instead - no customer-creation behavior is
-//    implemented by this change.
+// F5d-49B (Terra P2 UX honesty) established that this control must never
+// look live while unwired. F5d-65 wires it — NewServiceJob.tsx now passes a
+// real onCreateNewCustomer in every backend mode (Worker-mediated atomic
+// creation, DECISIONS.md-style fail-closed — see
+// src/services/serviceJobCreation.ts) — so the mode-conditional hide is
+// removed for the button itself. The search-dimension wording split
+// (marketplace/order only exist in Mock — DECISIONS.md #038) is unrelated
+// and stays exactly as it was.
 const RETRY_HINT =
   backendKind === 'mock'
     ? 'ลองค้นหาด้วยชื่อ โทรศัพท์ ชื่อผู้ใช้ ออเดอร์ เลขติดตาม หรือหมายเลขเครื่องอื่น'
@@ -34,18 +31,12 @@ export function SearchNoResults({
         <p className="font-medium text-ink">ไม่พบข้อมูลสำหรับ "{query}"</p>
         <p className="mt-1 text-sm text-neutral-500">{RETRY_HINT}</p>
       </div>
-      {backendKind === 'mock' ? (
-        <button type="button" onClick={onCreateNew} className="mt-2 w-full max-w-sm">
-          <GlassCard className="flex items-center justify-center gap-2 px-6 py-4 text-base font-medium text-brand-600 transition-all hover:bg-white">
-            <UserPlus className="h-5 w-5" />
-            สร้างลูกค้าใหม่
-          </GlassCard>
-        </button>
-      ) : (
-        <p className="mt-2 text-xs text-neutral-400">
-          การสร้างลูกค้าใหม่ยังไม่รองรับในโหมดนี้
-        </p>
-      )}
+      <button type="button" onClick={onCreateNew} className="mt-2 w-full max-w-sm">
+        <GlassCard className="flex items-center justify-center gap-2 px-6 py-4 text-base font-medium text-brand-600 transition-all hover:bg-white">
+          <UserPlus className="h-5 w-5" />
+          สร้างลูกค้าใหม่
+        </GlassCard>
+      </button>
     </div>
   );
 }

@@ -15,7 +15,10 @@ import type {
   ServiceReportDraftPatch,
 } from '../types';
 import type { BrandId } from '../types';
-import type { ServiceJobIntakePayload } from '../services/serviceJobCreation';
+import type {
+  CustomerIntakeSelector,
+  ServiceJobIntakePayload,
+} from '../services/serviceJobCreation';
 
 export type ServiceJobUpdate = Omit<
   Partial<ServiceJob>,
@@ -32,6 +35,10 @@ export type NewDurableServiceJob = Omit<
 export interface ServiceJobIntakeAttempt {
   idempotencyKey: string;
   intake: ServiceJobIntakePayload;
+  // F5d-65 — which customer branch this attempt is for. The Firestore
+  // repository forwards this to the Worker unchanged; it never inspects or
+  // acts on it directly (see firestoreServiceJobRepository.ts).
+  customer: CustomerIntakeSelector;
 }
 
 // Only ServiceJobIntakeAttempt is accepted by the Firestore repository. The

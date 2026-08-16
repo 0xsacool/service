@@ -145,7 +145,7 @@ export async function createFirestoreServiceJobRepository(
                 'Content-Type': 'application/json',
                 'Idempotency-Key': job.idempotencyKey,
               },
-              body: JSON.stringify({ intake: job.intake }),
+              body: JSON.stringify({ intake: job.intake, customer: job.customer }),
             }
           );
           if (!response.ok)

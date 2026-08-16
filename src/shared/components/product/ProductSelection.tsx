@@ -5,11 +5,14 @@ import { useCustomerProducts } from '../../../hooks/useCustomerProducts';
 import { GlassCard } from '../GlassCard';
 import { SecondaryButton } from '../Button';
 import { ProductCard } from './ProductCard';
+import { RegisterProductForm } from './RegisterProductForm';
 
 export interface ProductSelectionProps {
-  customerId: string;
+  // F5d-65 — null for a brand-new, not-yet-durable customer (IntakeCustomer
+  // kind: 'new'): there is nothing to look up yet, so useCustomerProducts
+  // returns an empty list without a repository call.
+  customerId: string | null;
   onSelectProduct?: (product: RegisteredProduct) => void;
-  onRegisterNewProduct?: () => void;
   className?: string;
 }
 
@@ -19,16 +22,24 @@ export interface ProductSelectionProps {
 export function ProductSelection({
   customerId,
   onSelectProduct,
-  onRegisterNewProduct,
   className = '',
 }: ProductSelectionProps) {
   const { products } = useCustomerProducts(customerId);
-  const [showRegisterNotice, setShowRegisterNotice] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
 
-  const handleRegisterNewProduct = () => {
-    setShowRegisterNotice(true);
-    onRegisterNewProduct?.();
-  };
+  if (isRegistering) {
+    return (
+      <div className={className}>
+        <RegisterProductForm
+          onRegister={(product) => {
+            setIsRegistering(false);
+            onSelectProduct?.(product);
+          }}
+          onCancel={() => setIsRegistering(false)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={className}>
@@ -49,17 +60,12 @@ export function ProductSelection({
       )}
 
       <SecondaryButton
-        onClick={handleRegisterNewProduct}
+        onClick={() => setIsRegistering(true)}
         className="mt-4 w-full justify-center px-6 py-4 text-base"
       >
         <Plus className="h-5 w-5" />
         ลงทะเบียนสินค้าใหม่
       </SecondaryButton>
-      {showRegisterNotice && (
-        <p className="mt-2 text-center text-sm text-neutral-400 animate-[fade-in_0.3s_ease_both]">
-          การลงทะเบียนสินค้าใหม่จะเปิดใช้งานในระยะถัดไป
-        </p>
-      )}
     </div>
   );
 }

@@ -518,6 +518,23 @@ export function createFirestoreClient(env: Env): FirestoreClient {
                   }),
                 },
               },
+              // F5d-65 — present only for a brand-new customer. Part of this
+              // same :commit, so it succeeds or fails atomically with the
+              // Service Job/intake key/sequence writes above — never a
+              // separate request, never a partial/ghost customer. Create-only
+              // (currentDocument.exists: false) via createWrite(), same
+              // precondition style already used for the intake key and
+              // Service Job writes.
+              ...(input.newCustomer
+                ? [
+                    createWrite('customers', input.newCustomer.id, {
+                      name: input.newCustomer.name,
+                      phone: input.newCustomer.phone,
+                      email: input.newCustomer.email,
+                      brandIds: [input.newCustomer.brandId],
+                    }),
+                  ]
+                : []),
             ],
           }),
         });

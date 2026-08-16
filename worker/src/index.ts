@@ -26,7 +26,7 @@ import {
   type FirebaseTokenVerifier,
 } from './firebaseAuth.ts';
 import { getAuthorizedStaffProfile, isStaffAuthorizedForServiceJob, type StaffProfile } from './staffAuthorization.ts';
-import { allocateServiceJob, isValidIdempotencyKey, MAX_INTAKE_BYTES, parseServiceJobIntake } from './serviceJobCreation.ts';
+import { allocateServiceJob, isValidIdempotencyKey, MAX_INTAKE_BYTES, parseServiceJobCreateRequest } from './serviceJobCreation.ts';
 import { logAllocatorStageFailure } from './allocatorDiagnostics.ts';
 import {
   exceedsDeclaredSize,
@@ -236,9 +236,9 @@ async function handleServiceJobCreate(request: Request, env: Env, dependencies: 
   if (!isValidIdempotencyKey(key)) return json({ error: 'Invalid idempotency key' }, { status: 400 });
   try {
     const raw = await readBodyWithLimit(request.body, MAX_INTAKE_BYTES);
-    const intake = parseServiceJobIntake(JSON.parse(new TextDecoder().decode(raw)));
-    if (!intake) return json({ error: 'Invalid Service Job intake' }, { status: 400 });
-    const job = await allocateServiceJob({ brandId: authorization.profile.brandId, key, intake, dataAccess: authorization.client });
+    const parsed = parseServiceJobCreateRequest(JSON.parse(new TextDecoder().decode(raw)));
+    if (!parsed) return json({ error: 'Invalid Service Job intake' }, { status: 400 });
+    const job = await allocateServiceJob({ brandId: authorization.profile.brandId, key, intake: parsed.intake, customer: parsed.customer, dataAccess: authorization.client });
     try {
       return json({ job }, { status: 201 });
     } catch (buildError) {

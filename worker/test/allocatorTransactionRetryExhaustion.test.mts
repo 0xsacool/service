@@ -306,7 +306,10 @@ function runAllocation(
           'Content-Type': 'application/json',
           'Idempotency-Key': '55555555-5555-4555-8555-555555555555',
         },
-        body: JSON.stringify({ intake }),
+        body: JSON.stringify({
+          intake,
+          customer: { kind: 'existing', customerId: 'test-customer' },
+        }),
       }),
       env,
       {} as ExecutionContext
@@ -401,7 +404,10 @@ function runAllocation(
           'Content-Type': 'application/json',
           'Idempotency-Key': '66666666-6666-4666-8666-666666666666',
         },
-        body: JSON.stringify({ intake }),
+        body: JSON.stringify({
+          intake,
+          customer: { kind: 'existing', customerId: 'test-customer' },
+        }),
       }),
       env,
       {} as ExecutionContext

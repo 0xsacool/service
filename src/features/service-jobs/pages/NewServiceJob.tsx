@@ -7,6 +7,7 @@ import type {
   ServiceIntakeData,
   ServiceJob,
 } from '../../../types';
+import type { IntakeCustomer } from '../../../services/serviceJobCreation';
 import {
   UniversalSearch,
   CustomerSummaryCard,
@@ -17,7 +18,12 @@ import {
   PageContainer,
   AsyncErrorAlert,
 } from '../../../shared/components';
-import { ServiceIntakeSection, ServiceRequestPrintPreview } from '../components';
+import {
+  ServiceIntakeSection,
+  ServiceRequestPrintPreview,
+  NewCustomerForm,
+  NewCustomerSummaryCard,
+} from '../components';
 import { ROUTES, createEmptyServiceIntake } from '../../../constants';
 import { isServiceIntakeComplete } from '../../../validation';
 import { useCreateServiceJob } from '../../../hooks/useCreateServiceJob';
@@ -36,9 +42,12 @@ export function NewServiceJob() {
   const navigate = useNavigate();
   const { createServiceJob } = useCreateServiceJob();
 
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSearchResult | null>(
-    null
-  );
+  const [selectedCustomer, setSelectedCustomer] = useState<IntakeCustomer | null>(null);
+  // F5d-65 — a separate step, not a modal: search stays visible-then-replaced
+  // by the inline form, matching how a picked search result already replaces
+  // UniversalSearch with CustomerSummaryCard below.
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+  const [newCustomerQuery, setNewCustomerQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<RegisteredProduct | null>(null);
   const [intake, setIntake] = useState<ServiceIntakeData>(createEmptyServiceIntake);
   const [savedJob, setSavedJob] = useState<ServiceJob | null>(null);
@@ -56,8 +65,23 @@ export function NewServiceJob() {
     }
   }, [savedJob]);
 
+  const selectExistingCustomer = (customer: CustomerSearchResult) => {
+    setSelectedCustomer({ kind: 'existing', ...customer });
+  };
+
+  const startCreatingCustomer = (query: string) => {
+    setNewCustomerQuery(query);
+    setIsCreatingCustomer(true);
+  };
+
+  const confirmNewCustomer = (draft: { name: string; phone: string; email: string }) => {
+    setSelectedCustomer({ kind: 'new', ...draft });
+    setIsCreatingCustomer(false);
+  };
+
   const changeCustomer = () => {
     setSelectedCustomer(null);
+    setIsCreatingCustomer(false);
     setSelectedProduct(null);
     setIntake(createEmptyServiceIntake());
   };
@@ -69,6 +93,7 @@ export function NewServiceJob() {
 
   const startNewServiceJob = () => {
     setSelectedCustomer(null);
+    setIsCreatingCustomer(false);
     setSelectedProduct(null);
     setIntake(createEmptyServiceIntake());
     setSavedJob(null);
@@ -96,13 +121,15 @@ export function NewServiceJob() {
 
   const subtitle = savedJob
     ? 'พร้อมรับลูกค้ารายถัดไปเมื่อคุณพร้อม'
-    : !selectedCustomer
-      ? START_SEARCH_PROMPT
-      : !selectedProduct
-        ? 'เลือกสินค้าที่ต้องการซ่อม'
-        : !intakeComplete
-          ? 'บันทึกอาการ อุปกรณ์ที่นำมาด้วย และหมายเหตุ'
-          : 'พร้อมบันทึก';
+    : isCreatingCustomer
+      ? 'กรอกข้อมูลลูกค้าใหม่'
+      : !selectedCustomer
+        ? START_SEARCH_PROMPT
+        : !selectedProduct
+          ? 'เลือกสินค้าที่ต้องการซ่อม'
+          : !intakeComplete
+            ? 'บันทึกอาการ อุปกรณ์ที่นำมาด้วย และหมายเหตุ'
+            : 'พร้อมบันทึก';
 
   return (
     <PageContainer maxWidthClassName="max-w-3xl">
@@ -137,12 +164,28 @@ export function NewServiceJob() {
       ) : (
         <div className="space-y-6">
           {selectedCustomer ? (
-            <CustomerSummaryCard
-              customer={selectedCustomer}
-              onChangeCustomer={changeCustomer}
+            selectedCustomer.kind === 'existing' ? (
+              <CustomerSummaryCard
+                customer={selectedCustomer}
+                onChangeCustomer={changeCustomer}
+              />
+            ) : (
+              <NewCustomerSummaryCard
+                customer={selectedCustomer}
+                onChangeCustomer={changeCustomer}
+              />
+            )
+          ) : isCreatingCustomer ? (
+            <NewCustomerForm
+              initialQuery={newCustomerQuery}
+              onConfirm={confirmNewCustomer}
+              onCancel={() => setIsCreatingCustomer(false)}
             />
           ) : (
-            <UniversalSearch onSelectCustomer={setSelectedCustomer} />
+            <UniversalSearch
+              onSelectCustomer={selectExistingCustomer}
+              onCreateNewCustomer={startCreatingCustomer}
+            />
           )}
 
           {selectedCustomer &&
@@ -153,7 +196,9 @@ export function NewServiceJob() {
               />
             ) : (
               <ProductSelection
-                customerId={selectedCustomer.id}
+                customerId={
+                  selectedCustomer.kind === 'existing' ? selectedCustomer.id : null
+                }
                 onSelectProduct={setSelectedProduct}
               />
             ))}

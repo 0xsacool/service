@@ -7,9 +7,17 @@ export interface UseCustomerProductsResult {
   error: null;
 }
 
-export function useCustomerProducts(customerId: string): UseCustomerProductsResult {
+// F5d-65 — `customerId` is `null` for a not-yet-durable walk-in customer
+// (pending local state only, see IntakeCustomer). There is nothing to look
+// up yet — no repository call is made, and an empty list is returned rather
+// than querying with an empty/placeholder id.
+export function useCustomerProducts(
+  customerId: string | null
+): UseCustomerProductsResult {
   return {
-    products: repositories.registeredProducts.getForCustomer(customerId),
+    products: customerId
+      ? repositories.registeredProducts.getForCustomer(customerId)
+      : [],
     isLoading: false,
     error: null,
   };

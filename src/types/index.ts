@@ -7,7 +7,8 @@ export {
   isCanonicalBrandId,
 } from './brand';
 export type { BrandId } from './brand';
-export type { Customer } from './customer';
+export type { Customer, NewCustomerDraft } from './customer';
+export { createEmptyNewCustomerDraft } from './customer';
 export type { Product } from './product';
 export type { CustomerSearchResult } from './search';
 export type { RegisteredProduct, WarrantyStatus } from './registeredProduct';

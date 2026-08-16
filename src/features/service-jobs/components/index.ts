@@ -1,4 +1,6 @@
 export { ServiceIntakeSection } from './ServiceIntakeSection';
+export { NewCustomerForm } from './NewCustomerForm';
+export { NewCustomerSummaryCard } from './NewCustomerSummaryCard';
 export { ProblemSection } from './ProblemSection';
 export { AccessoriesSection } from './AccessoriesSection';
 export { InternalNotesSection } from './InternalNotesSection';

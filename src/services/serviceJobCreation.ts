@@ -1,5 +1,6 @@
 import type {
   CustomerSearchResult,
+  NewCustomerDraft,
   RegisteredProduct,
   ServiceIntakeData,
   TimelineEvent,
@@ -23,9 +24,38 @@ export function createReceivedTimelineEvent(receivedAt: Date): TimelineEvent {
   };
 }
 
+// F5d-65 — the customer half of intake is now one of two shapes: an already
+// existing, already-searched-for customer, or a not-yet-durable walk-in
+// entered inline (NewCustomerDraft). Both carry name/phone/email directly so
+// buildServiceJobIntakePayload() below needs no branch at all; only the
+// discriminant (`kind`) and the existing customer's id differ. A discriminated
+// union here (CLAUDE.md: narrowing over assertions) makes "existing id +
+// new-customer fields at once" structurally unrepresentable, not just
+// runtime-rejected.
+export type IntakeCustomer =
+  ({ kind: 'existing' } & CustomerSearchResult) | ({ kind: 'new' } & NewCustomerDraft);
+
+// The Worker-facing declaration of which customer branch this creation
+// attempt is for. Deliberately minimal — `customerId` exists only so the
+// Worker's request parser can reject a malformed/ambiguous body before any
+// Firestore call (DECISIONS.md-style fail-closed parsing); the allocator
+// itself only ever inspects `kind`. A brand-new customer carries no id yet
+// (the Worker allocates one), so the 'new' branch has no id field at all —
+// not an optional one, so an "existing id + new" mix can't be constructed.
+export type CustomerIntakeSelector =
+  { kind: 'existing'; customerId: string } | { kind: 'new' };
+
+export function buildCustomerIntakeSelector(
+  customer: IntakeCustomer
+): CustomerIntakeSelector {
+  return customer.kind === 'existing'
+    ? { kind: 'existing', customerId: customer.id }
+    : { kind: 'new' };
+}
+
 export interface NewServiceJobInput {
   brandId: BrandId;
-  customer: CustomerSearchResult;
+  customer: IntakeCustomer;
   product: RegisteredProduct;
   intake: ServiceIntakeData;
 }

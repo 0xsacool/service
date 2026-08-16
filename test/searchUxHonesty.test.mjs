@@ -33,10 +33,17 @@ test('SearchEmptyState branches its bare prompt on backendKind and the Firestore
   assert.ok(firestoreBranchMatch, 'expected a Firestore-mode bare-prompt branch');
 });
 
-test('SearchNoResults hides the "+ New Customer" action outside Mock mode', async () => {
+test('F5d-65: SearchNoResults offers a live "+ New Customer" action in every backend mode', async () => {
+  // Superseded by F5d-65: F5d-49B hid this control outside Mock mode
+  // because customer creation was unwired everywhere. It is now wired
+  // (Worker-mediated, atomic with Service Job creation — see
+  // src/services/serviceJobCreation.ts), so the mode-conditional hide and
+  // its "not supported" copy are gone; the button itself no longer branches
+  // on backendKind at all.
   const source = await readSource('src/shared/components/search/SearchNoResults.tsx');
-  assert.match(source, /backendKind === 'mock' \? \(/);
-  assert.match(source, /ยังไม่รองรับในโหมดนี้/);
+  assert.doesNotMatch(source, /ยังไม่รองรับในโหมดนี้/);
+  assert.doesNotMatch(source, /backendKind === 'mock' \? \(/);
+  assert.match(source, /สร้างลูกค้าใหม่/);
 });
 
 test('NewServiceJob branches its start-search subtitle on backendKind and the Firestore-mode copy omits marketplace/order', async () => {

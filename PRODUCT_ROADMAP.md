@@ -52,6 +52,16 @@ Not yet built. Listed in roughly the order the current sprint trajectory (F-seri
 
 - **Auth and administration expansion** — staff Auth is live; broader Admin
   and Customer roles, user lifecycle, and administration remain future work.
+- **Walk-in customer + first-time product registration** — source only, not
+  production complete (F5d-65): staff can create a new customer and register
+  a new customer product directly from New Service Job when Universal Search
+  finds no match, atomically with Service Job creation. Warranty must be
+  explicitly confirmed by staff (no default), and a serial number already
+  known to service history blocks manual registration rather than inferring
+  ownership from a shared phone number. Server-side serial-conflict
+  enforcement remains a P2 hardening item. Not in production — pending
+  independent re-review and a separately approved deployment; see
+  `SPRINT_ROADMAP.md`.
 - **Notifications** — automatic customer updates on status change, delivered to a customer's registered contact channel (SMS/LINE/email are the realistic channels for the Thai market; exact channel choice is a future decision, not yet made — the `customer_channel_contacts` entity already anticipates this).
 - **Attachment experience expansion** — private Worker/R2 storage is live;
   broader presentation and any customer-visible attachment policy remain.

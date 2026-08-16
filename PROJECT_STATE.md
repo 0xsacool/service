@@ -2657,6 +2657,131 @@ and version
 Rollback remains a separately approved production mutation. The audit's P2/P3
 items remain intentionally deferred.
 
+## F5d-65 — Atomic new-customer + product registration (source only, not deployed)
+
+F5d-65 Phase 2 implements, in source only, the workflow its own Phase 1
+read-only audit identified as missing: staff can now create a new customer
+and register a new customer product when Universal Search finds no match,
+and continue directly into New Service Job without a separate durable write
+before Save & Print.
+
+**New customer creation remains Worker-only, atomic with Service Job
+creation.** No Firestore client-side write path was added and no
+`firestore.rules` change was made — the `customers` collection's existing
+`allow create, update, delete: if false` stays exactly as strict as it is.
+`POST /service-jobs`'s intake contract gained one additive, discriminated
+field, `customer: { kind: 'existing'; customerId } | { kind: 'new' }`
+(`src/services/serviceJobCreation.ts`, imported into the Worker the same way
+`ServiceJobIntakePayload` already was). When `kind` is `'new'`, the
+allocator's existing atomic `:commit` (already writing the intake key,
+Service Job, and two sequence documents) gains exactly one more create-only
+`customers/{id}` write — succeeding or failing together with the rest, never
+a separate request. The new customer's id is a fresh `crypto.randomUUID()`
+generated per attempt, never the phone number, so two real customers sharing
+a phone number are never structurally forced onto one document
+(`DATABASE_SCHEMA.md`'s own "no hard uniqueness constraint on phone"). Its
+`brandIds` is always `[authenticated staff's own verified brand]`, derived
+server-side the same way `ServiceJob.brandId` already is — never
+client-supplied. The existing-customer path is unchanged: omitting
+`customer` (every pre-F5d-65 caller) still writes no customer document and
+still exactly four writes.
+
+**Duplicate prevention remains staff-driven UX, not a database constraint** —
+no server-side phone-uniqueness check was added, matching the
+already-decided `DATABASE_SCHEMA.md` rule. The "+ New Customer" action
+(`SearchNoResults.tsx`) is reachable only from a dead-end search (no
+result), in every backend mode now, replacing F5d-49B's mode-conditional
+hide (that hide existed only because the action was unwired everywhere; it
+is wired now). A new inline `NewCustomerForm` (name + phone required, email
+optional) holds the entry as pending client-side state only
+(`IntakeCustomer`/`NewCustomerSummaryCard`) — nothing is written until the
+existing single Save & Print action runs.
+
+**Product registration adds no new entity.** Per Decision #037 (no
+`product_instances` collection exists on any backend), "Register New
+Product" collects intake fields for the new Service Job only — the same
+free-text `product`/`productCategory`/`serialNumber` fields every existing
+derived `RegisteredProduct` already flattens into. `ProductSelection.tsx`'s
+previously inert notice is replaced by `RegisterProductForm`, which reuses
+the existing, already brand-neutral Product Master catalog
+(`useProductMaster`) for brand/product/model selection with a free-text
+fallback (`BUSINESS_RULES.md`'s `model_other` escape hatch), plus an
+optional serial number. A blank serial remains accepted (intake proceeds;
+repeat-visit recognition is forfeited, an already-documented limitation, not
+a new one).
+
+**Warranty has no silent or default path (blocker fix, P1 #1).** An
+independent review found the first cut discarded the staff member's actual
+warranty choice: the radio selection lived in its own component state while
+`buildManualRegisteredProduct()` read a separate `ManualProductEntry`
+field that `createEmptyManualProductEntry()` hardcoded to
+`'out_of_warranty'` — so choosing "in warranty" still produced
+`warranty: false` on the durable Service Job, and the UI copy additionally
+told staff to record `out_of_warranty` whenever the real status was unknown.
+Both are removed. `ManualProductEntry` no longer carries a warranty field at
+all, so no default exists to fall back to; warranty is a required, explicitly
+passed argument, making the two values structurally incapable of diverging.
+The radio group starts fully unselected, submission is blocked until staff
+pick one of the two known states, and the "unknown → out_of_warranty" copy is
+replaced with an instruction to verify the unit's real warranty status first.
+The `WarrantyStatus` domain union is unchanged (`'in_warranty' |
+'out_of_warranty'`) — "not yet chosen" is form state only, never a persisted
+third value.
+
+**Manual registration no longer uses phone as customer identity (blocker
+fix, P1 #2).** The same review found the first cut decided whether a serial
+"belonged to" the selected customer by comparing normalized phone numbers,
+then either auto-selected that customer's product or declared a
+cross-customer conflict. That inference is invalid: `DATABASE_SCHEMA.md`
+explicitly permits two distinct customers to share one phone number, and the
+historical Service Job model has no stable customer foreign key (Decision
+#039 treats the phone join as an accepted legacy convenience, never an
+identity proof). Phone-based ownership inference is removed entirely — the
+phone is no longer passed into this path at all.
+`checkSerialAgainstServiceHistory()` now makes no ownership claim: any
+non-blank serial that already appears anywhere in the loaded, brand-scoped
+Service Job history **blocks** manual registration with Thai guidance to
+verify and select the existing customer/product through the normal search
+path. Two customers sharing a phone cannot bypass this, and a blank or
+unresolvable historical phone is not an ownership exception. Historical
+serial ownership cannot currently be proven reliably from phone-based
+Service Job history, and this code no longer pretends otherwise.
+
+**Known limitation — P2 hardening, not solved here.** Serial-conflict
+checking is client-side and advisory: it sees only the Service Jobs already
+loaded in the authenticated staff member's own brand-scoped cache, so it is
+race-prone and not an enforcement boundary. Server-side enforcement was
+deliberately **not** implemented, because the only shapes available today
+would be either a phone-based ownership rule (rejected above as invalid) or
+schema expansion introducing a real customer/product-instance relation (out
+of F5d-65's approved scope). This remains an explicit production
+consideration for a later, separately approved phase; Worker validation was
+not relaxed to accommodate it.
+
+**One narrowly-scoped pre-existing constraint was loosened.** The Worker's
+`parseServiceJobIntake()` required a non-blank `serialNumber` for every
+Service Job, existing customer or not — never previously exercised as a
+real limit because every derived `RegisteredProduct` already guarantees a
+real serial. Manual product registration's approved "blank serial allowed"
+behavior needed this widened to optional; every existing caller already
+sends a real serial and is unaffected.
+
+Validation after the blocker fix: Worker TypeScript typecheck reproduces
+only the pre-existing `ImportMeta.env` baseline (unrelated files, unchanged);
+the full Worker test suite (21 files, 371 checks) passes, re-confirming the
+legacy `{ intake }` body, the four-write existing-customer commit, and the
+five-write new-customer commit; the complete non-emulator application suite
+(29 files) passes 291/291; the Firestore Rules emulator suite passes 11/11
+unchanged (`firestore.rules` itself was not touched); `tsc -b`, `eslint .`,
+`vite build`, and Prettier (scoped to changed files only) are clean;
+`git diff --check` reports only pre-existing LF/CRLF normalization notices,
+no real whitespace errors.
+
+F5d-65 is **source only and not production complete**. It has not been
+committed, tagged, pushed, or deployed, and no Firestore/Rules/IAM mutation
+or production write occurred. Independent re-review is still required before
+commit. Production remains F5d-64. Public Tracking remains unavailable.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Any future repository or production-data expansion gets the same documentation, review, and approval treatment as the delivered Firestore repositories, not a silent bulk migration.

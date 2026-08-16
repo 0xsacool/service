@@ -2,6 +2,7 @@ import type { ServiceJob } from '../types';
 import { useRef } from 'react';
 import { repositories } from '../repositories/repositoryProvider';
 import {
+  buildCustomerIntakeSelector,
   buildNewDurableServiceJob,
   buildServiceJobIntakePayload,
   performServiceJobCreate,
@@ -52,6 +53,7 @@ export function useCreateServiceJob(): UseCreateServiceJobResult {
         const created = await repositories.serviceJobs.create({
           idempotencyKey: attemptKey.current,
           intake: buildServiceJobIntakePayload(input),
+          customer: buildCustomerIntakeSelector(input.customer),
         });
         attemptKey.current = null;
         return created;

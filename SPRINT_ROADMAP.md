@@ -185,6 +185,48 @@ safe browser surface had an existing staff session.
 
 ---
 
+### F5d-65 — Atomic new-customer + product registration *(source only, not deployed)*
+
+**Objective:** Close the gap the New Service Job flow has had since the
+Firestore cutover — Universal Search could find an existing customer, but
+staff had no way to register a first-time walk-in customer or a product
+with no prior visit history, so intake was blocked for exactly that case.
+
+**Delivered (source only):** New-customer creation is Worker-only and
+atomic with Service Job creation — one more create-only `customers/{id}`
+write added to the existing allocator's atomic `:commit`, using a fresh
+opaque id (never the phone number) and staff-derived `brandIds`; no
+`firestore.rules` change. The "+ New Customer" action is wired end-to-end in
+every backend mode; entry is held as pending client state until the single
+existing Save & Print write. "Register New Product" collects intake fields
+only (Decision #037 — no `product_instances` entity), reusing the existing
+Product Master catalog. `WarrantyStatus` remains unchanged as a domain type.
+
+**Two P1 defects found by independent review and fixed here:** warranty is no
+longer defaulted or discarded — the staff member's explicit radio selection is
+the value used, the control starts unselected, submission is blocked until one
+of the two known states is chosen, and the "unknown → out_of_warranty" copy is
+gone. Phone is no longer used as customer identity — manual registration makes
+no ownership claim, and any already-known non-blank serial blocks manual
+registration rather than inferring ownership from a phone number that
+`DATABASE_SCHEMA.md` explicitly allows two customers to share. Blank serials
+remain allowed.
+
+**Known limitation (P2, documented not solved):** serial-conflict checking is
+client-side and advisory; server-side enforcement needs either a rejected
+phone-based ownership rule or schema expansion, both outside this scope.
+
+Full validation (Worker + application test suites, Firestore Rules emulator
+suite, build, lint, format) passes — see `PROJECT_STATE.md`'s F5d-65 entry
+for the complete record.
+
+**Not yet done:** independent re-review, commit, deployment. F5d-65 is source
+only and not production complete. Production remains F5d-64.
+
+**Estimated Scope:** M
+
+---
+
 ### Sprint F3/F4 repository expansion *(delivered through later F-series work)*
 
 Customer, Service Job, Search, Registered Product, attachment, and related

@@ -515,7 +515,10 @@ for (const scenario of commitErrorScenarios) {
             'Content-Type': 'application/json',
             'Idempotency-Key': '33333333-3333-4333-8333-333333333333',
           },
-          body: JSON.stringify({ intake }),
+          body: JSON.stringify({
+            intake,
+            customer: { kind: 'existing', customerId: 'test-customer' },
+          }),
         }),
         env,
         {} as ExecutionContext

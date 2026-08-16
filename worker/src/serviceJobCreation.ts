@@ -1,4 +1,7 @@
-import type { ServiceJobIntakePayload } from '../../src/services/serviceJobCreation.ts';
+import type {
+  CustomerIntakeSelector,
+  ServiceJobIntakePayload,
+} from '../../src/services/serviceJobCreation.ts';
 import { bangkokIsoDate, bangkokNumberingYear } from '../../src/services/bangkokTime.ts';
 import type { ServiceJob } from '../../src/types/serviceJob.ts';
 import type { BrandId } from './brands.ts';
@@ -168,7 +171,15 @@ export function parseServiceJobIntake(value: unknown): ServiceJobIntakePayload |
   const customerEmail = string(intake.customerEmail, 320, false);
   const product = string(intake.product, 300);
   const productCategory = string(intake.productCategory, 100);
-  const serialNumber = string(intake.serialNumber, 150);
+  // F5d-65 — was required (matching every existing derived RegisteredProduct,
+  // which always has a real serial — Terra P2 already excludes blank ones
+  // from ever being selectable). Manual "Register New Product" registration
+  // (approved scope item #7) explicitly allows an unknown/absent serial —
+  // it just forfeits repeat-visit recognition, a pre-existing, documented
+  // limitation (BUSINESS_RULES.md), not a new risk. Widened to optional so
+  // that path can actually submit; every existing caller already sends a
+  // real serial and is unaffected.
+  const serialNumber = string(intake.serialNumber, 150, false);
   const problemDescription = string(intake.problemDescription, 4000, false);
   const problemChips = strings(intake.problemChips, 20, 160);
   const accessories = strings(intake.accessories, 50, 160);
@@ -210,6 +221,73 @@ export function parseServiceJobIntake(value: unknown): ServiceJobIntakePayload |
   };
 }
 
+// F5d-65 — the customer branch is a small, separate discriminator alongside
+// `intake` rather than extra fields folded into it: `intake.customerName/
+// customerPhone/customerEmail` already carry the name/phone/email a new
+// customer needs (buildServiceJobIntakePayload() populates them identically
+// for an existing or a brand-new customer), so duplicating those into a
+// second nested object would only invite the two copies to disagree. This
+// parser's only job is to fail closed on a malformed or ambiguous shape —
+// e.g. a 'new' branch that also smuggles a customerId, or an 'existing'
+// branch missing one — before any Firestore call is attempted.
+function parseCustomerIntakeSelector(value: unknown): CustomerIntakeSelector | null {
+  const body = record(value);
+  if (!body || typeof body.kind !== 'string') return null;
+  if (body.kind === 'new') {
+    return Object.keys(body).length === 1 ? { kind: 'new' } : null;
+  }
+  if (body.kind === 'existing') {
+    if (Object.keys(body).length !== 2 || !Object.hasOwn(body, 'customerId')) return null;
+    const customerId = string(body.customerId, 200);
+    return customerId ? { kind: 'existing', customerId } : null;
+  }
+  return null;
+}
+
+export interface ServiceJobCreateRequest {
+  intake: ServiceJobIntakePayload;
+  customer: CustomerIntakeSelector;
+}
+
+// Deployment reality this Worker must tolerate: Worker and frontend source
+// deploy through separate, sequential gates in this project (every prior F5d
+// rollout — e.g. Gate 7's Worker deploy landing before F5d-61/62's frontend
+// deploy — confirms Worker-ahead-of-frontend windows are real, not
+// hypothetical), so a newly deployed Worker must keep accepting the exact
+// legacy body a still-live older frontend sends. The legacy shape is exactly
+// `{ intake }` — one key, no `customer` at all — and is treated identically
+// to an explicit `{ kind: 'existing', customerId: '' }`: no customer write,
+// the unchanged four-write commit. Only the new two-key `{ intake, customer }`
+// shape may declare a 'new' customer; anything else (0 keys, 3+ keys, wrong
+// key names) is rejected exactly as before.
+const LEGACY_EXISTING_CUSTOMER: CustomerIntakeSelector = {
+  kind: 'existing',
+  customerId: '',
+};
+
+// The full POST /service-jobs body parser. Delegates the `intake`
+// sub-object to parseServiceJobIntake() unchanged (by re-wrapping it in the
+// single-key shape that function already expects) rather than duplicating
+// its bounds checks here — one allowlist per field, not two.
+export function parseServiceJobCreateRequest(value: unknown): ServiceJobCreateRequest | null {
+  const body = record(value);
+  if (!body || !Object.hasOwn(body, 'intake')) return null;
+  const keys = Object.keys(body);
+
+  if (keys.length === 1) {
+    const intake = parseServiceJobIntake({ intake: body.intake });
+    return intake ? { intake, customer: LEGACY_EXISTING_CUSTOMER } : null;
+  }
+
+  if (keys.length === 2 && Object.hasOwn(body, 'customer')) {
+    const intake = parseServiceJobIntake({ intake: body.intake });
+    const customer = parseCustomerIntakeSelector(body.customer);
+    return intake && customer ? { intake, customer } : null;
+  }
+
+  return null;
+}
+
 export function isValidIdempotencyKey(value: string | null): value is string {
   return (
     value !== null &&
@@ -220,6 +298,23 @@ export function isValidIdempotencyKey(value: string | null): value is string {
 export interface AllocationTransaction {
   readonly id: string;
 }
+
+// F5d-65 — the additional document the allocator's atomic commit writes only
+// when `customer.kind === 'new'`. `id` is allocated fresh per attempt (see
+// allocateServiceJob() below), never derived from `phone` — a phone-keyed
+// document ID would force two real people who happen to share a phone number
+// onto one Customer document, contradicting BUSINESS_RULES.md's own "no hard
+// uniqueness constraint on phone" rule. `brandId` is always the authenticated
+// staff's own verified brand (never client-supplied) — see
+// authorizeStaffCreation()/index.ts.
+export interface NewCustomerAllocation {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  brandId: BrandId;
+}
+
 export interface ServiceJobCreationDataAccess {
   beginServiceJobTransaction(): Promise<AllocationTransaction>;
   getIntakeKey(transaction: AllocationTransaction, key: string): Promise<string | null>;
@@ -242,6 +337,12 @@ export interface ServiceJobCreationDataAccess {
       trackingSequence: number;
       serviceRequestSequence: number;
       year: number;
+      // F5d-65 — null for an existing customer (no customer write at all,
+      // unchanged four-write commit); set only for a brand-new customer, in
+      // which case the implementation must add exactly one create-only
+      // `customers/{id}` write to the same atomic :commit as the Service
+      // Job, intake key, and sequence writes — never a separate request.
+      newCustomer: NewCustomerAllocation | null;
     }
   ): Promise<void>;
 }
@@ -251,10 +352,19 @@ export async function allocateServiceJob(input: {
   brandId: BrandId;
   key: string;
   intake: ServiceJobIntakePayload;
+  // F5d-65 — optional and defaults to 'existing' with no id, so every
+  // pre-existing caller (offline tests included) that never passed this
+  // parameter keeps its exact prior behavior: no customer write, four-write
+  // commit, unchanged. Only an explicit { kind: 'new' } adds the fifth write.
+  customer?: CustomerIntakeSelector;
   dataAccess: ServiceJobCreationDataAccess;
   now?: () => Date;
 }): Promise<ServiceJob> {
   const now = input.now ?? (() => new Date());
+  const customer: CustomerIntakeSelector = input.customer ?? {
+    kind: 'existing',
+    customerId: '',
+  };
   for (let attempt = 0; attempt < MAX_TRANSACTION_RETRIES; attempt += 1) {
     const transaction = await input.dataAccess.beginServiceJobTransaction();
     const existingId = await input.dataAccess.getIntakeKey(transaction, input.key);
@@ -263,6 +373,24 @@ export async function allocateServiceJob(input: {
       if (!existing) throw new Error('Idempotency record has no canonical Service Job');
       return existing;
     }
+    // A fresh opaque id is generated on every attempt, never reused across a
+    // retry — safe because a TransactionConflictError only ever happens when
+    // the whole atomic :commit (Service Job + intake key + sequences +
+    // customer) was rejected in full: Firestore's :commit is all-or-nothing,
+    // so a rejected attempt has written nothing anywhere, and the intake-key
+    // check above already guarantees a genuinely *successful* prior attempt
+    // is returned as-is instead of ever reaching this line again — so this
+    // can never allocate two different ids for the same logical customer.
+    const newCustomer: NewCustomerAllocation | null =
+      customer.kind === 'new'
+        ? {
+            id: crypto.randomUUID(),
+            name: input.intake.customerName,
+            phone: input.intake.customerPhone,
+            email: input.intake.customerEmail,
+            brandId: input.brandId,
+          }
+        : null;
     const current = now();
     const year = bangkokNumberingYear(current);
     const trackingStart = nextSequence(
@@ -304,6 +432,7 @@ export async function allocateServiceJob(input: {
         trackingSequence,
         serviceRequestSequence,
         year,
+        newCustomer,
       });
       return job;
     } catch (error) {
