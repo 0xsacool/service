@@ -2657,9 +2657,9 @@ and version
 Rollback remains a separately approved production mutation. The audit's P2/P3
 items remain intentionally deferred.
 
-## F5d-65 — Atomic new-customer + product registration (source only, not deployed)
+## F5d-65/F5d-65A — Atomic new-customer + product registration (Production, 2026-08-17)
 
-F5d-65 Phase 2 implements, in source only, the workflow its own Phase 1
+F5d-65 Phase 2 implements the workflow its own Phase 1
 read-only audit identified as missing: staff can now create a new customer
 and register a new customer product when Universal Search finds no match,
 and continue directly into New Service Job without a separate durable write
@@ -2777,10 +2777,53 @@ unchanged (`firestore.rules` itself was not touched); `tsc -b`, `eslint .`,
 `git diff --check` reports only pre-existing LF/CRLF normalization notices,
 no real whitespace errors.
 
-F5d-65 is **source only and not production complete**. It has not been
-committed, tagged, pushed, or deployed, and no Firestore/Rules/IAM mutation
-or production write occurred. Independent re-review is still required before
-commit. Production remains F5d-64. Public Tracking remains unavailable.
+F5d-65A Hosting deployment is live. The reviewed source commit
+`84c0668c00c2e1907357a60eb85381be67ef4e5c` (tag `f5d-65`) was deployed in
+exactly one separately approved, `--only hosting` attempt with zero retries,
+preceded by the already-completed F5d-65 Worker production rollout
+(`service-tech-files-worker` version `1da88d90-0131-4859-8e10-2c5546199971`,
+100% traffic). The live-channel release is
+`projects/luxace-service/sites/luxace-service/channels/live/releases/1786958174254000`
+(`DEPLOY`, `2026-08-17T09:16:14.254Z`) on finalized version
+`projects/luxace-service/sites/luxace-service/versions/7b540ddfdd52d38f`. The
+approved artifact has 21 user files, totals 1,138,590 bytes, and canonical
+aggregate SHA-256
+`713be03e2317ed73cb347e5bc732c4f78d8c149800728c9cdf8dc6090f444db2`; all 21/21
+live files were independently downloaded by filename (not discovered via
+`index.html` link-following, which would miss lazily-loaded chunks) and
+matched their approved byte size and SHA-256 exactly.
+
+`/`, `/login`, `/dashboard`, `/service-jobs`, and `/service-jobs/new` returned
+HTTP 200 with the approved SPA shell. Read-only browser smoke confirmed Login
+renders with Thai document language, the route-specific Thai title/heading,
+one main landmark, and the `FIRESTORE + WORKER` runtime label; an
+unauthenticated `/dashboard` visit redirected client-side to `/login`. No
+credentials were entered and no authenticated session was fabricated; neither
+StaffShell nor an authenticated Service Jobs list/detail view was exercised.
+
+Post-deploy Worker re-verification found the Worker unchanged at version
+`1da88d90-0131-4859-8e10-2c5546199971` with 100% traffic: `GET /health`
+returned 200, the Hosting-origin CORS preflight returned 204 with the exact
+approved `Access-Control-Allow-Origin` and both `Authorization` and
+`Idempotency-Key` allowed, a disallowed origin received no ACAO grant, and an
+unauthenticated `POST /service-jobs` returned 401. `firestore.rules`,
+`firestore.indexes.json`, `firebase.json`, and `.firebaserc` are
+byte-identical to the F5d-64 baseline — this rollout carried no
+infrastructure-config change. F5d-65A made zero Service Job, customer, or
+attachment writes and zero additional Worker, Firestore, Rules, Auth, IAM, or
+R2 mutations beyond the already-recorded F5d-65 Worker rollout.
+
+The retained Hosting rollback baseline is F5d-64 release
+`projects/769692662603/sites/luxace-service/channels/live/releases/1786857261574000`
+and version
+`projects/769692662603/sites/luxace-service/versions/fd13206179cf6474`. Any
+rollback is a separate production mutation requiring approval; per the
+established procedure, Hosting must roll back before any Worker rollback is
+considered, and the Worker must never be rolled back while F5d-65 Hosting is
+live. The known P2 limitation (client-side/advisory serial-conflict checking)
+remains explicitly accepted and unchanged for this rollout; no server-side
+enforcement or schema expansion was added. Production is now F5d-65. Public
+Tracking remains unavailable.
 
 ## Development Principles
 

@@ -363,6 +363,74 @@ config/` pattern) and must never be committed; this repository records
 - F5d-63B made zero Service Job writes, attachment mutations, Worker
   mutations, or Firestore/Auth/Rules/IAM/R2 mutations.
 
+## F5d-65 Worker and F5d-65A Hosting production evidence
+
+- `service-tech-files-worker` is live at F5d-65 version
+  `1da88d90-0131-4859-8e10-2c5546199971`, deployment message "F5d-65
+  production Worker rollout", 100% traffic (confirmed via `wrangler
+  deployments list`; not redeployed during this Hosting phase). The
+  retained Worker rollback baseline remains F5d-62 version
+  `06bc88e9-1437-4708-b68e-07f82caaf916`.
+- F5d-65A deployed the reviewed source commit
+  `84c0668c00c2e1907357a60eb85381be67ef4e5c` (tag `f5d-65`) to Firebase
+  Hosting in exactly one separately approved, `--only hosting` attempt with
+  zero retries, using the pre-existing local `dist` build with no rebuild
+  between the preflight report and the deploy command.
+- The live-channel release is
+  `projects/luxace-service/sites/luxace-service/channels/live/releases/1786958174254000`
+  (`DEPLOY`, `2026-08-17T09:16:14.254Z`) on finalized version
+  `projects/luxace-service/sites/luxace-service/versions/7b540ddfdd52d38f`.
+  The approved 21-file, 1,138,590-byte user artifact has canonical aggregate
+  SHA-256
+  `713be03e2317ed73cb347e5bc732c4f78d8c149800728c9cdf8dc6090f444db2`,
+  computed by resolving the `dist` root, asserting every file falls under
+  that root, stripping the root prefix, normalizing separators to `/`,
+  sorting ordinally, and hashing `sha256  path\n` lines with a final
+  trailing newline — the canonical method specified after F5d-62A's
+  `Path.GetRelativePath()` finding, run once in a single non-interactive
+  Node process.
+- Post-deploy independent verification downloaded all 21 approved filenames
+  directly from the live site by name (not discovered via `index.html`
+  link-following, which would have missed lazily-loaded chunks) and matched
+  every file's byte size and SHA-256 to the approved manifest; the
+  recomputed live aggregate matched
+  `713be03e2317ed73cb347e5bc732c4f78d8c149800728c9cdf8dc6090f444db2`
+  exactly. `/`, `/login`, `/dashboard`, `/service-jobs`, and
+  `/service-jobs/new` all returned HTTP 200 with the approved SPA shell. The
+  live runtime remained `FIRESTORE + WORKER` with only the approved Worker
+  origin embedded, no `localhost`/`127.0.0.1` origin, and Public Tracking's
+  Worker URL absent.
+- Read-only browser smoke confirmed Login renders with Thai document
+  language (`lang="th"`), the route-specific Thai title/heading, one main
+  landmark, and the `FIRESTORE + WORKER` runtime label; an unauthenticated
+  `/dashboard` visit redirected client-side to `/login`. No credentials
+  were entered and no authenticated session was fabricated; neither
+  StaffShell nor an authenticated Service Jobs list/detail view was
+  exercised.
+- Post-deploy Worker re-verification found the Worker unchanged at version
+  `1da88d90-0131-4859-8e10-2c5546199971` with 100% traffic: `GET /health`
+  returned 200, the Hosting-origin CORS preflight returned 204 with
+  `Access-Control-Allow-Origin: https://luxace-service.web.app` and both
+  `Authorization`/`Idempotency-Key` allowed, a disallowed origin
+  (`https://evil.example.com`) received a 204 with no ACAO grant, and an
+  unauthenticated `POST /service-jobs` returned 401. F5d-65A made zero
+  Service Job, customer, attachment, or Firestore writes and zero Worker,
+  Rules, Auth, IAM, or R2 mutations.
+- `firestore.rules`, `firestore.indexes.json`, `firebase.json`, and
+  `.firebaserc` are byte-identical to the F5d-64 baseline (`git diff --stat
+  f5d-64 HEAD` reports no change to any of the four); this rollout carried
+  no infrastructure-config change.
+- The retained Hosting rollback baseline is F5d-64 release
+  `projects/769692662603/sites/luxace-service/channels/live/releases/1786857261574000`
+  and version
+  `projects/769692662603/sites/luxace-service/versions/fd13206179cf6474`.
+  Any rollback is a separate production mutation requiring approval; per
+  established procedure, roll back Hosting first, verify the old frontend,
+  and only then consider a Worker rollback — never roll the Worker back
+  while F5d-65 Hosting is live. The accepted P2 limitation (client-side/
+  advisory serial-conflict checking) remains unchanged; no server-side
+  enforcement or schema expansion accompanied this rollout.
+
 ## Deferred test improvement
 
 The Rules emulator suite covers legacy updates and hash immutability. A future

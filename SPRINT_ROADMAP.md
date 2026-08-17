@@ -185,7 +185,7 @@ safe browser surface had an existing staff session.
 
 ---
 
-### F5d-65 — Atomic new-customer + product registration *(source only, not deployed)*
+### F5d-65 — Atomic new-customer + product registration *(Production, 2026-08-17)*
 
 **Objective:** Close the gap the New Service Job flow has had since the
 Firestore cutover — Universal Search could find an existing customer, but
@@ -220,8 +220,12 @@ Full validation (Worker + application test suites, Firestore Rules emulator
 suite, build, lint, format) passes — see `PROJECT_STATE.md`'s F5d-65 entry
 for the complete record.
 
-**Not yet done:** independent re-review, commit, deployment. F5d-65 is source
-only and not production complete. Production remains F5d-64.
+**Resolved by F5d-65A:** independent re-review, commit, and deployment are
+complete. F5d-65 is live in production — Hosting release `1786958174254000`,
+version `7b540ddfdd52d38f`, 21/21 files verified byte-for-byte against the
+approved manifest, Worker unchanged at `1da88d90-0131-4859-8e10-2c5546199971`
+(100% traffic). See `PROJECT_STATE.md`'s F5d-65/F5d-65A entry for the full
+record. Production is F5d-65.
 
 **Estimated Scope:** M
 
