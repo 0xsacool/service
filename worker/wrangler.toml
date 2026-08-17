@@ -22,7 +22,7 @@ bucket_name = "service-tech-attachments-prod"
 [vars]
 # Comma-separated list of origins allowed to call this Worker via fetch()
 # from a browser. Local Vite dev server default; adjust per environment.
-ALLOWED_ORIGINS = "http://localhost:5173"
+ALLOWED_ORIGINS = "http://localhost:5173,https://luxace-service.web.app"
 
 # F5d-5: the Firestore project ID is not a secret — mirrors
 # VITE_FIREBASE_PROJECT_ID already being public in .env.example. The
