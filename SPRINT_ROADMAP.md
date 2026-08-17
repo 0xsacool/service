@@ -279,6 +279,54 @@ rollout.
 
 ---
 
+### F5d-67/F5d-67A — Service Job intake photo hotfix *(Production, 2026-08-17)*
+
+**Objective:** Fix a production bug where New Service Job evidence photos
+failed to submit — root-caused (Phase 1, read-only) to real camera photos
+having zero client-side compression and blowing past the Worker's existing
+per-photo/aggregate size caps, rejected before the Service Job's own
+creation transaction ever began (no partial-job or duplicate-job risk).
+
+**Delivered:** client-side image resize/compression (`imageEvidenceProcessing.ts`)
+— dimension-first, quality-second JPEG re-encoding through six tiers,
+processed through a bounded-concurrency pool (2 at a time, not unbounded).
+Three layered ceilings with real margin under the unchanged Worker caps
+(300 KiB/photo, 700 KiB aggregate, 900 KiB intake): 260 KiB absolute
+per-photo, a 600 KiB compression *target* aggregate (200 KiB/photo across
+the UI's recommended 3-photo checklist, with a genuine 40 KiB headroom —
+tightened from an initial ~1-byte margin found at Phase 3 review), a 640 KiB
+hard rejection ceiling, and a new 860 KiB whole-request UTF-8 byte guard.
+Specific safe Thai error messages for known local conditions; the generic
+unknown-error fallback is untouched. A second defect — an in-flight
+add/remove race that could silently revert a photo removal — was found at
+Phase 3 review and closed by blocking removal outright while processing.
+
+**Production rollout was Hosting-only** — Worker and Firestore Rules
+untouched throughout (zero diff, reconfirmed at every gate). Source
+checkpoint `ebb124637f24d693af2699b03a34cb7f6d9e08e9` (tag `f5d-67`), 7
+files. The Hosting build was built exactly once and frozen (matching
+F5d-66's non-reproducible-build finding): 20 files, 1,139,290 bytes,
+aggregate SHA-256
+`de9368a2c5fd0e24b5a1d8d33b6d98babdd691a7a172f4291e75943a99f70a9c`, deployed
+to release `1786984404257000` / version `234caccc3034c98f`, all 20/20 files
+verified byte-exact live. **Both automated verification and the user's own
+real-camera-photo manual test on production passed** — a Service Job can now
+be created with a real evidence photo, preview renders correctly, submit
+succeeds. See `PROJECT_STATE.md`'s F5d-67/F5d-67A entry and
+`PRODUCTION_ROLLBACK_RUNBOOK.md` for the complete evidence record. Production
+is now F5d-67. The retained Hosting rollback baseline is F5d-66 release
+`1786976550427000` / version `b0a3907899a67afe`.
+
+**Known next bug, tracked as F5d-68 (not investigated or fixed here):**
+Service Request print/PDF spills to 2 physical pages — application shell UI
+above the document pushes the actual Service Request content past page 1,
+while the footer still declares "page 1 of 1." See `PROJECT_STATE.md`'s
+Current Limitations.
+
+**Estimated Scope:** M
+
+---
+
 ### Sprint F3/F4 repository expansion *(delivered through later F-series work)*
 
 Customer, Service Job, Search, Registered Product, attachment, and related

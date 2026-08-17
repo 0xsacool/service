@@ -513,6 +513,78 @@ config/` pattern) and must never be committed; this repository records
   back while newer Hosting still performs direct-client `serviceReports`
   reads/updates that depend on the new allowlist.
 
+## F5d-67/F5d-67A Service Job intake photo hotfix — Hosting-only production evidence
+
+- **Scope: Hosting-only.** Worker (`a3d5afd8-fb9a-42da-b589-3f77cb1c92ea`,
+  100% traffic) and Firestore Rules (ruleset
+  `075129c8-6dc4-46ef-9d0e-93174c8e0409`) were confirmed byte/config-unchanged
+  before, during, and after this rollout — `worker/`, `firestore.rules`,
+  `firestore.indexes.json`, `firebase.json`, and `.firebaserc` all zero diff
+  from the `f5d-66b` baseline. No Worker or Rules deployment occurred as part
+  of F5d-67.
+- **Root cause (confirmed):** real evidence photos during New Service Job
+  intake are embedded as raw base64 data URLs in the same atomic
+  `POST /service-jobs` request (no separate attachment/R2 upload step exists
+  for them), with zero client-side compression before F5d-67 — any real
+  camera photo exceeded the Worker's `MAX_PHOTO_DATA_URL_BYTES` (300 KiB) and
+  was rejected at `400` before the allocator transaction began. Structurally
+  proven no partial Service Job or duplicate-job risk: parse/validation
+  strictly precedes the Firestore write in `worker/src/index.ts`.
+- **Fix:** client-side image resize/compression
+  (`src/services/imageEvidenceProcessing.ts`), bounded to 2 concurrent
+  decode/compress operations. Layered ceilings, all with real margin under
+  the unchanged Worker caps (300 KiB/photo, 700 KiB aggregate, 900 KiB
+  intake): 260 KiB absolute per-photo, a 600 KiB compression target
+  (200 KiB/photo across the 3-photo recommended workflow, 40 KiB headroom —
+  widened from an initial ~1-byte margin found and closed at Phase 3
+  review), a 640 KiB hard aggregate rejection ceiling (unchanged), and a new
+  860 KiB whole-request UTF-8 byte guard. A second defect (an in-flight
+  add/remove race that could silently revert a photo removal) was also found
+  at Phase 3 review and closed before source freeze.
+- **Source checkpoint:** commit `ebb124637f24d693af2699b03a34cb7f6d9e08e9`
+  (tag `f5d-67`), exactly 7 files changed from `f5d-66b`. Validation: 43 new
+  F5d-67 tests, full non-emulator application suite 358/358, `tsc -b`,
+  `eslint`, `git diff --check` all clean.
+- **Frozen Hosting artifact.** Matching F5d-66's established policy (Vite/
+  Rolldown builds are not byte-reproducible across separate invocations),
+  the artifact was built exactly once and never rebuilt before deploy: 20
+  user files, 1,139,290 bytes, canonical aggregate SHA-256
+  `de9368a2c5fd0e24b5a1d8d33b6d98babdd691a7a172f4291e75943a99f70a9c`.
+- **Deployment.** `firebase deploy --only hosting --project luxace-service`
+  published the frozen artifact in exactly one attempt to release
+  `sites/luxace-service/channels/live/releases/1786984404257000`
+  (`2026-08-17T16:33:24.257Z`) on finalized version
+  `sites/luxace-service/versions/234caccc3034c98f`. All 20 approved files
+  were independently fetched by exact filename from live Hosting and matched
+  byte size and SHA-256 exactly; the aggregate recomputed from the
+  live-downloaded bytes matched `de9368a2...` exactly. Live `index.html`
+  references the new `assets/index-hCCr629L.js` bundle.
+- **Postdeploy verification passed** on both automated and real-world
+  checks. Automated: `/`, `/login`, `/dashboard`, `/service-jobs`,
+  `/service-jobs/new` all 200; unauthenticated `/service-jobs/new` redirected
+  client-side to `/login` with zero console errors; live runtime embedded
+  only the approved Worker origin and `luxace-service`, Public Tracking's
+  Worker URL still absent; Worker and Rules reconfirmed unchanged
+  post-deploy. **Manual: the user independently verified on live production**
+  that a Service Job can be created with a real evidence photo, the
+  processed-image preview renders, submission succeeds, and the prior
+  oversized-photo failure no longer reproduces — the only production Service
+  Job activity associated with this rollout; zero synthetic/durable writes
+  occurred during any automated verification step.
+- **The retained Hosting rollback baseline is F5d-66** release
+  `sites/luxace-service/channels/live/releases/1786976550427000`, version
+  `sites/luxace-service/versions/b0a3907899a67afe`, confirmed still
+  retrievable (`FINALIZED`) after this deploy. Any rollback is a separate
+  production mutation requiring approval; since this rollout touched Hosting
+  only, a rollback (if ever needed) requires no corresponding Worker/Rules
+  rollback.
+- **Known next bug, tracked as F5d-68, deliberately not investigated or
+  fixed here:** Service Request print/PDF spills to 2 physical pages —
+  application shell UI above the document (Create Service Job page heading,
+  success card/actions) pushes the actual Service Request content past page
+  1, with evidence photos/date/signature spilling to page 2, while the
+  document's own footer still declares "page 1 of 1."
+
 ## Deferred test improvement
 
 The Rules emulator suite covers legacy updates and hash immutability. A future

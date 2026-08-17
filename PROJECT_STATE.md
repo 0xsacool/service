@@ -194,6 +194,7 @@ Grouped by what shipped, not by exact sprint label (many sprints predate a forma
 - **Public Tracking is unavailable in production.** Its Worker binding,
   issuance flow, and fail-closed rate-limit scope remain separately gated.
 - **Limited app test coverage** — Service Job retention-anchor regression tests run through Vite and Node’s built-in test runner; broader application test coverage remains to be established.
+- **Known bug, tracked as F5d-68 (not yet investigated or fixed): Service Request print/PDF spills to 2 physical pages.** Print output includes non-document application UI above the Service Request (the Create Service Job page heading, the success card/actions, application shell/runtime UI), so the actual Service Request begins partway down page 1 and the evidence-photos/date/signature area spills onto page 2 — while the document's own footer still declares "page 1 of 1." See F5d-67's entry below for the reproduction evidence this was observed alongside.
 
 ## F5d-26 Auth + Data Access Integration Readiness (source/emulator only)
 
@@ -2964,6 +2965,130 @@ version `b0a3907899a67afe`. Rollback of any single layer, if ever separately
 approved, follows Hosting first, then Rules, then Worker last — matching the
 established precedent that the user-facing layer should stop depending on new
 capability before the layers underneath it are touched.
+
+## F5d-67/F5d-67A — Service Job intake photo hotfix (Production, 2026-08-17)
+
+**Root cause (confirmed, Phase 1 read-only investigation).** Real evidence
+photos added during New Service Job intake failed to submit in production
+with a generic "create job failed" message. There is no separate
+attachment-upload step for these photos — despite the architecture's
+existing Worker/R2 `workerAttachmentsRepository` pipeline, intake photos
+have embedded as raw base64 data URLs directly inside the same atomic
+`POST /service-jobs` request since F5d-33/34, with zero client-side
+compression, resizing, or size validation
+(`PhotoEvidenceSection.tsx`'s prior `readFilesAsPhotos()` used a bare
+`FileReader.readAsDataURL()`). Any real, uncompressed phone-camera photo
+(typically 1–8 MB) produces a base64 string far larger than the Worker's
+`MAX_PHOTO_DATA_URL_BYTES` (300 KiB), so `parseServiceJobIntake()` rejected
+the whole request with `400` **before** the allocator transaction ever
+began — proven structurally impossible to produce a partial Service Job
+this way (parse/validate strictly precedes the Firestore write in
+`worker/src/index.ts`'s `handleServiceJobCreate`), and no duplicate-job risk
+exists since the F5d-32 idempotency key is only consumed once the
+transaction actually starts. This was a long-standing, deliberately
+documented gap since F5d-34 — not a regression introduced by F5d-65/F5d-66 —
+that had simply never been exercised with a real camera photo before.
+
+**Hotfix — client-side image compression/resize (frontend only, no Worker
+change).** `src/services/imageEvidenceProcessing.ts` (new) decodes each
+selected file, resizes it preserving aspect ratio (never enlarging a
+smaller source), and JPEG-encodes it through six dimension/quality tiers
+(1600px down to 480px, each tier trying moderate-to-good quality before
+ever moving to a smaller dimension) — preferring dimension reduction over
+destructive JPEG-quality crushing, so a normal camera photo lands at a
+readable quality without staff ever resizing anything by hand. Decoding is
+processed through a small **bounded-concurrency pool (2 at a time)**, not
+unbounded `Promise.all` — a full-resolution camera photo can use tens of MB
+per image while decoding, and doing up to 10 at once was never safe on
+mobile memory.
+
+Three layered client-side ceilings, each with real, documented margin under
+the Worker's authoritative caps (unchanged: 300 KiB/photo, 700 KiB
+aggregate, 900 KiB whole intake — see `worker/src/serviceJobCreation.ts`):
+- **Per-photo absolute ceiling: 260 KiB** (`MAX_PHOTO_DATA_URL_SAFE_BYTES`).
+- **Compression TARGET aggregate: 600 KiB** (`PHOTOS_TARGET_AGGREGATE_BYTES`)
+  — divided evenly across the UI's own recommended 3-photo checklist
+  (Product, Damaged Area, Serial Number) to exactly 200 KiB/photo, so the
+  documented normal workflow fits by construction with a genuine 40 KiB
+  headroom under the separate, unchanged 640 KiB hard rejection ceiling
+  (a first design landed only ~1 byte of margin here — found and closed at
+  Phase 3 review, before source freeze).
+- **Hard aggregate rejection ceiling: 640 KiB** (`MAX_PHOTOS_TOTAL_SAFE_BYTES`,
+  unchanged from the first design) and a **whole-request safety ceiling of
+  860 KiB** (`MAX_INTAKE_REQUEST_SAFE_BYTES`, new) measuring the exact same
+  `{ intake, customer }` JSON body the Worker receives via `TextEncoder`
+  (real UTF-8 bytes, not JS string length — Thai text is multi-byte), so
+  non-photo fields are covered too, not just photos.
+
+A defense-in-depth validation runs immediately before `NewServiceJob.tsx`
+builds the Service Job payload, rejecting locally (no network call) if
+either the photo checks or the whole-request check would fail. Specific,
+safe Thai messages exist for the known local conditions (image unreadable,
+image still too large after compression, total photos too large, too many
+photos, whole request too large); every other failure still falls through
+to the existing generic `serviceJobCreateErrorMessage`, which remains
+byte-for-byte unchanged and never leaks internal error detail.
+
+**A second defect was found and closed before source freeze (Phase 3
+audit → Phase 2R2).** The per-photo remove control was not disabled while
+an add operation was still processing; since `addFiles()` snapshots
+`photos` at the start of its async work and only calls `onChange()` once
+every file in the batch has settled, a removal that executed mid-processing
+was silently reverted when that stale snapshot was written back. Fixed by
+blocking removal outright for the whole processing window — both via the
+remove button's `disabled={isProcessing}` and a guard inside `removePhoto()`
+itself — rather than trying to reconcile a stale snapshot after the fact;
+no removal can be silently dropped or a removed photo made to reappear.
+
+**Validation.** 43 new F5d-67 tests (pure-logic coverage of the compression
+ladder, bounded-concurrency pool, whole-request byte measurement, and
+source-structure proofs of the remove-race fix, since this Node test
+environment has no jsdom/canvas); the full non-emulator application suite
+passed 358/358; `tsc -b`, `eslint`, and `git diff --check` all clean at
+every gate. `worker/`, `firestore.rules`, `firestore.indexes.json`,
+`firebase.json`, and `.firebaserc` are byte-identical to the F5d-66B
+baseline throughout — this is a Hosting-only change.
+
+**Immutable source checkpoint** is commit
+`ebb124637f24d693af2699b03a34cb7f6d9e08e9` (tag `f5d-67`), exactly 7 files
+changed from `f5d-66b`. The Vite/Rolldown build was independently proven
+**not** byte-reproducible across separate invocations of identical source
+(a finding carried over from F5d-66's Hosting artifact policy), so the
+`dist` built once during predeploy was frozen and never rebuilt before
+deploy: 20 user files, 1,139,290 bytes, canonical aggregate SHA-256
+`de9368a2c5fd0e24b5a1d8d33b6d98babdd691a7a172f4291e75943a99f70a9c`.
+
+**Hosting-only production rollout.** `firebase deploy --only hosting`
+published the frozen artifact in exactly one attempt to release
+`sites/luxace-service/channels/live/releases/1786984404257000`
+(`2026-08-17T16:33:24.257Z`) on finalized version
+`sites/luxace-service/versions/234caccc3034c98f`. All 20 approved files were
+independently fetched by exact filename from live Hosting and matched byte
+size and SHA-256 exactly; the aggregate recomputed from the live-downloaded
+bytes matched `de9368a2...` exactly. Live `index.html` references the new
+`assets/index-hCCr629L.js` bundle. `/`, `/login`, `/dashboard`,
+`/service-jobs`, `/service-jobs/new` all returned HTTP 200; unauthenticated
+`/service-jobs/new` redirected client-side to `/login`
+(`lang="th"`, zero console errors); live runtime embedded only the approved
+Worker origin and `luxace-service`, with Public Tracking's Worker URL still
+absent. The Worker (`a3d5afd8-fb9a-42da-b589-3f77cb1c92ea`, 100% traffic)
+and Firestore Rules (ruleset `075129c8-6dc4-46ef-9d0e-93174c8e0409`) were
+reconfirmed unchanged both before and after the Hosting deploy. The retained
+Hosting rollback baseline is F5d-66 release
+`sites/luxace-service/channels/live/releases/1786976550427000`, version
+`sites/luxace-service/versions/b0a3907899a67afe`.
+
+**Both automated and real-world manual verification passed.** Beyond the
+automated byte/route/runtime checks above, the user independently confirmed
+on live production: a Service Job can be created with a real evidence
+photo, the processed-image preview renders correctly, submission succeeds,
+and the prior oversized-photo failure no longer reproduces. Zero synthetic
+or durable production writes were made during any automated verification
+step; the user's own manual test is the only production Service Job
+activity associated with this rollout. Production is now F5d-67. The
+deferred print-layout bug (now tracked as F5d-68, see Current Limitations
+above) was observed during this work but deliberately not investigated or
+fixed as part of this hotfix.
 
 ## Development Principles
 
