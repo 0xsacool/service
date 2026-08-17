@@ -69,8 +69,22 @@ export function NewServiceJob() {
   // Fires once right after a save, once the print preview has actually
   // committed to the DOM — matches "Save & Print" being one action, with
   // "Print Again" below for any reprint after this first automatic one.
+  //
+  // F5d-68 Phase 3A — the classList.add() call here is a deterministic
+  // pre-print safety guarantee, not a duplicate of the lifecycle owner.
+  // ServiceRequestPrintPreview's own mount/cleanup effect remains
+  // responsible for service-request-print-mode's lifecycle for as long as
+  // the preview exists (React's child-before-parent passive-effect commit
+  // order already makes that effect run first, so this add() is normally a
+  // harmless idempotent no-op) — but a production print path should not
+  // have to rest on that ordering being load-bearing. Calling add() again
+  // here, synchronously and unconditionally right before window.print(),
+  // makes the very first automatic print correct regardless of effect
+  // ordering, with zero risk: classList.add() of an already-present token
+  // is a no-op.
   useEffect(() => {
     if (savedJob) {
+      document.body.classList.add('service-request-print-mode');
       successPreviewRef.current?.focus({ preventScroll: true });
       window.print();
     }
@@ -169,7 +183,7 @@ export function NewServiceJob() {
             : 'พร้อมบันทึก';
 
   return (
-    <PageContainer maxWidthClassName="max-w-3xl">
+    <PageContainer maxWidthClassName="max-w-3xl" className="new-service-job-page">
       <button
         onClick={() => navigate(ROUTES.serviceJobs)}
         className="flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium text-brand-600 transition-colors hover:bg-brand-50 animate-[fade-in_0.4s_ease_both]"
@@ -190,7 +204,7 @@ export function NewServiceJob() {
           ref={successPreviewRef}
           tabIndex={-1}
           aria-label={`สร้างงานบริการ ${savedJob.id} แล้ว`}
-          className="focus:outline-none"
+          className="service-request-print-host focus:outline-none"
         >
           <ServiceRequestPrintPreview
             job={savedJob}

@@ -641,4 +641,53 @@ body {
     break-after: avoid;
     page-break-after: avoid;
   }
+
+  /* F5d-68 — Service Request (New Service Job "Save & Print"). Mirrors the
+     service-report-print-mode / delivery-note-print-mode isolation pattern
+     above exactly: this print flow previously never activated any body
+     mode, so nothing hid the staff shell, page heading, or the on-screen
+     success card/action buttons around .print-area — the actual document
+     began partway down page 1 and its lower content spilled to page 2. */
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
+  body.service-request-print-mode {
+    background: #fff;
+    margin: 0;
+  }
+
+  .service-request-print-mode .staff-shell {
+    background: #fff !important;
+    min-height: 0 !important;
+  }
+
+  .service-request-print-mode .staff-shell__sidebar,
+  .service-request-print-mode .staff-shell__topbar,
+  .service-request-preview-toolbar {
+    display: none !important;
+  }
+
+  .service-request-print-mode .staff-shell__main {
+    padding-left: 0 !important;
+  }
+
+  .service-request-print-mode .staff-shell__content {
+    padding: 0 !important;
+  }
+
+  .service-request-print-mode .new-service-job-page > * {
+    display: none !important;
+  }
+
+  .service-request-print-mode .new-service-job-page > .service-request-print-host {
+    display: block !important;
+    margin-top: 0 !important;
+  }
+
+  .service-request-print-mode .print-area,
+  .service-request-print-mode .print-area * {
+    visibility: visible;
+  }
 }
