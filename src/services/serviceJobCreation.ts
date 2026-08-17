@@ -94,6 +94,26 @@ export function buildServiceJobIntakePayload(
   };
 }
 
+// F5d-67 Phase 2R — the Worker also enforces a whole-request ceiling
+// (worker/src/serviceJobCreation.ts's MAX_INTAKE_BYTES = 900 * 1024) on the
+// complete JSON body of POST /service-jobs, not just per-photo/aggregate
+// photo bytes — non-photo fields (customer name, problem description,
+// notes...) count too, and Thai text encodes to more than one UTF-8 byte
+// per character, so a JS string `.length` (UTF-16 code units) would
+// understate the real wire size. This measures the exact same request body
+// shape firestoreServiceJobRepository.ts's create() actually sends
+// (`{ intake, customer }`), using the same byte semantics the Worker's own
+// Content-Length/body-read checks use.
+export const MAX_INTAKE_REQUEST_SAFE_BYTES = 860 * 1024;
+
+export function estimateIntakeRequestBytes(
+  intake: ServiceJobIntakePayload,
+  customer: CustomerIntakeSelector
+): number {
+  const body = JSON.stringify({ intake, customer });
+  return new TextEncoder().encode(body).length;
+}
+
 export function buildServerOwnedServiceJob(
   brandId: BrandId,
   intake: ServiceJobIntakePayload,

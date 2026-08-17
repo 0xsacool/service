@@ -9,6 +9,12 @@ import type {
 } from '../../../types';
 import type { IntakeCustomer } from '../../../services/serviceJobCreation';
 import {
+  buildCustomerIntakeSelector,
+  buildServiceJobIntakePayload,
+  estimateIntakeRequestBytes,
+  MAX_INTAKE_REQUEST_SAFE_BYTES,
+} from '../../../services/serviceJobCreation';
+import {
   UniversalSearch,
   CustomerSummaryCard,
   ProductSelection,
@@ -28,7 +34,12 @@ import { ROUTES, createEmptyServiceIntake } from '../../../constants';
 import { isServiceIntakeComplete } from '../../../validation';
 import { useCreateServiceJob } from '../../../hooks/useCreateServiceJob';
 import { backendKind } from '../../../config/backend';
-import { serviceJobCreateErrorMessage } from '../serviceJobErrorMessages';
+import {
+  serviceJobCreateErrorMessage,
+  serviceJobIntakeTooLargeMessage,
+} from '../serviceJobErrorMessages';
+import { photoValidationErrorMessage } from '../photoEvidenceErrorMessages';
+import { validatePhotosForSubmission } from '../../../services/imageEvidenceProcessing';
 
 // F5d-49D (Terra P2 UX honesty follow-up): same rationale as SearchInput.tsx
 // — Firestore mode has no marketplace username/order number backing data
@@ -101,8 +112,34 @@ export function NewServiceJob() {
 
   const handleSaveAndPrint = async () => {
     if (isSaving || !selectedCustomer || !selectedProduct) return;
-    setIsSaving(true);
     setSaveError(null);
+    // Defense-in-depth only — every photo accepted by PhotoEvidenceSection
+    // should already satisfy this; this is the one gate that runs
+    // immediately before a Service Job payload is built, regardless of how
+    // a photo entered `intake.photos`. Never reaches the network on failure.
+    const photoValidation = validatePhotosForSubmission(intake.photos);
+    if (!photoValidation.ok) {
+      setSaveError(photoValidationErrorMessage(photoValidation.reason));
+      return;
+    }
+    // F5d-67 Phase 2R — the whole-request defense-in-depth check. Per-photo
+    // and aggregate photo checks above don't cover non-photo fields (Thai
+    // text encodes to more than one UTF-8 byte per character), and the
+    // Worker's MAX_INTAKE_BYTES bounds the complete serialized body, not
+    // just photos. Builds the exact same wire-shape payload
+    // useCreateServiceJob's Firestore path will build — cheap, pure,
+    // duplicated intentionally rather than restructuring the hook.
+    const intakePayload = buildServiceJobIntakePayload({
+      customer: selectedCustomer,
+      product: selectedProduct,
+      intake,
+    });
+    const customerSelector = buildCustomerIntakeSelector(selectedCustomer);
+    if (estimateIntakeRequestBytes(intakePayload, customerSelector) > MAX_INTAKE_REQUEST_SAFE_BYTES) {
+      setSaveError(serviceJobIntakeTooLargeMessage());
+      return;
+    }
+    setIsSaving(true);
     try {
       const job = await createServiceJob({
         customer: selectedCustomer,
