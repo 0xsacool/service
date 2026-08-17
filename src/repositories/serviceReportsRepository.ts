@@ -50,6 +50,10 @@ export const serviceReportsRepository: ServiceReportsRepository = {
       : undefined;
   },
 
+  // F5d-66 Phase 2B-R — the interface's optional idempotencyKey parameter
+  // is simply not declared here: Mock has no real network/idempotency
+  // concept, and TypeScript's structural function typing permits an
+  // implementation with fewer parameters than the interface it satisfies.
   async createDraft(serviceJobId, input: ServiceReportDraftInput = {}) {
     const serviceJob = requireServiceJob(serviceJobId);
     if (!serviceJob.brandId) {

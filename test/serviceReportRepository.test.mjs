@@ -332,17 +332,32 @@ test('missing Service Jobs fail safely before report creation', async () => {
   );
 });
 
-test('Firestore repository uses report IDs, service-job queries, and server timestamps', async () => {
+// F5d-66 — createDraft/finalize moved from direct client-side Firestore
+// writes to the privileged Worker (DECISIONS.md #036/#040): FR-{YYYY}-{SEQ}
+// allocation and the one-active-draft lock both require a transaction the
+// browser must never perform itself. updateDraft is unchanged — it remains
+// a direct-client Firestore transaction, now Rules-protected instead of
+// blocked by ServiceReportsSection's removed unavailable gate.
+test('Firestore repository delegates create/finalize to the Worker and keeps ordinary draft edits direct-client', async () => {
   const source = await readFile(
     new URL('../src/repositories/firestoreServiceReportsRepository.ts', import.meta.url),
     'utf8'
   );
   assert.match(source, /SERVICE_REPORTS_COLLECTION, reportId/);
   assert.match(source, /where\('serviceJobId', '==', serviceJobId\)/);
-  assert.match(source, /createdAt: serverTimestamp\(\)/);
+  assert.equal(source.includes('fetchWithWorkerToken'), true);
+  assert.equal(source.includes('/service-reports'), true);
+  assert.equal(source.includes('/finalize'), true);
+  assert.equal(source.includes('Idempotency-Key'), true);
+  // Sequence allocation, the active-draft query, and the direct
+  // creation/finalization writes are gone from this file — they now live
+  // only in worker/src/serviceReportCreation.ts and
+  // serviceReportFinalization.ts.
+  assert.equal(source.includes('numberSequences'), false);
+  assert.equal(source.includes('getDocs('), false);
+  assert.equal(source.includes('already has an active draft'), false);
+  // updateDraft alone remains a direct-client write.
   assert.match(source, /updatedAt: serverTimestamp\(\)/);
-  assert.match(source, /finalizedAt: serverTimestamp\(\)/);
-  assert.match(source, /numberSequences/);
-  assert.match(source, /getDocs\(/);
-  assert.match(source, /already has an active draft/);
+  assert.equal(source.includes('createdAt: serverTimestamp()'), false);
+  assert.equal(source.includes('finalizedAt: serverTimestamp()'), false);
 });

@@ -58,3 +58,22 @@ export async function getAuthorizedStaffProfile(
   const profile = await dataAccess.getStaffProfile(uid);
   return profile && profile.uid === uid && isCanonicalBrandId(profile.brandId) ? profile : null;
 }
+
+// F5d-66 — the Service Report create-draft/finalize routes already resolve
+// an authorized StaffProfile via authorizeStaffCreation() before this runs,
+// so re-verifying the staff profile the way isStaffAuthorizedForServiceJob()
+// does would be a redundant Firestore read. This checks only the other
+// half: does the given jobId genuinely belong to the caller's own brand.
+export async function isServiceJobInBrand(
+  jobId: string,
+  brandId: BrandId,
+  dataAccess: StaffAuthorizationDataAccess
+): Promise<boolean> {
+  const serviceJob = await dataAccess.getServiceJobAuthorization(jobId);
+  return Boolean(
+    serviceJob &&
+      serviceJob.id === jobId &&
+      isCanonicalBrandId(serviceJob.brandId) &&
+      serviceJob.brandId === brandId
+  );
+}

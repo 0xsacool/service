@@ -117,5 +117,43 @@ service cloud.firestore {
       allow get, list: if staffOwnsCustomer(resource.data);
       allow create, update, delete: if false;
     }
+
+    // F5d-66 / DECISIONS.md #040 — Service Report draft creation and
+    // finalize are both Worker-mediated privileged transactions (matching
+    // #036's model), never client-writable here. This is an explicit
+    // allowlist (hasOnly), not a blacklist of immutable fields — an
+    // unlisted/new field can never become client-writable by omission.
+    match /serviceReports/{reportId} {
+      allow get, list: if staffOwnsServiceReport(resource.data);
+      allow create: if false;
+      allow update: if staffOwnsServiceReport(resource.data) &&
+        resource.data.status == 'draft' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'technician', 'customerReportedProblem', 'inspectionFindings',
+          'serviceActions', 'parts', 'technicianRemark', 'resultStatus',
+          'resultDetail', 'evidenceAttachmentIds', 'claimNo',
+          'factoryReference', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    function staffOwnsServiceReport(report) {
+      return staffOwnsBrand(
+        get(/databases/$(database)/documents/serviceJobs/$(report.serviceJobId)).data.brandId
+      );
+    }
+
+    // Worker-only allocator collections (F5d-66). No carve-out is needed
+    // for the paired lock/report state — since finalize never runs
+    // client-side, serviceReportActiveDrafts needs no getAfter()/
+    // existsAfter() rule at all, unlike DECISIONS.md #040's rejected
+    // Option B.
+    match /serviceReportActiveDrafts/{serviceJobId} {
+      allow read, write: if false;
+    }
+
+    match /serviceReportDraftKeys/{key} {
+      allow read, write: if false;
+    }
   }
 }

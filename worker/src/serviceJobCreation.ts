@@ -107,20 +107,26 @@ function buildServerJob(
   };
 }
 
+// F5d-66 — exported (previously module-private) so serviceReportCreation.ts
+// can reuse these exact bounded wire-body parsing primitives instead of
+// duplicating them. Deliberately not shared with any app-side validation:
+// this Worker's own parse layer is independently strict about untrusted
+// request-body bounds (length/array-count caps), separate from app-side
+// state validation, matching parseServiceJobIntake()'s existing precedent.
 type UnknownRecord = Record<string, unknown>;
-function record(value: unknown): UnknownRecord | null {
+export function record(value: unknown): UnknownRecord | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as UnknownRecord)
     : null;
 }
-function string(value: unknown, max: number, required = true): string | null {
+export function string(value: unknown, max: number, required = true): string | null {
   return typeof value === 'string' &&
     value.length <= max &&
     (!required || value.trim().length > 0)
     ? value
     : null;
 }
-function strings(value: unknown, maxItems: number, maxLength: number): string[] | null {
+export function strings(value: unknown, maxItems: number, maxLength: number): string[] | null {
   if (!Array.isArray(value) || value.length > maxItems) return null;
   return value.every((entry) => typeof entry === 'string' && entry.length <= maxLength)
     ? value
@@ -318,10 +324,17 @@ export interface NewCustomerAllocation {
 export interface ServiceJobCreationDataAccess {
   beginServiceJobTransaction(): Promise<AllocationTransaction>;
   getIntakeKey(transaction: AllocationTransaction, key: string): Promise<string | null>;
+  // F5d-66 — widened to include 'repair_report' so the Service Report
+  // allocator (serviceReportCreation.ts) can reuse this exact method/
+  // implementation for FR-{YYYY}-{SEQ} allocation instead of introducing a
+  // parallel sequence-read method; the underlying numberSequences document
+  // shape and firestoreClient.ts implementation are already fully generic
+  // on `type`. Existing 'tracking_number'/'service_request' callers are
+  // unaffected — this is a type-level widening only.
   getSequence(
     transaction: AllocationTransaction,
     brandId: BrandId,
-    type: 'tracking_number' | 'service_request',
+    type: 'tracking_number' | 'service_request' | 'repair_report',
     year: number
   ): Promise<number | null>;
   getServiceJob(

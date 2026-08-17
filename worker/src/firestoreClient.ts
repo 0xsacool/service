@@ -20,7 +20,11 @@ import {
   type AllocationTransaction,
   type ServiceJobCreationDataAccess,
 } from './serviceJobCreation.ts';
+import type { ActiveDraftLock, ServiceReportCreationDataAccess } from './serviceReportCreation.ts';
+import type { ServiceReportFinalizationDataAccess } from './serviceReportFinalization.ts';
 import type { ServiceJob } from '../../src/types/serviceJob.ts';
+import { isValidServiceReport } from '../../src/services/serviceReport.ts';
+import type { ServiceReport } from '../../src/types/serviceReport.ts';
 import {
   logAllocatorStageFailure,
   markAsLocalValidationError,
@@ -73,7 +77,9 @@ export interface FirestoreClient
   extends
     StaffAuthorizationDataAccess,
     PublicTrackingTokenHashStore,
-    ServiceJobCreationDataAccess {
+    ServiceJobCreationDataAccess,
+    ServiceReportCreationDataAccess,
+    ServiceReportFinalizationDataAccess {
   listAttachments(): Promise<AttachmentRetentionRecord[]>;
   // F5d-15 — a single-document read, added for the deletion executor's
   // required "re-read current metadata immediately before deleting" step
@@ -239,6 +245,26 @@ function parseServiceJobDocument(doc: FirestoreDocument): ServiceJob | null {
   return { ...fields, id } as ServiceJob;
 }
 
+// F5d-66 — reuses the exact same isValidServiceReport() the client-side
+// Firebase-SDK-based repository and app already trust, so the Worker's REST
+// parse and the app's SDK parse agree on what a well-formed ServiceReport
+// looks like, without duplicating that validation logic a second time.
+function parseServiceReportDocument(doc: FirestoreDocument): ServiceReport | null {
+  const fields = Object.fromEntries(
+    Object.entries(doc.fields ?? {}).map(([key, value]) => [key, valueToJson(value)])
+  ) as Record<string, unknown>;
+  const id = doc.name.split('/').pop() ?? '';
+  const candidate = { ...fields, id };
+  return isValidServiceReport(candidate) ? (candidate as unknown as ServiceReport) : null;
+}
+
+function parseActiveDraftLockDocument(doc: FirestoreDocument): ActiveDraftLock | null {
+  const draftReportId = doc.fields?.draftReportId?.stringValue;
+  return typeof draftReportId === 'string' && draftReportId.length > 0
+    ? { draftReportId }
+    : null;
+}
+
 function authHeaders(token: string | null): HeadersInit {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
@@ -320,44 +346,72 @@ export function createFirestoreClient(env: Env): FirestoreClient {
   // ("lacks \"projects\" at index 0") before any Rules/IAM check ran.
   const resourcePath = resolveDatabasePath(env);
 
-  return {
-    // F5d-56B (Terra F5d-56A blocker, Objective 4): the full body after
-    // token acquisition — fetch(), the not-ok check, response.json(), and
-    // the malformed-transaction-identifier check — is now one
-    // runAllocatorStage('firestore-transaction-begin', ...) unit, so a
-    // rejected fetch, an unparsable body, or a structurally malformed 200
-    // response are all attributed, not just a non-OK HTTP status.
-    async beginServiceJobTransaction() {
-      let token: string | null;
-      try {
-        token = await getAccessToken(env);
-      } catch (error) {
-        logAllocatorStageFailure('oauth-token', error);
-        throw error;
-      }
-      return await runAllocatorStage('firestore-transaction-begin', async () => {
-        const response = await fetch(`${baseUrl}:beginTransaction`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
-          body: '{}',
-        });
-        if (!response.ok) {
-          throw new FirestoreRequestError(
-            'beginServiceJobTransaction',
-            response.status,
-            await response.text()
-          );
-        }
-        const body: unknown = await response.json();
-        if (
-          !body ||
-          typeof body !== 'object' ||
-          !('transaction' in body) ||
-          typeof body.transaction !== 'string'
-        )
-          throw new Error('Firestore returned malformed transaction');
-        return { id: body.transaction };
+  // F5d-66 — hoisted out of commitServiceJobCreation() so
+  // commitDraftCreation()/commitFinalization() (Service Report) can reuse
+  // the exact same bare-resource-name write construction instead of
+  // duplicating it a second/third time (the F5d-33 B-1 defect class this
+  // helper exists to prevent).
+  const fields = (value: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, jsonToValue(entry)]));
+  const resourceName = (collection: string, id: string) =>
+    `${resourcePath}/${collection}/${encodeURIComponent(id)}`;
+  const createWrite = (collection: string, id: string, value: Record<string, unknown>) => ({
+    update: { name: resourceName(collection, id), fields: fields(value) },
+    currentDocument: { exists: false },
+  });
+
+  // F5d-56B (Terra F5d-56A blocker, Objective 4): the full body after
+  // token acquisition — fetch(), the not-ok check, response.json(), and
+  // the malformed-transaction-identifier check — is now one
+  // runAllocatorStage('firestore-transaction-begin', ...) unit, so a
+  // rejected fetch, an unparsable body, or a structurally malformed 200
+  // response are all attributed, not just a non-OK HTTP status.
+  //
+  // F5d-66 — this operation was never actually Service-Job-specific (it
+  // just opens a generic Firestore REST transaction); hoisted to a shared
+  // closure function so the Service Report allocator/finalizer can reuse it
+  // under a more accurately-named beginTransaction() without duplicating
+  // the fetch/parse logic under a second name.
+  async function beginTransactionImpl(): Promise<AllocationTransaction> {
+    let token: string | null;
+    try {
+      token = await getAccessToken(env);
+    } catch (error) {
+      logAllocatorStageFailure('oauth-token', error);
+      throw error;
+    }
+    return await runAllocatorStage('firestore-transaction-begin', async () => {
+      const response = await fetch(`${baseUrl}:beginTransaction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: '{}',
       });
+      if (!response.ok) {
+        throw new FirestoreRequestError(
+          'beginTransaction',
+          response.status,
+          await response.text()
+        );
+      }
+      const body: unknown = await response.json();
+      if (
+        !body ||
+        typeof body !== 'object' ||
+        !('transaction' in body) ||
+        typeof body.transaction !== 'string'
+      )
+        throw new Error('Firestore returned malformed transaction');
+      return { id: body.transaction };
+    });
+  }
+
+  return {
+    async beginServiceJobTransaction() {
+      return beginTransactionImpl();
+    },
+
+    async beginTransaction() {
+      return beginTransactionImpl();
     },
 
     async getIntakeKey(transaction, key) {
@@ -468,20 +522,6 @@ export function createFirestoreClient(env: Env): FirestoreClient {
       await runAllocatorStage('firestore-commit', async () => {
         const trackingId = `${input.job.brandId}__tracking_number__${input.year}`;
         const requestId = `${input.job.brandId}__service_request__${input.year}`;
-        const fields = (value: Record<string, unknown>) =>
-          Object.fromEntries(
-            Object.entries(value).map(([key, entry]) => [key, jsonToValue(entry)])
-          );
-        const resourceName = (collection: string, id: string) =>
-          `${resourcePath}/${collection}/${encodeURIComponent(id)}`;
-        const createWrite = (
-          collection: string,
-          id: string,
-          value: Record<string, unknown>
-        ) => ({
-          update: { name: resourceName(collection, id), fields: fields(value) },
-          currentDocument: { exists: false },
-        });
         const response = await fetch(`${baseUrl}:commit`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
@@ -551,6 +591,123 @@ export function createFirestoreClient(env: Env): FirestoreClient {
         }
       });
     },
+
+    // --- F5d-66: Service Report draft creation / finalization ---
+    // Worker-mediated for the same reasons as commitServiceJobCreation()
+    // above (DECISIONS.md #036, extended by #040): FR-{YYYY}-{SEQ}
+    // allocation reuses the existing generic getSequence() implementation
+    // with type: 'repair_report'; nothing below adds a new
+    // numberSequences access path or weakens its existing blanket browser
+    // deny.
+
+    async getDraftKey(transaction, key) {
+      const doc = await getDocument(env, baseUrl, 'serviceReportDraftKeys', key, transaction);
+      const value = doc?.fields?.reportId?.stringValue;
+      return typeof value === 'string' && value.length > 0 ? value : null;
+    },
+
+    async getServiceReport(transaction, reportId) {
+      const doc = await getDocument(env, baseUrl, 'serviceReports', reportId, transaction);
+      return doc ? parseServiceReportDocument(doc) : null;
+    },
+
+    async getActiveDraftLock(transaction, serviceJobId) {
+      const doc = await getDocument(
+        env,
+        baseUrl,
+        'serviceReportActiveDrafts',
+        serviceJobId,
+        transaction
+      );
+      return doc ? parseActiveDraftLockDocument(doc) : null;
+    },
+
+    async commitDraftCreation(transaction, input) {
+      const token = await getAccessToken(env);
+      const sequenceId = `${input.brandId}__repair_report__${input.year}`;
+      // Reuses the same createWrite()/currentDocument.exists:false
+      // precondition already proven correct by
+      // serviceJobAllocatorCommit.test.mts's bare-resource-name regression
+      // test — the sequence document below is the sole update-only write
+      // (no create-only precondition), matching numberSequences' existing
+      // upsert-by-merge write shape in commitServiceJobCreation() above.
+      const response = await fetch(`${baseUrl}:commit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({
+          transaction: transaction.id,
+          writes: [
+            createWrite(
+              'serviceReports',
+              input.report.id,
+              input.report as unknown as Record<string, unknown>
+            ),
+            createWrite('serviceReportActiveDrafts', input.report.serviceJobId, {
+              draftReportId: input.report.id,
+            }),
+            {
+              update: {
+                name: resourceName('numberSequences', sequenceId),
+                fields: fields({
+                  brandId: input.brandId,
+                  documentType: 'repair_report',
+                  year: input.year,
+                  currentValue: input.sequence,
+                }),
+              },
+            },
+            createWrite('serviceReportDraftKeys', input.key, {
+              reportId: input.report.id,
+            }),
+          ],
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.text();
+        if (response.status === 409 && sanitizedGoogleErrorStatus(body) === 'ABORTED') {
+          throw new TransactionConflictError();
+        }
+        throw new FirestoreRequestError('commitDraftCreation', response.status, body);
+      }
+    },
+
+    async commitFinalization(transaction, input) {
+      const token = await getAccessToken(env);
+      const response = await fetch(`${baseUrl}:commit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({
+          transaction: transaction.id,
+          writes: [
+            {
+              update: {
+                name: resourceName('serviceReports', input.finalized.id),
+                fields: fields({
+                  status: input.finalized.status,
+                  finalizedAt: input.finalized.finalizedAt,
+                  snapshot: input.finalized.snapshot,
+                  updatedAt: input.finalized.updatedAt,
+                }),
+              },
+              updateMask: { fieldPaths: ['status', 'finalizedAt', 'snapshot', 'updatedAt'] },
+              currentDocument: { exists: true },
+            },
+            {
+              delete: resourceName('serviceReportActiveDrafts', input.serviceJobId),
+              currentDocument: { exists: true },
+            },
+          ],
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.text();
+        if (response.status === 409 && sanitizedGoogleErrorStatus(body) === 'ABORTED') {
+          throw new TransactionConflictError();
+        }
+        throw new FirestoreRequestError('commitFinalization', response.status, body);
+      }
+    },
+
     async listAttachments() {
       const token = await getAccessToken(env);
       // pageSize is set explicitly rather than relying on the REST API's

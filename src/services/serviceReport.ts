@@ -1,18 +1,23 @@
+// F5d-66 — explicit concrete-file imports (not the '../types' barrel):
+// worker/src/serviceReportCreation.ts and serviceReportFinalization.ts now
+// reuse this module's pure functions directly, and the Worker's test
+// runner loads .ts files via plain Node ESM resolution, which does not
+// resolve a bare directory specifier like '../types' the way Vite/tsc's
+// bundler-mode resolution does. Matches the same explicit-file convention
+// src/services/serviceJobCreation.ts already uses for the same reason.
+import { getBrandCode, isCanonicalBrandId, type BrandId } from '../types/brand.ts';
+import type { ServiceJob } from '../types/serviceJob.ts';
 import {
-  getBrandCode,
-  isCanonicalBrandId,
   RESULT_STATUSES,
   SERVICE_ACTIONS,
-  type BrandId,
   type ResultStatus,
   type ServiceAction,
-  type ServiceJob,
   type ServiceReport,
   type ServiceReportDraftInput,
   type ServiceReportDraftPatch,
   type ServiceReportPart,
   type ServiceReportSnapshot,
-} from '../types';
+} from '../types/serviceReport.ts';
 
 const BRAND_NAMES = {
   'bruno-thailand': 'Bruno Thailand',

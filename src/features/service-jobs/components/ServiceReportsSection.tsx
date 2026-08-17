@@ -27,7 +27,6 @@ import type {
   ResultStatus,
 } from '../../../types';
 import { RESULT_STATUSES, SERVICE_ACTIONS } from '../../../types';
-import { backendKind } from '../../../config/backend';
 import { useServiceReports } from '../../../hooks/useServiceReports';
 import {
   useServiceJobAttachments,
@@ -118,43 +117,12 @@ function reportStatusClass(status: ServiceReport['status']): string {
     : 'bg-warning-50 text-warning-700 ring-warning-200';
 }
 
-// F5d-33/F5d-34 B-6: Service Report Firestore persistence remains blocked
-// (no `serviceReports`/`numberSequences` Rules yet — see DECISIONS.md and
-// PROJECT_STATE.md's Service Report Workstream notes). Under a durable
-// backend the unavailable repository provider makes createDraft/updateDraft/
-// finalize reject, so the section wasn't silently corrupting data — but it
-// still presented a "Create Report" action that was guaranteed to fail on
-// click. This gate keeps the full Mock/development experience unchanged and
-// replaces the interactive section with an explicit unavailable state
-// whenever the durable backend is active, instead of offering an action
-// that cannot succeed.
+// F5d-66: Service Report Firestore persistence is live (Worker-mediated
+// create/finalize, Rules-protected reads/draft edits — see DECISIONS.md
+// #036/#040). The F5d-33/F5d-34 B-6 unavailable gate that used to render
+// here is removed now that the durable backend actually supports this
+// section end to end, in every backend mode.
 export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }) {
-  if (backendKind !== 'mock') {
-    return (
-      <section className="space-y-5" aria-labelledby="service-reports-heading">
-        <div className="flex items-center gap-2">
-          <ClipboardList className="h-5 w-5 text-brand-600" />
-          <h2
-            id="service-reports-heading"
-            className="text-xl font-semibold tracking-tight text-ink"
-          >
-            ใบรายงานการตรวจสอบและซ่อม
-          </h2>
-        </div>
-        <GlassCard className="p-8">
-          <EmptyState
-            icon={ClipboardList}
-            title="ยังไม่เปิดใช้งานใบรายงานในระบบจริง"
-            description="ฟีเจอร์ใบรายงานยังอยู่ระหว่างการตรวจสอบสิทธิ์การเข้าถึงข้อมูล (Firestore Rules) และยังไม่พร้อมใช้งานในระบบจริง"
-          />
-        </GlassCard>
-      </section>
-    );
-  }
-  return <ServiceReportsSectionActive serviceJob={serviceJob} />;
-}
-
-function ServiceReportsSectionActive({ serviceJob }: { serviceJob: ServiceJob }) {
   const { reports, createDraft, updateDraft, finalize } = useServiceReports(
     serviceJob.id
   );

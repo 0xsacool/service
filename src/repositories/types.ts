@@ -138,12 +138,41 @@ export interface AttachmentsRepository {
   deleteAttachment(id: string): Promise<void>;
 }
 
+// F5d-66 Phase 2B-R — carries the HTTP status alongside the Worker's error
+// message so a caller (useServiceReports.ts) can distinguish a conclusive
+// rejection (e.g. 400/401/403/409 — retrying with the same idempotency key
+// serves no purpose) from a genuinely ambiguous outcome (network failure,
+// 500, or any other status — the request's real server-side effect is
+// unknown, and reusing the same key on retry is what lets a
+// lost-success-response replay the canonical draft instead of erroring).
+// Defined here (the repository seam), not inside
+// firestoreServiceReportsRepository.ts, so hooks can reference it without
+// importing a concrete backend implementation file directly — matching
+// this project's existing repository-interface-only dependency rule
+// (DECISIONS.md #006/#017). Never thrown by the Mock repository.
+export class WorkerServiceReportError extends Error {
+  public readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'WorkerServiceReportError';
+    this.status = status;
+  }
+}
+
 export interface ServiceReportsRepository {
   listForServiceJob(serviceJobId: string): ServiceReport[];
   getById(reportId: string): ServiceReport | undefined;
+  // F5d-66 Phase 2B-R — idempotencyKey is owned by the caller (see
+  // useServiceReports.ts), not generated inside this method: only the
+  // caller initiating a retry knows whether a given call is a resumption
+  // of an earlier logical attempt or a genuinely new one. Optional and
+  // ignored by the Mock implementation, which has no real idempotency
+  // concept; the Firestore implementation generates its own key when
+  // omitted, preserving every existing direct call site untouched.
   createDraft(
     serviceJobId: string,
-    input?: ServiceReportDraftInput
+    input?: ServiceReportDraftInput,
+    idempotencyKey?: string
   ): Promise<ServiceReport>;
   updateDraft(reportId: string, patch: ServiceReportDraftPatch): Promise<ServiceReport>;
   finalize(reportId: string): Promise<ServiceReport>;

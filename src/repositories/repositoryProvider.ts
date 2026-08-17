@@ -176,7 +176,7 @@ async function createFirestoreBackedRepositoryProvider(
       resolveAttachmentsRepository(serviceJobs, tokenProvider)
     ),
     serviceReports: await activateWithDiagnostics('serviceReports', () =>
-      createFirestoreServiceReportsRepository(serviceJobs)
+      createFirestoreServiceReportsRepository(serviceJobs, tokenProvider)
     ),
     registeredProducts: createFirestoreRegisteredProductsRepository(
       customers,

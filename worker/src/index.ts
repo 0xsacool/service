@@ -25,8 +25,22 @@ import {
   readBearerToken,
   type FirebaseTokenVerifier,
 } from './firebaseAuth.ts';
-import { getAuthorizedStaffProfile, isStaffAuthorizedForServiceJob, type StaffProfile } from './staffAuthorization.ts';
+import { getAuthorizedStaffProfile, isServiceJobInBrand, isStaffAuthorizedForServiceJob, type StaffProfile } from './staffAuthorization.ts';
 import { allocateServiceJob, isValidIdempotencyKey, MAX_INTAKE_BYTES, parseServiceJobCreateRequest } from './serviceJobCreation.ts';
+import {
+  ActiveDraftExistsError,
+  allocateServiceReportDraft,
+  IdempotencyKeyJobMismatchError,
+  isValidReportId,
+  parseServiceReportDraftRequest,
+  ServiceJobMissingError,
+} from './serviceReportCreation.ts';
+import {
+  ActiveDraftLockInconsistentError,
+  finalizeServiceReportTransaction,
+  ServiceReportIncompleteError,
+  ServiceReportNotFoundError,
+} from './serviceReportFinalization.ts';
 import { logAllocatorStageFailure } from './allocatorDiagnostics.ts';
 import {
   exceedsDeclaredSize,
@@ -41,6 +55,10 @@ const PUBLIC_TRACKING_PREFIX = '/public/tracking/';
 const PUBLIC_TRACKING_CODE_PATH = '/public/tracking';
 const MAX_PUBLIC_TRACKING_BODY_BYTES = 1024;
 const SERVICE_JOBS_PATH = '/service-jobs';
+// F5d-66 — a trailing slash so this never matches SERVICE_JOBS_PATH's exact
+// '/service-jobs' (Service Job creation) — the two routes cannot collide.
+const SERVICE_JOBS_PREFIX = '/service-jobs/';
+const MAX_SERVICE_REPORT_INPUT_BYTES = 200 * 1024;
 
 function isPublicTrackingEnabled(env: Env): boolean {
   return env.PUBLIC_TRACKING_ENABLED === 'true';
@@ -256,6 +274,121 @@ async function handleServiceJobCreate(request: Request, env: Env, dependencies: 
     // which must never reach Worker logs (Objective 2).
     console.error('[files-worker] Service Job create failed');
     return json({ error: 'Unable to create Service Job' }, { status: 500 });
+  }
+}
+
+// F5d-66 — POST /service-jobs/{jobId}/service-reports. Worker-mediated for
+// the same reason Service Job creation is (DECISIONS.md #036, extended by
+// #040): FR-{YYYY}-{SEQ} allocation and the one-active-draft lock both
+// require a privileged transaction the browser must never perform itself.
+async function handleServiceReportCreateDraft(
+  request: Request,
+  env: Env,
+  jobId: string,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  if (!isSafeJobId(jobId)) return json({ error: 'Invalid jobId' }, { status: 400 });
+
+  const authorization = await authorizeStaffCreation(request, env, dependencies);
+  if (authorization instanceof Response) return authorization;
+  if (!(await isServiceJobInBrand(jobId, authorization.profile.brandId, authorization.client))) {
+    return json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const key = request.headers.get('Idempotency-Key');
+  if (!isValidIdempotencyKey(key)) {
+    return json({ error: 'Invalid idempotency key' }, { status: 400 });
+  }
+
+  const contentLength = request.headers.get('Content-Length');
+  if (
+    request.body &&
+    (!request.headers.get('Content-Type')?.startsWith('application/json') ||
+      (contentLength && Number(contentLength) > MAX_SERVICE_REPORT_INPUT_BYTES))
+  ) {
+    return json({ error: 'Invalid Service Report draft input' }, { status: 400 });
+  }
+
+  try {
+    let parsedBody: unknown = {};
+    if (request.body) {
+      const raw = await readBodyWithLimit(request.body, MAX_SERVICE_REPORT_INPUT_BYTES);
+      const text = new TextDecoder().decode(raw);
+      if (text.length > 0) parsedBody = JSON.parse(text);
+    }
+    const input = parseServiceReportDraftRequest(parsedBody);
+    if (input === null) {
+      return json({ error: 'Invalid Service Report draft input' }, { status: 400 });
+    }
+    const report = await allocateServiceReportDraft({
+      serviceJobId: jobId,
+      brandId: authorization.profile.brandId,
+      key,
+      input,
+      dataAccess: authorization.client,
+    });
+    return json({ report }, { status: 201 });
+  } catch (error) {
+    if (error instanceof ActiveDraftExistsError) {
+      return json({ error: 'Active draft already exists' }, { status: 409 });
+    }
+    if (error instanceof IdempotencyKeyJobMismatchError) {
+      return json(
+        { error: 'Idempotency key is already associated with a different Service Job' },
+        { status: 409 }
+      );
+    }
+    if (error instanceof ServiceJobMissingError) {
+      return json({ error: 'Forbidden' }, { status: 403 });
+    }
+    if (error instanceof FileTooLargeError || error instanceof SyntaxError) {
+      return json({ error: 'Invalid Service Report draft input' }, { status: 400 });
+    }
+    console.error('[files-worker] Service Report draft creation failed');
+    return json({ error: 'Unable to create Service Report draft' }, { status: 500 });
+  }
+}
+
+// F5d-66 — POST /service-jobs/{jobId}/service-reports/{reportId}/finalize.
+// Also Worker-mediated: this is the only other operation that touches the
+// shared active-draft lock, and Firestore Rules cannot safely validate that
+// the lock's release and the report's draft->final transition happen
+// together and correctly (see DECISIONS.md #040 for the full analysis).
+async function handleServiceReportFinalize(
+  request: Request,
+  env: Env,
+  jobId: string,
+  reportId: string,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  if (!isSafeJobId(jobId)) return json({ error: 'Invalid jobId' }, { status: 400 });
+  if (!isValidReportId(reportId)) return json({ error: 'Invalid reportId' }, { status: 400 });
+
+  const authorization = await authorizeStaffCreation(request, env, dependencies);
+  if (authorization instanceof Response) return authorization;
+  if (!(await isServiceJobInBrand(jobId, authorization.profile.brandId, authorization.client))) {
+    return json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  try {
+    const report = await finalizeServiceReportTransaction({
+      serviceJobId: jobId,
+      reportId,
+      dataAccess: authorization.client,
+    });
+    return json({ report }, { status: 200 });
+  } catch (error) {
+    if (error instanceof ServiceReportNotFoundError) {
+      return json({ error: 'Not found' }, { status: 404 });
+    }
+    if (error instanceof ActiveDraftLockInconsistentError) {
+      return json({ error: 'Service Report state is inconsistent' }, { status: 409 });
+    }
+    if (error instanceof ServiceReportIncompleteError) {
+      return json({ error: error.message }, { status: 400 });
+    }
+    console.error('[files-worker] Service Report finalize failed');
+    return json({ error: 'Unable to finalize Service Report' }, { status: 500 });
   }
 }
 
@@ -477,6 +610,29 @@ export function createWorkerHandler(
 
     if (request.method === 'POST' && url.pathname === SERVICE_JOBS_PATH) {
       return withCors(await handleServiceJobCreate(request, env, dependencies), request, env);
+    }
+
+    // F5d-66 — the exact '/service-jobs' check above never matches this
+    // prefix (it requires a trailing '/'), so there is no route-ordering
+    // ambiguity between Service Job creation and these two new routes.
+    if (request.method === 'POST' && url.pathname.startsWith(SERVICE_JOBS_PREFIX)) {
+      const rest = decodeURIComponent(url.pathname.slice(SERVICE_JOBS_PREFIX.length));
+      const segments = rest.split('/').filter(Boolean);
+      if (segments.length === 2 && segments[1] === 'service-reports') {
+        return withCors(
+          await handleServiceReportCreateDraft(request, env, segments[0]!, dependencies),
+          request,
+          env
+        );
+      }
+      if (segments.length === 4 && segments[1] === 'service-reports' && segments[3] === 'finalize') {
+        return withCors(
+          await handleServiceReportFinalize(request, env, segments[0]!, segments[2]!, dependencies),
+          request,
+          env
+        );
+      }
+      return withCors(json({ error: 'Not found' }, { status: 404 }), request, env);
     }
 
     if (url.pathname.startsWith(FILES_PREFIX)) {

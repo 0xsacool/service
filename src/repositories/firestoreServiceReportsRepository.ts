@@ -1,48 +1,26 @@
 import {
   collection,
   doc,
-  getDocs,
   getDocFromServer,
   onSnapshot,
   query,
   runTransaction,
   serverTimestamp,
-  setDoc,
   where,
 } from 'firebase/firestore';
 import { getFirestoreDb } from '../lib/firebase/firebase';
-import type {
-  BrandId,
-  ServiceJob,
-  ServiceReport,
-  ServiceReportDraftInput,
-  ServiceReportDraftPatch,
-} from '../types';
-import {
-  createServiceReportDraft,
-  editableServiceReportFields,
-  finalizeServiceReport,
-  formatServiceReportNumber,
-  orderServiceReports,
-} from '../services/serviceReport';
-import { bangkokNumberingYear } from '../services/bangkokTime';
+import type { ServiceJob, ServiceReport, ServiceReportDraftPatch } from '../types';
+import { editableServiceReportFields, orderServiceReports } from '../services/serviceReport';
 import type { ServiceJobsRepository, ServiceReportsRepository } from './types';
-import {
-  fromFirestoreData as fromServiceJobFirestoreData,
-  SERVICE_JOBS_COLLECTION,
-} from './firestore/serviceJobMapping';
-import {
-  fromFirestoreData,
-  SERVICE_REPORTS_COLLECTION,
-  toFirestoreFields,
-} from './firestore/serviceReportMapping';
+import { fromFirestoreData, SERVICE_REPORTS_COLLECTION } from './firestore/serviceReportMapping';
 import {
   describeFirestoreInitError,
   recordFirestoreInitFailure,
 } from './firestoreInitDiagnostics';
-
-const NUMBER_SEQUENCES_COLLECTION = 'numberSequences';
-const REPORT_DOCUMENT_TYPE = 'repair_report';
+import type { WorkerTokenProvider } from '../auth/workerTokenProvider';
+import { fetchWithWorkerToken } from '../auth/workerTokenProvider';
+import { getFilesWorkerBaseUrl } from '../config/workerUrl';
+import { WorkerServiceReportError } from './types';
 
 function reportReference(reportId: string) {
   return doc(getFirestoreDb(), SERVICE_REPORTS_COLLECTION, reportId);
@@ -65,45 +43,35 @@ async function readReport(reportId: string): Promise<ServiceReport | undefined> 
   return fromFirestoreData(snapshot.id, snapshot.data()) ?? undefined;
 }
 
-function sequenceReference(brandId: BrandId, year: number) {
-  return doc(
-    getFirestoreDb(),
-    NUMBER_SEQUENCES_COLLECTION,
-    `${brandId}__${REPORT_DOCUMENT_TYPE}__${year}`
-  );
-}
-
-async function allocateFirestoreReportNumber(
-  brandId: BrandId,
-  year: number
-): Promise<string> {
-  let sequence = 0;
-  await runTransaction(getFirestoreDb(), async (transaction) => {
-    const reference = sequenceReference(brandId, year);
-    const snapshot = await transaction.get(reference);
-    const current = snapshot.exists() ? snapshot.data().currentValue : 0;
-    if (!Number.isInteger(current) || current < 0 || current >= 999999) {
-      throw new Error(
-        'Firestore Service Report number sequence is malformed or exhausted'
-      );
-    }
-    sequence = current + 1;
-    transaction.set(
-      reference,
-      {
-        brandId,
-        documentType: REPORT_DOCUMENT_TYPE,
-        year,
-        currentValue: sequence,
-      },
-      { merge: true }
-    );
-  });
-  return formatServiceReportNumber(year, sequence);
+// F5d-66 — parses the Worker's { report } response body or throws the
+// Worker's own { error } message; used by both createDraft() and
+// finalize() below, the only two operations this repository delegates to
+// the privileged Worker transaction (see DECISIONS.md #036/#040).
+async function readWorkerReportResponse(response: Response): Promise<ServiceReport> {
+  if (!response.ok) {
+    const body: unknown = await response.json().catch(() => null);
+    const message =
+      body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
+        ? body.error
+        : `Worker Service Report request failed (${response.status})`;
+    throw new WorkerServiceReportError(message, response.status);
+  }
+  const body: unknown = await response.json();
+  if (
+    !body ||
+    typeof body !== 'object' ||
+    !('report' in body) ||
+    !body.report ||
+    typeof body.report !== 'object'
+  ) {
+    throw new Error('Worker returned malformed Service Report');
+  }
+  return body.report as ServiceReport;
 }
 
 export async function createFirestoreServiceReportsRepository(
-  serviceJobs: ServiceJobsRepository
+  serviceJobs: ServiceJobsRepository,
+  tokenProvider: WorkerTokenProvider
 ): Promise<ServiceReportsRepository> {
   const reportsById = new Map<string, ServiceReport>();
   const subscribedJobIds = new Set<string>();
@@ -181,45 +149,26 @@ export async function createFirestoreServiceReportsRepository(
       return reportsById.get(reportId);
     },
 
-    async createDraft(serviceJobId, input: ServiceReportDraftInput = {}) {
-      const serviceJob = requireServiceJob(serviceJobs, serviceJobId);
-      if (!serviceJob.brandId) {
-        throw new Error(
-          `Cannot create Service Report without Service Job brand "${serviceJobId}"`
-        );
-      }
-      const existingReports = await getDocs(
-        query(
-          collection(getFirestoreDb(), SERVICE_REPORTS_COLLECTION),
-          where('serviceJobId', '==', serviceJobId)
-        )
+    // F5d-66 — Worker-mediated (DECISIONS.md #036/#040): FR-{YYYY}-{SEQ}
+    // allocation and the one-active-draft lock both require a privileged
+    // transaction the browser must never perform itself. requireServiceJob()
+    // below is a fast local pre-check only — the Worker independently
+    // re-verifies brand ownership and is the actual enforcement boundary.
+    async createDraft(serviceJobId, input = {}, idempotencyKey) {
+      requireServiceJob(serviceJobs, serviceJobId);
+      const key = idempotencyKey ?? crypto.randomUUID();
+      const response = await fetchWithWorkerToken(
+        tokenProvider,
+        `${getFilesWorkerBaseUrl()}/service-jobs/${encodeURIComponent(serviceJobId)}/service-reports`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
+          body: JSON.stringify({ input }),
+        }
       );
-      const hasActiveDraft = existingReports.docs.some(
-        (document) => fromFirestoreData(document.id, document.data())?.status === 'draft'
-      );
-      if (hasActiveDraft) {
-        throw new Error(
-          `Cannot create Service Report: Service Job "${serviceJobId}" already has an active draft`
-        );
-      }
-      const reportId = crypto.randomUUID();
-      const reportNo = await allocateFirestoreReportNumber(
-        serviceJob.brandId,
-        bangkokNumberingYear(new Date())
-      );
-      const draft = createServiceReportDraft(reportId, reportNo, serviceJob, input);
-      await setDoc(reportReference(reportId), {
-        ...toFirestoreFields(draft),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        finalizedAt: null,
-      });
-      const committed = await readReport(reportId);
-      if (!committed) {
-        throw new Error(`Firestore did not return created Service Report "${reportId}"`);
-      }
-      reportsById.set(reportId, committed);
-      return committed;
+      const report = await readWorkerReportResponse(response);
+      reportsById.set(report.id, report);
+      return report;
     },
 
     async updateDraft(reportId, patch: ServiceReportDraftPatch) {
@@ -250,49 +199,25 @@ export async function createFirestoreServiceReportsRepository(
       return updated;
     },
 
+    // F5d-66 — also Worker-mediated: the only other operation that touches
+    // the shared active-draft lock, which must clear atomically and
+    // correctly with the draft->final transition (DECISIONS.md #040).
+    // serviceJobId is resolved locally (cache, falling back to a direct
+    // read) purely to build the request URL — the Worker independently
+    // re-derives and re-verifies it server-side from the report document.
     async finalize(reportId) {
-      const reportRef = reportReference(reportId);
-      await runTransaction(getFirestoreDb(), async (transaction) => {
-        const reportSnapshot = await transaction.get(reportRef);
-        if (!reportSnapshot.exists()) {
-          throw new Error(
-            `Cannot finalize Service Report "${reportId}": no report exists`
-          );
-        }
-        const report = fromFirestoreData(reportSnapshot.id, reportSnapshot.data());
-        if (!report) {
-          throw new Error(`Cannot finalize malformed Service Report "${reportId}"`);
-        }
-        const jobRef = doc(
-          getFirestoreDb(),
-          SERVICE_JOBS_COLLECTION,
-          report.serviceJobId
-        );
-        const jobSnapshot = await transaction.get(jobRef);
-        if (!jobSnapshot.exists()) {
-          throw new Error(
-            `Cannot finalize Service Report: parent Service Job is missing`
-          );
-        }
-        const serviceJob = fromServiceJobFirestoreData(
-          report.serviceJobId,
-          jobSnapshot.data()
-        );
-        const finalized = finalizeServiceReport(report, serviceJob);
-        transaction.update(reportRef, {
-          status: finalized.status,
-          finalizedAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          snapshot: finalized.snapshot,
-        });
-      });
-      const finalized = await readReport(reportId);
-      if (!finalized) {
-        throw new Error(
-          `Firestore did not return finalized Service Report "${reportId}"`
-        );
+      const cached = reportsById.get(reportId);
+      const report = cached ?? (await readReport(reportId));
+      if (!report) {
+        throw new Error(`Cannot finalize Service Report "${reportId}": no report exists`);
       }
-      reportsById.set(reportId, finalized);
+      const response = await fetchWithWorkerToken(
+        tokenProvider,
+        `${getFilesWorkerBaseUrl()}/service-jobs/${encodeURIComponent(report.serviceJobId)}/service-reports/${encodeURIComponent(reportId)}/finalize`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }
+      );
+      const finalized = await readWorkerReportResponse(response);
+      reportsById.set(finalized.id, finalized);
       return finalized;
     },
   };

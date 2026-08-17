@@ -48,6 +48,44 @@ function serviceJob(brandId, status = 'Received') {
   };
 }
 
+function serviceReport(serviceJobId, status = 'draft', overrides = {}) {
+  return {
+    serviceJobId,
+    reportNo: 'FR-2026-000001',
+    status,
+    createdAt: '2026-08-17T00:00:00.000Z',
+    updatedAt: '2026-08-17T00:00:00.000Z',
+    finalizedAt: status === 'final' ? '2026-08-17T00:00:00.000Z' : null,
+    technician: 'QA Tech',
+    customerReportedProblem: 'Fault reported',
+    inspectionFindings: 'Fault reproduced',
+    serviceActions: ['repair'],
+    parts: [],
+    technicianRemark: '',
+    resultStatus: 'repaired',
+    resultDetail: '',
+    evidenceAttachmentIds: [],
+    claimNo: null,
+    factoryReference: null,
+    snapshot:
+      status === 'final'
+        ? {
+            trackingReference: serviceJobId,
+            customerName: 'Synthetic test record',
+            customerPhone: '0000000000',
+            customerEmail: '',
+            brandCode: 'BRN',
+            brandName: 'Bruno Thailand',
+            productName: 'QA Product',
+            modelOrSku: null,
+            serialNumber: 'SERIAL-1',
+            customerReportedProblem: 'Fault reported',
+          }
+        : null,
+    ...overrides,
+  };
+}
+
 function attachment(jobId, deletedAt = null) {
   return {
     jobId,
@@ -97,6 +135,18 @@ async function seed() {
         brandIds: ['bruno-thailand', 'join-lux-club'],
       }),
       setDoc(doc(db, 'customers', 'customer-legacy'), { name: 'Legacy customer' }),
+      setDoc(
+        doc(db, 'serviceReports', 'report-bruno-draft'),
+        serviceReport('job-bruno', 'draft')
+      ),
+      setDoc(
+        doc(db, 'serviceReports', 'report-join-lux-draft'),
+        serviceReport('job-join-lux', 'draft')
+      ),
+      setDoc(
+        doc(db, 'serviceReports', 'report-bruno-final'),
+        serviceReport('job-bruno', 'final')
+      ),
     ]);
   });
 }
@@ -252,4 +302,138 @@ test('public Firestore reads remain denied', async () => {
   await assertFails(getDoc(doc(db, 'serviceJobs', 'job-bruno')));
   await assertFails(getDoc(doc(db, 'customers', 'customer-bruno')));
   await assertFails(getDoc(doc(db, 'products', 'product-1')));
+});
+
+// F5d-66 / DECISIONS.md #040 — Service Report live persistence.
+
+test('authorized same-brand ServiceReport get, list query, and draft edit succeed', async () => {
+  const brunoDb = staffDb(brunoUid);
+  await assertSucceeds(getDoc(doc(brunoDb, 'serviceReports', 'report-bruno-draft')));
+  await assertSucceeds(
+    getDocs(
+      query(collection(brunoDb, 'serviceReports'), where('serviceJobId', '==', 'job-bruno'))
+    )
+  );
+  await assertSucceeds(
+    updateDoc(doc(brunoDb, 'serviceReports', 'report-bruno-draft'), {
+      technicianRemark: 'Updated remark',
+      updatedAt: Timestamp.fromDate(new Date('2026-08-17T01:00:00.000Z')),
+    })
+  );
+});
+
+test('cross-brand ServiceReport read and write are denied', async () => {
+  const brunoDb = staffDb(brunoUid);
+  await assertFails(getDoc(doc(brunoDb, 'serviceReports', 'report-join-lux-draft')));
+  await assertFails(
+    getDocs(
+      query(collection(brunoDb, 'serviceReports'), where('serviceJobId', '==', 'job-join-lux'))
+    )
+  );
+  await assertFails(
+    updateDoc(doc(brunoDb, 'serviceReports', 'report-join-lux-draft'), {
+      technicianRemark: 'Should be denied',
+    })
+  );
+});
+
+test('browser ServiceReport creation is denied', async () => {
+  const brunoDb = staffDb(brunoUid);
+  await assertFails(
+    setDoc(doc(brunoDb, 'serviceReports', 'report-new'), serviceReport('job-bruno', 'draft'))
+  );
+});
+
+test('browser cannot flip status/finalizedAt/snapshot or any identity field on a draft', async () => {
+  const brunoDb = staffDb(brunoUid);
+  await assertFails(
+    updateDoc(doc(brunoDb, 'serviceReports', 'report-bruno-draft'), { status: 'final' })
+  );
+  await assertFails(
+    updateDoc(doc(brunoDb, 'serviceReports', 'report-bruno-draft'), {
+      finalizedAt: Timestamp.fromDate(new Date()),
+    })
+  );
+  await assertFails(
+    updateDoc(doc(brunoDb, 'serviceReports', 'report-bruno-draft'), {
+      snapshot: { trackingReference: 'forged' },
+    })
+  );
+  await assertFails(
+    updateDoc(doc(brunoDb, 'serviceReports', 'report-bruno-draft'), {
+      serviceJobId: 'job-join-lux',
+    })
+  );
+  await assertFails(
+    updateDoc(doc(brunoDb, 'serviceReports', 'report-bruno-draft'), {
+      reportNo: 'FR-2026-999999',
+    })
+  );
+  await assertFails(
+    updateDoc(doc(brunoDb, 'serviceReports', 'report-bruno-draft'), {
+      createdAt: '2020-01-01T00:00:00.000Z',
+    })
+  );
+});
+
+test('an unknown/new field can never become client-writable by omission (explicit allowlist, not a blacklist)', async () => {
+  const brunoDb = staffDb(brunoUid);
+  await assertFails(
+    updateDoc(doc(brunoDb, 'serviceReports', 'report-bruno-draft'), {
+      someBrandNewField: 'should never be allowed just because it is unrecognized',
+    })
+  );
+});
+
+test('a final ServiceReport is fully immutable to the browser, and deletion is always denied', async () => {
+  const brunoDb = staffDb(brunoUid);
+  await assertFails(
+    updateDoc(doc(brunoDb, 'serviceReports', 'report-bruno-final'), {
+      technicianRemark: 'Late edit attempt',
+    })
+  );
+  await assertFails(
+    updateDoc(doc(brunoDb, 'serviceReports', 'report-bruno-final'), { status: 'draft' })
+  );
+  await assertFails(deleteDoc(doc(brunoDb, 'serviceReports', 'report-bruno-draft')));
+  await assertFails(deleteDoc(doc(brunoDb, 'serviceReports', 'report-bruno-final')));
+});
+
+test('the Worker-only ServiceReport allocator collections are fully denied to the browser', async () => {
+  const brunoDb = staffDb(brunoUid);
+  await assertFails(getDoc(doc(brunoDb, 'serviceReportActiveDrafts', 'job-bruno')));
+  await assertFails(
+    setDoc(doc(brunoDb, 'serviceReportActiveDrafts', 'job-bruno'), {
+      draftReportId: 'report-bruno-draft',
+    })
+  );
+  await assertFails(
+    deleteDoc(doc(brunoDb, 'serviceReportActiveDrafts', 'job-bruno'))
+  );
+  await assertFails(getDoc(doc(brunoDb, 'serviceReportDraftKeys', 'some-key')));
+  await assertFails(
+    setDoc(doc(brunoDb, 'serviceReportDraftKeys', 'some-key'), {
+      reportId: 'report-bruno-draft',
+    })
+  );
+});
+
+test('browser access to numberSequences remains fully denied, including repair_report', async () => {
+  const brunoDb = staffDb(brunoUid);
+  await assertFails(
+    getDoc(doc(brunoDb, 'numberSequences', 'bruno-thailand__repair_report__2026'))
+  );
+  await assertFails(
+    setDoc(doc(brunoDb, 'numberSequences', 'bruno-thailand__repair_report__2026'), {
+      currentValue: 1,
+    })
+  );
+  // Re-proving the pre-existing tracking_number/service_request denial is
+  // unchanged by this rollout, not just repair_report's new value.
+  await assertFails(
+    getDoc(doc(brunoDb, 'numberSequences', 'bruno-thailand__tracking_number__2026'))
+  );
+  await assertFails(
+    getDoc(doc(brunoDb, 'numberSequences', 'bruno-thailand__service_request__2026'))
+  );
 });
