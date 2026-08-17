@@ -2825,6 +2825,146 @@ remains explicitly accepted and unchanged for this rollout; no server-side
 enforcement or schema expansion was added. Production is now F5d-65. Public
 Tracking remains unavailable.
 
+## F5d-66/F5d-66A/F5d-66B — Service Report live persistence (Production, 2026-08-17)
+
+F5d-66 activates Service Report (`serviceReports`) live Firestore persistence,
+closing the gap every SR-1 through SR-4.1 entry above documented as
+source-complete-but-blocked. The implementation checkpoint is commit
+`1603b719c77dff583f002724573fe33df521964c` (tag `f5d-66`) — distinct from the
+`f5d-66a` config-parity checkpoint described below, and from this section's own
+`f5d-66b` documentation-closeout commit, neither of which is the feature
+implementation itself. **Service Report draft creation and finalize are
+now live in production**, following the Worker-mediated architecture recorded
+in [DECISIONS.md](DECISIONS.md) #040: both are privileged Worker transactions
+(`worker/src/serviceReportCreation.ts`, `serviceReportFinalization.ts`),
+reusing #036's transaction/auth/idempotency machinery. Ordinary draft field
+edits (`updateDraft`) remain a direct-client Firestore operation, now
+genuinely Rules-protected instead of blocked by `ServiceReportsSection.tsx`'s
+former F5d-33/34-era unavailable gate, which is removed.
+
+**Two security/idempotency hardening gaps were found and closed before source
+freeze (Phase 2B-R/2B-R2), both recorded in #040's addendum:** the create-draft
+Idempotency-Key moved from a fresh-per-call repository-generated value to a
+job-scoped controller (`src/hooks/serviceReportDraftAttemptKey.ts`, one per
+`useServiceReports()` instance via `useRef`) so a retry after a lost network
+outcome reuses the original key and a key can never leak across Service Jobs;
+and the Worker's idempotency-key lookup now verifies the resolved report's
+`serviceJobId` matches the request's before returning it, rejecting a
+cross-job replay as `IdempotencyKeyJobMismatchError` (409) before any write.
+
+**A pre-existing, unrelated production config-drift bug was found and fixed
+separately (F5d-66A, commit `a677311c7b7e5d86d6bcb6548011719e754146f4`,
+tag `f5d-66a`).** Worker Gate 1's predeploy review found the checked-in
+`worker/wrangler.toml` still declared `ALLOWED_ORIGINS =
+"http://localhost:5173"` only, while live production had also carried
+`https://luxace-service.web.app` since F5d-62, added out-of-band without ever
+updating this file — proven via live CORS preflight, `wrangler versions
+upload --dry-run`'s bindings table, and `--keep-vars`'s documented default of
+deleting all vars and replacing them from `wrangler.toml` at upload time. Gate
+1 correctly **blocked** rather than silently uploading a candidate that would
+have regressed production CORS if ever promoted to traffic. F5d-66A is a
+single-line source-only fix (`ALLOWED_ORIGINS =
+"http://localhost:5173,https://luxace-service.web.app"`) with its own
+commit/tag, run before any Worker candidate was uploaded.
+
+**Firestore Rules gained an explicit allowlist for `serviceReports`, plus two
+fully-denied Worker-only collections — `numberSequences` untouched.** The
+`firestore.rules` diff (`f5d-65a..f5d-66a`) is a pure 38-line append after the
+`customers` block: `serviceReports` allows same-brand staff `get`/`list`,
+denies browser `create`/`delete`, and allows `update` only while
+`resource.data.status == 'draft'` under an explicit
+`diff().affectedKeys().hasOnly([...12 editable fields])` allowlist — identity,
+report number, `status`, `finalizedAt`, and `snapshot` can never be touched by
+an ordinary client update, and a final report's update rule is unsatisfiable
+entirely. `serviceReportActiveDrafts` (the one-active-draft lock, #033) and the
+new `serviceReportDraftKeys` idempotency-key collection are both fully denied
+to the browser (`allow read, write: if false`). `numberSequences` is
+unmodified — no `repair_report` carve-out — because the browser never touches
+it; the Worker's existing, now record-type-widened `getSequence()` allocates it
+directly.
+
+**Production rollout followed Worker → Rules → Hosting, each its own
+separately approved, byte-verified gate, with zero synthetic/durable
+production writes at any point.** `service-tech-files-worker` is live at
+version `a3d5afd8-fb9a-42da-b589-3f77cb1c92ea`, deployed via `wrangler
+versions deploy ...@100` at `2026-08-17T13:41:41.282Z` (deployment message
+"F5d-66 production Worker rollout"), 100% traffic; the retained rollback
+baseline is F5d-65 version `1da88d90-0131-4859-8e10-2c5546199971`. Firestore
+Rules deployed via `firebase deploy --only firestore:rules` to release
+`projects/luxace-service/releases/cloud.firestore`, ruleset
+`projects/luxace-service/rulesets/075129c8-6dc4-46ef-9d0e-93174c8e0409`, live
+source SHA-256 `40c4ac1e06d359506817aec1481f3ed4a7ee01c268c0cfc5db88b28638968226`
+— byte-identical to the committed `f5d-66a:firestore.rules` blob, confirmed
+both immediately before and after deploy via the read-only Firebase Rules API.
+The retained Rules rollback baseline is ruleset
+`projects/luxace-service/rulesets/7538645e-5898-4238-8d2a-33be07b01209`
+(source SHA-256
+`e300d6046623945375283605cfbe3bbdfa7f179e12554ee39803a0f50e002589`, the
+pre-F5d-66 F5d-42/43 baseline, confirmed still retained and unmutated).
+
+**The Hosting build proved non-byte-reproducible across independent
+rebuilds** (Rolldown/Vite chunk-hash naming is not deterministic between
+separate `npm ci` + build invocations of identical frozen source — 9 of 20
+files differ in both filename and byte content run-to-run, confirmed in an
+isolated `git archive f5d-66a` + fresh install, without ever touching the
+frozen `dist`). Because of this, the single `dist` built once during Hosting
+Gate 1 was locked as the only approved deployment artifact and never rebuilt
+before deploy — 20 user files, 1,134,618 bytes, canonical aggregate SHA-256
+`3ae4c26e8c513779719e6738bba24db48a4b97316fb5cc29982ec667b991222c`. `firebase
+deploy --only hosting` published it in exactly one attempt to release
+`sites/luxace-service/channels/live/releases/1786976550427000`
+(`2026-08-17T14:22:30.427Z`) on finalized version
+`sites/luxace-service/versions/b0a3907899a67afe`. All 20 approved files were
+independently fetched by exact filename from live Hosting (not discovered via
+`index.html` link-following) and matched byte size and SHA-256 exactly; the
+canonical aggregate recomputed from the live-downloaded bytes matched
+`3ae4c26e8c513779719e6738bba24db48a4b97316fb5cc29982ec667b991222c` exactly.
+Live `index.html` (SHA-256
+`ead637cd5d886dc695d0baf61022eb0c49dc523843cb27985fc001e0fd43b7eb`) references
+the new `assets/index-BEmCZ7Ae.js` bundle, not F5d-65's
+`assets/index-ChysXqtl.js`. The retained Hosting rollback baseline is F5d-65
+release `sites/luxace-service/channels/live/releases/1786958174254000`,
+version `sites/luxace-service/versions/7b540ddfdd52d38f`.
+
+**Postdeploy verification passed at every gate.** `/`, `/login`, `/dashboard`,
+`/service-jobs`, and `/service-jobs/new` all returned HTTP 200 on both the
+Worker's dependent Hosting checks and the final live smoke. Read-only browser
+smoke confirmed `/login` renders with `lang="th"`, the Thai staff-login
+heading, exactly one main landmark, and the `FIRESTORE + WORKER` runtime
+label; an unauthenticated `/dashboard` visit redirected client-side to
+`/login`; no credentials were entered. `GET /health` returned 200; Hosting-origin
+CORS preflight on both new Service Report routes
+(`/service-jobs/{id}/service-reports` and its `/finalize` sibling) returned
+204 with the exact `Access-Control-Allow-Origin` and `Authorization`/
+`Idempotency-Key` both allowed; a disallowed origin received no ACAO grant;
+unauthenticated `POST` to create-draft, finalize, and `/service-jobs` all
+returned 401 `{"error":"Unauthorized"}`. Unauthenticated `GET` against
+`serviceReports`, `serviceReportActiveDrafts`, and `serviceReportDraftKeys`
+via the raw Firestore REST API all returned 403 `PERMISSION_DENIED`. Live
+runtime configuration embeds only the approved
+`https://service-tech-files-worker.sacool-spizy.workers.dev` origin (no
+`localhost`/`127.0.0.1` app-configured origin) and `luxace-service`; Public
+Tracking's `VITE_PUBLIC_TRACKING_WORKER_URL` remains absent from the build
+entirely, so **Public Tracking remains unavailable**, unchanged by this
+rollout. Local validation across every gate: the full non-emulator application
+suite passed 315/315, the Firestore Rules emulator suite passed 19/19
+(re-run fresh immediately before both the Rules and the final closeout
+review), `tsc -b`, `eslint .`, and `git diff --check` all clean.
+
+**No synthetic or durable production Service Report, lock, sequence,
+idempotency-key, Service Job, customer, or attachment write occurred at any
+point in this rollout** — every write-shaped verification request was either
+rejected at the Worker's 401 auth boundary or the Rules' 403 permission
+boundary before reaching Firestore. The known P2 limitation from F5d-65
+(client-side/advisory serial-conflict checking) is unchanged and unrelated to
+this rollout. Production is now F5d-66: `service-tech-files-worker`
+`a3d5afd8-fb9a-42da-b589-3f77cb1c92ea` @ 100%, Firestore Rules ruleset
+`075129c8-6dc4-46ef-9d0e-93174c8e0409`, Hosting release `1786976550427000` /
+version `b0a3907899a67afe`. Rollback of any single layer, if ever separately
+approved, follows Hosting first, then Rules, then Worker last — matching the
+established precedent that the user-facing layer should stop depending on new
+capability before the layers underneath it are touched.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Any future repository or production-data expansion gets the same documentation, review, and approval treatment as the delivered Firestore repositories, not a silent bulk migration.

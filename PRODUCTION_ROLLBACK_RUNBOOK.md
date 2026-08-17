@@ -4,10 +4,11 @@
 
 This runbook began as a preflight artifact and now retains the chronological
 rollout and rollback evidence; it is not authorization for any new mutation.
-The rollout excludes Cron, `deletionExecutor`, public tracking credential
-issuance, and Service Report persistence. Before every future mutation,
-capture the named evidence read-only, stop on a mismatch, and retain the
-capture with the gate record.
+The rollout excludes Cron, `deletionExecutor`, and public tracking credential
+issuance. Service Report persistence is live as of F5d-66 (see that section
+below); it is no longer excluded. Before every future mutation, capture the
+named evidence read-only, stop on a mismatch, and retain the capture with the
+gate record.
 
 ## Historical F5d-35 source rollback baseline
 
@@ -430,6 +431,87 @@ config/` pattern) and must never be committed; this repository records
   while F5d-65 Hosting is live. The accepted P2 limitation (client-side/
   advisory serial-conflict checking) remains unchanged; no server-side
   enforcement or schema expansion accompanied this rollout.
+
+## F5d-66/F5d-66A/F5d-66B Worker, Rules, and Hosting production evidence
+
+- **Worker.** `service-tech-files-worker` is live at F5d-66 version
+  `a3d5afd8-fb9a-42da-b589-3f77cb1c92ea`, deployed via `wrangler versions
+  deploy a3d5afd8-fb9a-42da-b589-3f77cb1c92ea@100` (deployment message "F5d-66
+  production Worker rollout") at `2026-08-17T13:41:41.282Z`, 100% traffic.
+  Worker Gate 1's predeploy review found the checked-in `worker/wrangler.toml`
+  did not match live production's `ALLOWED_ORIGINS` (missing
+  `https://luxace-service.web.app`, added out-of-band since F5d-62) and
+  correctly **blocked** rather than upload a candidate that would have
+  regressed CORS if ever promoted — F5d-66A applied the single-line source fix
+  (commit `a677311c7b7e5d86d6bcb6548011719e754146f4`, tag `f5d-66a`) before any
+  candidate was uploaded. The retained Worker rollback baseline is F5d-65
+  version `1da88d90-0131-4859-8e10-2c5546199971`.
+- **Firestore Rules.** Deployed via `firebase deploy --only firestore:rules
+  --project luxace-service` to release
+  `projects/luxace-service/releases/cloud.firestore`, ruleset
+  `projects/luxace-service/rulesets/075129c8-6dc4-46ef-9d0e-93174c8e0409`, live
+  source SHA-256
+  `40C4AC1E06D359506817AEC1481F3ED4A7EE01C268C0CFC5DB88B28638968226` — verified
+  byte-identical to the committed `f5d-66a:firestore.rules` blob both
+  immediately before and after deploy via the read-only Firebase Rules API.
+  The diff (`f5d-65a..f5d-66a`) is a pure 38-line append: an explicit-allowlist
+  `serviceReports` update rule (`diff().affectedKeys().hasOnly([...])`,
+  identity/status/finalizedAt/snapshot excluded), and two fully-denied
+  Worker-only collections, `serviceReportActiveDrafts` and
+  `serviceReportDraftKeys`. `numberSequences` is byte-unchanged — no
+  `repair_report` carve-out. The retained Rules rollback baseline is ruleset
+  `projects/luxace-service/rulesets/7538645e-5898-4238-8d2a-33be07b01209`
+  (source SHA-256
+  `E300D6046623945375283605CFBE3BBDFA7F179E12554EE39803A0F50E002589`, the
+  pre-F5d-66 F5d-42/43 baseline), confirmed still retained and unmutated.
+- **Hosting.** The build was proven **not** byte-reproducible across
+  independent rebuilds of identical frozen source (`git archive f5d-66a` +
+  fresh `npm ci` + build, in isolation, without touching the frozen `dist`) —
+  9 of 20 files differ in filename and byte content between separate build
+  invocations, which is Rolldown/Vite chunk-hash non-determinism, not source
+  drift. The single `dist` built once during Hosting Gate 1 was therefore
+  locked as the only approved deployment artifact and never rebuilt before
+  deploy: 20 user files, 1,134,618 bytes, canonical aggregate SHA-256
+  `3ae4c26e8c513779719e6738bba24db48a4b97316fb5cc29982ec667b991222c`.
+  `firebase deploy --only hosting --project luxace-service` published it in
+  exactly one attempt to release
+  `sites/luxace-service/channels/live/releases/1786976550427000`
+  (`2026-08-17T14:22:30.427Z`) on finalized version
+  `sites/luxace-service/versions/b0a3907899a67afe`. All 20 approved files were
+  independently fetched by exact filename from live Hosting and matched byte
+  size and SHA-256 exactly; the aggregate recomputed from the live-downloaded
+  bytes matched exactly. Live `index.html` (SHA-256
+  `ead637cd5d886dc695d0baf61022eb0c49dc523843cb27985fc001e0fd43b7eb`)
+  references the new `assets/index-BEmCZ7Ae.js` bundle, not F5d-65's
+  `assets/index-ChysXqtl.js`. The retained Hosting rollback baseline is F5d-65
+  release `sites/luxace-service/channels/live/releases/1786958174254000`,
+  version `sites/luxace-service/versions/7b540ddfdd52d38f`.
+- **Postdeploy verification** passed at every gate: `/`, `/login`,
+  `/dashboard`, `/service-jobs`, `/service-jobs/new` all 200; `/login` renders
+  `lang="th"`, the Thai staff-login heading, one main landmark, and
+  `FIRESTORE + WORKER`; unauthenticated `/dashboard` redirects client-side to
+  `/login`; `GET /health` 200; Hosting-origin CORS on both new Service Report
+  routes 204 with exact `Access-Control-Allow-Origin` and
+  `Authorization`/`Idempotency-Key` both allowed; a disallowed origin received
+  no ACAO grant; unauthenticated `POST` to create-draft, finalize, and
+  `/service-jobs` all 401; unauthenticated Firestore REST reads of
+  `serviceReports`, `serviceReportActiveDrafts`, and `serviceReportDraftKeys`
+  all 403 `PERMISSION_DENIED`. Live runtime configuration embeds only the
+  approved Worker origin and `luxace-service`; Public Tracking's Worker URL
+  remains absent from the build. The full non-emulator application suite
+  passed 315/315; the Firestore Rules emulator suite passed 19/19.
+- **Zero synthetic or durable production writes** occurred at any point in
+  this rollout — every write-shaped verification request was rejected at
+  either the Worker's 401 auth boundary or the Rules' 403 permission boundary
+  before reaching Firestore. No IAM, Auth, R2, Cron, or `deletionExecutor`
+  change accompanied this rollout.
+- **Rollback ordering, if any layer is ever separately approved for
+  rollback:** Hosting first, then Rules, then Worker last — matching the
+  established F5d-65 precedent that the user-facing layer should stop
+  depending on new capability before the layers underneath it are touched.
+  Do not roll the Worker back while newer Hosting is live; do not roll Rules
+  back while newer Hosting still performs direct-client `serviceReports`
+  reads/updates that depend on the new allowlist.
 
 ## Deferred test improvement
 

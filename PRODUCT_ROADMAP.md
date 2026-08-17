@@ -54,6 +54,11 @@ Features that exist and work in the running app today, not just on paper — see
   registration rather than inferring ownership from a shared phone number.
   Server-side serial-conflict enforcement remains an accepted P2 hardening
   item, not solved here.
+- **Service Report live persistence** — F5d-66 is live in production: staff
+  can create, edit, and finalize Service Reports against real Firestore data.
+  Draft creation and finalize are Worker-mediated privileged transactions;
+  ordinary draft edits are direct-client and Rules-protected. Only one active
+  draft is allowed per Service Job; finalized reports are immutable.
 
 ## Planned
 

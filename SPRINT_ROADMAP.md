@@ -231,6 +231,54 @@ record. Production is F5d-65.
 
 ---
 
+### F5d-66/F5d-66A/F5d-66B — Service Report live persistence *(Production, 2026-08-17)*
+
+**Objective:** Activate live Firestore persistence for Service Reports —
+source-complete since SR-4/SR-4.1 but intentionally blocked pending a Rules
+review (see `PROJECT_STATE.md`'s Service Report Workstream entries).
+
+**Delivered:** Service Report draft creation and finalize are now
+Worker-mediated privileged transactions ([DECISIONS.md](DECISIONS.md) #040),
+reusing the #036 allocator's transaction/auth/idempotency machinery; ordinary
+draft edits remain a direct-client Firestore operation, now Rules-protected
+instead of UI-gated unavailable. The one-active-draft invariant (#033) is
+enforced by a new `serviceReportActiveDrafts` lock document, fully denied to
+the browser; a new `serviceReportDraftKeys` collection mirrors the existing
+`serviceJobIntakeKeys` idempotency pattern. `numberSequences` is unmodified.
+Two idempotency-key hardening gaps (stale cross-retry keys; cross-job replay)
+were found and closed at source freeze — see #040's addendum.
+
+**F5d-66A** fixed an unrelated, pre-existing production config-drift bug found
+during Worker predeploy review: checked-in `worker/wrangler.toml` didn't match
+the live `ALLOWED_ORIGINS` value (which had gained the Hosting origin
+out-of-band since F5d-62). Single-line source fix, its own commit/tag, applied
+before any Worker candidate upload.
+
+**Production rollout** followed Worker → Rules → Hosting, each a separately
+approved, byte-verified gate with zero synthetic/durable production writes.
+Worker is live at version `a3d5afd8-fb9a-42da-b589-3f77cb1c92ea` (100%
+traffic, rollback baseline `1da88d90-0131-4859-8e10-2c5546199971`). Firestore
+Rules are live at ruleset `075129c8-6dc4-46ef-9d0e-93174c8e0409`, confirmed
+byte-identical to the committed source (rollback baseline ruleset
+`7538645e-5898-4238-8d2a-33be07b01209`). Hosting is live at release
+`1786976550427000` / version `b0a3907899a67afe`, 20 files verified byte-exact
+against the frozen artifact (rollback baseline release `1786958174254000` /
+version `7b540ddfdd52d38f`). The Hosting build was proven **not**
+byte-reproducible across independent rebuilds (bundler chunk-hash
+non-determinism, not source drift) — the single frozen `dist` built once was
+the only approved deployment artifact and was never rebuilt before deploy.
+
+Full validation: 315/315 non-emulator application tests, 19/19 Firestore Rules
+emulator tests, clean `tsc -b`/`eslint`/`git diff --check` at every gate. See
+`PROJECT_STATE.md`'s F5d-66/F5d-66A/F5d-66B entry and
+`PRODUCTION_ROLLBACK_RUNBOOK.md` for the complete evidence record. Production
+is now F5d-66. Public Tracking remains unavailable, unchanged by this
+rollout.
+
+**Estimated Scope:** L
+
+---
+
 ### Sprint F3/F4 repository expansion *(delivered through later F-series work)*
 
 Customer, Service Job, Search, Registered Product, attachment, and related
