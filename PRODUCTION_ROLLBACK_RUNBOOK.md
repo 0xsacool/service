@@ -583,7 +583,79 @@ config/` pattern) and must never be committed; this repository records
   application shell UI above the document (Create Service Job page heading,
   success card/actions) pushes the actual Service Request content past page
   1, with evidence photos/date/signature spilling to page 2, while the
-  document's own footer still declares "page 1 of 1."
+  document's own footer still declares "page 1 of 1." **Resolved by F5d-68
+  below.**
+
+## F5d-68/F5d-68A Service Request one-page print fix — Hosting-only production evidence
+
+- **Scope: Hosting-only.** Worker (`a3d5afd8-fb9a-42da-b589-3f77cb1c92ea`,
+  100% traffic) and Firestore Rules (ruleset
+  `075129c8-6dc4-46ef-9d0e-93174c8e0409`) confirmed unchanged before and
+  after this rollout — `worker/`, `firestore.rules`,
+  `firestore.indexes.json`, `firebase.json`, and `.firebaserc` all zero diff
+  from the `f5d-67a` baseline, as were all five F5d-67 photo-hotfix source
+  files. No Worker or Rules deployment occurred as part of F5d-68.
+- **Root cause (confirmed):** the Service Request was the only one of the
+  codebase's three print documents that never activated a print-mode body
+  class. `src/index.css`'s entire `@media print` block was scoped solely to
+  `.service-report-print-mode` and `.delivery-note-print-mode`, so nothing
+  hid the staff shell, page heading/subtitle, back navigation, success card,
+  or action buttons around `.print-area` — the document began partway down
+  page 1 and its lower content spilled to page 2. The document also had zero
+  test coverage anywhere in `test/`.
+- **Fix:** added `service-request-print-mode` (mount/cleanup lifecycle owned
+  by `ServiceRequestPrintPreview.tsx`) plus matching `@media print`
+  isolation rules; moved the on-screen success card/actions into a
+  `.service-request-preview-toolbar` wrapper that is a sibling — never an
+  ancestor — of `.print-area`; added print-only section compaction, compact
+  64×64 evidence-photo thumbnails, and individually-scoped
+  `break-inside-avoid` on the photo/dates/signature/footer blocks. A4
+  portrait with 10mm margins preserved unchanged; no content removed,
+  truncated, or clipped. Phase 3A additionally made the first automatic
+  print deterministic — `NewServiceJob.tsx`'s own effect adds the class
+  synchronously immediately before `window.print()`, so correctness no
+  longer rests on React's child-before-parent passive-effect ordering.
+- **Source checkpoint:** commit
+  `7745043286549654c7a7b20a618c04d4340acbcd` (tag `f5d-68`), exactly 4 files
+  changed from `f5d-67a`. Validation: 30 new F5d-68 tests, 388/388
+  non-emulator application tests, 24/24 sibling print tests unaffected,
+  clean `tsc -b` / `eslint` / `git diff --check`.
+- **Frozen Hosting artifact.** Per the established non-reproducible-build
+  policy, built exactly once after the commit/tag and never rebuilt before
+  deploy: 20 user files, 1,140,996 bytes, canonical aggregate SHA-256
+  `6c9a33efac987912aa99191846fa2dd3aef1d4bd105751280763b36ddae01277`
+  (`index.html`
+  `e92dc470d21af8089b769250c4a7bc9314f63fc04c70c2da931cd55582ffb39c`, main JS
+  `assets/index-BMaxAmgJ.js`
+  `271aa82fa0c010183080cd4c96e4e06d983fa7bb99925b74dad03cac67f1437c`, main
+  CSS `assets/index-B6SXHkq9.css`
+  `f13e84b36f9d5169da5f86826c3f5f8e9d358d0b091e57e592a3d40cb249be3c`).
+- **Deployment.** `firebase deploy --only hosting --project luxace-service`
+  published the frozen artifact in exactly one attempt to release
+  `sites/luxace-service/channels/live/releases/1786988734502000`
+  (`2026-08-17T17:45:34.502Z`) on finalized version
+  `sites/luxace-service/versions/0460393db235052c`. All 20 approved files
+  were independently fetched from live Hosting by exact filename and matched
+  byte size and SHA-256 exactly; the aggregate recomputed from the
+  live-downloaded bytes matched exactly.
+- **Postdeploy verification passed on both automated and real-world checks.**
+  Automated: all five SPA routes returned 200; unauthenticated
+  `/service-jobs/new` redirected client-side to `/login` with `lang="th"` and
+  zero console errors; live runtime embedded only the approved Worker origin
+  and `luxace-service`. **Manual: the user performed a real production Print
+  → Save as PDF** and confirmed exactly 1 physical page, all Service Request
+  content present, 3 evidence photos printing, no application shell/success/
+  action UI in the output, and the footer correctly reading "หน้า 1 จาก 1".
+  Remaining date/title/URL/page-number elements are Chrome print-dialog
+  headers/footers (browser chrome, not application DOM — outside application
+  CSS's control by design). Zero synthetic or durable production writes
+  occurred during automated verification.
+- **The retained Hosting rollback baseline is F5d-67** release
+  `sites/luxace-service/channels/live/releases/1786984404257000`, version
+  `sites/luxace-service/versions/234caccc3034c98f`, confirmed still
+  retrievable (`FINALIZED`) after this deploy. Any rollback is a separate
+  production mutation requiring approval; since this rollout touched Hosting
+  only, a rollback requires no corresponding Worker/Rules rollback.
 
 ## Deferred test improvement
 

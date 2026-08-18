@@ -194,7 +194,7 @@ Grouped by what shipped, not by exact sprint label (many sprints predate a forma
 - **Public Tracking is unavailable in production.** Its Worker binding,
   issuance flow, and fail-closed rate-limit scope remain separately gated.
 - **Limited app test coverage** — Service Job retention-anchor regression tests run through Vite and Node’s built-in test runner; broader application test coverage remains to be established.
-- **Known bug, tracked as F5d-68 (not yet investigated or fixed): Service Request print/PDF spills to 2 physical pages.** Print output includes non-document application UI above the Service Request (the Create Service Job page heading, the success card/actions, application shell/runtime UI), so the actual Service Request begins partway down page 1 and the evidence-photos/date/signature area spills onto page 2 — while the document's own footer still declares "page 1 of 1." See F5d-67's entry below for the reproduction evidence this was observed alongside.
+- ~~**Known bug, tracked as F5d-68: Service Request print/PDF spills to 2 physical pages.**~~ **Resolved in production by F5d-68** (2026-08-17) — the root cause was that this print flow, unlike its two sibling print documents, never activated a print-mode body class, so the staff shell, page heading, and on-screen success card/actions all printed alongside the document. Verified one physical page by a real production Print → Save as PDF. See the F5d-68 entry below.
 
 ## F5d-26 Auth + Data Access Integration Readiness (source/emulator only)
 
@@ -3086,9 +3086,120 @@ and the prior oversized-photo failure no longer reproduces. Zero synthetic
 or durable production writes were made during any automated verification
 step; the user's own manual test is the only production Service Job
 activity associated with this rollout. Production is now F5d-67. The
-deferred print-layout bug (now tracked as F5d-68, see Current Limitations
-above) was observed during this work but deliberately not investigated or
-fixed as part of this hotfix.
+deferred print-layout bug (tracked as F5d-68) was observed during this work
+but deliberately not investigated or fixed as part of this hotfix; it was
+subsequently root-caused and fixed in F5d-68 below.
+
+## F5d-68/F5d-68A — Service Request one-page print fix (Production, 2026-08-17)
+
+**Root cause (confirmed, Phase 1 read-only investigation).** The Service
+Request print document was the only one of this codebase's three print
+documents that never activated a print-mode body class.
+`ServiceReportPrintPreview.tsx` (SR-4.1) and `DeliveryNotePrintPreview.tsx`
+(OPS-UX1) each add their own `service-report-print-mode` /
+`delivery-note-print-mode` class on mount, and `src/index.css`'s entire
+`@media print` block consisted solely of rules scoped to those two classes.
+`ServiceRequestPrintPreview.tsx` set no class at all, and
+`NewServiceJob.tsx`'s automatic `window.print()` ran with zero setup — so
+nothing hid the staff sidebar, topbar/runtime indicator, back navigation,
+page heading/subtitle, success confirmation card, or action buttons. The
+actual Service Request therefore began partway down page 1 and its lower
+content (evidence photos, received date, expected return, technician,
+signatures, footer) spilled onto page 2, while the document's own footer
+still declared "หน้า 1 จาก 1". Notably the document was referenced in **zero**
+test files anywhere — the same class of coverage gap that let F5d-67's bug
+through.
+
+**Fix — mirror the proven sibling architecture, plus print-only compaction.**
+`ServiceRequestPrintPreview.tsx` now adds `service-request-print-mode` on
+mount and removes it on cleanup, and a matching `.service-request-print-mode`
+block was appended to `src/index.css`'s `@media print` section (hiding
+`.staff-shell__sidebar`/`.staff-shell__topbar`, zeroing
+`.staff-shell__content` padding, hiding every `.new-service-job-page`
+sibling except `.service-request-print-host`, keeping `.print-area` visible).
+The on-screen success card and action buttons moved into a
+`.service-request-preview-toolbar` wrapper that is a **sibling** of
+`.print-area`, never an ancestor — so hiding the toolbar can never hide the
+document. Print-only compaction (`print:mt-4`/`print:mt-6` on section gaps,
+`print:h-16 print:w-16` 64px evidence thumbnails) and individually-scoped
+`print:break-inside-avoid` on the photo, dates/technician, signature, and
+footer blocks were added — deliberately **not** one giant break-protection
+around the whole document, which would risk worse pagination. A4 portrait /
+10mm margins are preserved unchanged. No document content was removed or
+truncated, and no `overflow:hidden` was introduced.
+
+**A production-hardening gap was found at Phase 3 audit and closed in Phase
+3A.** The initial automatic print originally relied on
+`ServiceRequestPrintPreview`'s child passive effect adding the class before
+`NewServiceJob`'s parent effect called `window.print()`. React's reconciler
+does flush passive effects child-before-parent, and that ordering was
+verified as sound — but it is not a contract worth making load-bearing on a
+production print path. `NewServiceJob.tsx`'s own `savedJob` effect now adds
+`service-request-print-mode` itself, synchronously, immediately before
+`window.print()` (an idempotent no-op when the class is already present).
+`ServiceRequestPrintPreview` remains the sole owner of the class's
+add-on-mount/remove-on-cleanup lifecycle; the parent never removes it.
+
+**Validation.** 30 new F5d-68 tests (source/CSS structural assertions
+following the established sibling print-test convention — exact physical
+pagination cannot be executed in this Node/no-jsdom environment); the full
+non-emulator application suite passed 388/388; the sibling Service Report
+and Delivery Note print suites passed 24/24 unaffected; `tsc -b`, `eslint`,
+and `git diff --check` clean at every gate. `worker/`, `firestore.rules`,
+`firestore.indexes.json`, `firebase.json`, `.firebaserc`, and every F5d-67
+photo-hotfix file are byte-unchanged — this was a Hosting-only change.
+
+**Predictive measurement before deployment.** Because the live dev server is
+wired to real production Firestore, reaching the print-preview state through
+the app would have risked a production write, so instead a standalone static
+fixture reproducing the exact print-resolved markup — using the real compiled
+Tailwind CSS from this fix's own build, realistic full-length Thai content,
+and three evidence photos — was rendered and measured live in a browser:
+document height ≈929px against ≈1046.77px available A4 content height
+(≈117px / 11% headroom), with all three 64×64px photos confirmed on one row.
+This was recorded explicitly as strong predictive evidence only, never as a
+claim of actual PDF success.
+
+**Hosting-only production rollout.** Source checkpoint is commit
+`7745043286549654c7a7b20a618c04d4340acbcd` (tag `f5d-68`), exactly 4 files
+changed from `f5d-67a`. Following the established non-reproducible-build
+policy, the artifact was built exactly once after the commit/tag and never
+rebuilt before deploy: 20 user files, 1,140,996 bytes, canonical aggregate
+SHA-256
+`6c9a33efac987912aa99191846fa2dd3aef1d4bd105751280763b36ddae01277`.
+`firebase deploy --only hosting` published it in exactly one attempt to
+release `sites/luxace-service/channels/live/releases/1786988734502000`
+(`2026-08-17T17:45:34.502Z`) on finalized version
+`sites/luxace-service/versions/0460393db235052c`. All 20 files were
+independently fetched from live Hosting by exact filename and matched byte
+size and SHA-256 exactly; the aggregate recomputed from live-downloaded
+bytes matched exactly. Live `index.html` references the new
+`assets/index-BMaxAmgJ.js` bundle. `/`, `/login`, `/dashboard`,
+`/service-jobs`, `/service-jobs/new` all returned 200; unauthenticated
+`/service-jobs/new` redirected client-side to `/login` (`lang="th"`, zero
+console errors); live runtime embedded only the approved Worker origin and
+`luxace-service`.
+
+**Real production manual verification PASSED.** The user performed an actual
+production Print → Save as PDF and confirmed: the Service Request output is
+**exactly 1 physical page**; all normal content remains present (customer,
+product, problem, accessories, dates, technician, both signatures, footer);
+3 evidence photos print successfully; the application sidebar, topbar,
+success card, and action buttons no longer print; and the document footer
+correctly reads "หน้า 1 จาก 1". The remaining date/title/URL/page-number
+elements in the PDF are Chrome's own print-dialog headers/footers —
+browser chrome controlled by the print dialog's "Headers and footers"
+setting, not application DOM, and explicitly out of application CSS's
+control by design.
+
+The Worker (`a3d5afd8-fb9a-42da-b589-3f77cb1c92ea`, 100% traffic) and
+Firestore Rules (ruleset `075129c8-6dc4-46ef-9d0e-93174c8e0409`) were
+reconfirmed unchanged both before and after the Hosting deploy. The retained
+Hosting rollback baseline is F5d-67 release
+`sites/luxace-service/channels/live/releases/1786984404257000`, version
+`sites/luxace-service/versions/234caccc3034c98f`, confirmed still retained
+(`FINALIZED`) after this deploy. Zero synthetic or durable production writes
+were made during automated verification. Production is now F5d-68.
 
 ## Development Principles
 

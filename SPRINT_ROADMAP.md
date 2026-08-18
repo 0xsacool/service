@@ -320,10 +320,61 @@ is now F5d-67. The retained Hosting rollback baseline is F5d-66 release
 **Known next bug, tracked as F5d-68 (not investigated or fixed here):**
 Service Request print/PDF spills to 2 physical pages — application shell UI
 above the document pushes the actual Service Request content past page 1,
-while the footer still declares "page 1 of 1." See `PROJECT_STATE.md`'s
-Current Limitations.
+while the footer still declares "page 1 of 1." **Resolved by F5d-68 below.**
 
 **Estimated Scope:** M
+
+---
+
+### F5d-68/F5d-68A — Service Request one-page print fix *(Production, 2026-08-17)*
+
+**Objective:** Fix the deferred print bug carried over from F5d-67 — the
+Service Request printed as 2 physical pages while its own footer declared
+"หน้า 1 จาก 1".
+
+**Root cause:** this was the only one of the codebase's three print documents
+that never activated a print-mode body class. `ServiceReportPrintPreview`
+and `DeliveryNotePrintPreview` each set their own class on mount, and every
+rule in `src/index.css`'s `@media print` block was scoped to those two — so
+for the Service Request, nothing hid the staff shell, page heading, success
+card, or action buttons, pushing the document's lower content onto page 2.
+It also had zero test coverage anywhere.
+
+**Delivered:** a `service-request-print-mode` body class following the exact
+proven sibling pattern, with matching `@media print` isolation rules; the
+on-screen success card/actions moved into a `.service-request-preview-toolbar`
+wrapper that is a sibling (never an ancestor) of `.print-area`; print-only
+section compaction and compact 64×64 evidence-photo thumbnails; and
+individually-scoped `break-inside-avoid` on the photo, dates/technician,
+signature, and footer blocks (deliberately not one giant protection around
+the whole document). A4 portrait / 10mm margins unchanged; no content
+removed or truncated. A Phase 3A hardening pass removed the initial
+automatic print's reliance on React child-before-parent passive-effect
+ordering by having `NewServiceJob`'s own effect add the class synchronously
+immediately before `window.print()`.
+
+**Production rollout was Hosting-only** — Worker and Firestore Rules
+untouched (zero diff, reconfirmed at every gate), as were all F5d-67
+photo-hotfix files. Source checkpoint `7745043286549654c7a7b20a618c04d4340acbcd`
+(tag `f5d-68`), 4 files. The artifact was built exactly once and frozen: 20
+files, 1,140,996 bytes, aggregate SHA-256
+`6c9a33efac987912aa99191846fa2dd3aef1d4bd105751280763b36ddae01277`, deployed
+to release `1786988734502000` / version `0460393db235052c`, all 20/20 files
+verified byte-exact live.
+
+**Both automated verification and the user's own real production Print →
+Save as PDF passed** — output is exactly 1 physical page with all content
+present, 3 evidence photos printing successfully, and no application shell
+UI in the output. Remaining date/title/URL/page-number elements are Chrome's
+own print-dialog headers/footers, not application DOM. Validation: 30 new
+F5d-68 tests, 388/388 non-emulator application tests, 24/24 sibling print
+tests unaffected, clean `tsc -b`/`eslint`/`git diff --check`. See
+`PROJECT_STATE.md`'s F5d-68/F5d-68A entry and
+`PRODUCTION_ROLLBACK_RUNBOOK.md` for the complete evidence record.
+Production is now F5d-68. Retained Hosting rollback baseline is F5d-67
+release `1786984404257000` / version `234caccc3034c98f`.
+
+**Estimated Scope:** S
 
 ---
 
