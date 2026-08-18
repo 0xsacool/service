@@ -1,6 +1,8 @@
 import type {
+  ChannelId,
   CustomerSearchResult,
   NewCustomerDraft,
+  OrderVerification,
   RegisteredProduct,
   ServiceIntakeData,
   TimelineEvent,
@@ -73,6 +75,20 @@ export interface ServiceJobIntakePayload {
   internalNotes: string;
   photos: string[];
   warranty: boolean;
+  // F5d-69 — optional on the wire, deliberately: the currently-live frontend
+  // sends none of these, and the Worker's allowlist parser resolves every
+  // absent value to null. That is what makes the locked Worker -> Rules ->
+  // Hosting rollout safe in both directions. The persisted ServiceJob type
+  // keeps them as required `T | null` instead, since the Worker always writes
+  // an explicit value.
+  contactChannel?: ChannelId | null;
+  contactChannelIdentity?: string | null;
+  orderNumber?: string | null;
+  orderVerification?: OrderVerification | null;
+  purchaseDate?: string | null;
+  orderDeliveredDate?: string | null;
+  externalEvidenceUrl?: string | null;
+  externalEvidenceNote?: string | null;
 }
 
 export function buildServiceJobIntakePayload(
@@ -148,6 +164,19 @@ export function buildServerOwnedServiceJob(
     closedAt: null,
     publicTrackingTokenHash: null,
     publicTrackingCodeHash: null,
+    // F5d-69 — the wire payload's optional metadata resolved to the
+    // persisted two-state representation. Mirrors the Worker's own
+    // resolution (worker/src/serviceJobCreation.ts) so Mock and Firestore
+    // modes cannot drift; cross-field invariants are applied there and in
+    // Rules, which are the two boundaries that actually enforce them.
+    contactChannel: intake.contactChannel ?? null,
+    contactChannelIdentity: intake.contactChannelIdentity ?? null,
+    orderNumber: intake.orderNumber ?? null,
+    orderVerification: intake.orderVerification ?? null,
+    purchaseDate: intake.purchaseDate ?? null,
+    orderDeliveredDate: intake.orderDeliveredDate ?? null,
+    externalEvidenceUrl: intake.externalEvidenceUrl ?? null,
+    externalEvidenceNote: intake.externalEvidenceNote ?? null,
     technician: 'Unassigned',
     estimatedCompletion: '—',
     warranty: intake.warranty,

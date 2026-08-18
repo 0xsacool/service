@@ -13,6 +13,37 @@ import type { BrandId } from './brand';
 
 export type Priority = 'Low' | 'Normal' | 'High' | 'Urgent';
 
+// F5d-69 / DECISIONS.md #041 — the seven approved V1 contact channels. The
+// union is deliberately exactly the visible V1 set (no tiktok_shop/facebook):
+// production has never stored a channel value, so there is nothing to stay
+// backward-compatible with. Adding a channel later is a union + UI-list edit
+// with no migration, because every reader maps an unrecognized persisted
+// value to 'other' rather than failing — matching DATABASE_SCHEMA.md's
+// "validated at the application layer, not a rigid DB enum" intent.
+export const CHANNEL_IDS = [
+  'shopee',
+  'lazada',
+  'line',
+  'store',
+  'website',
+  'phone',
+  'other',
+] as const;
+export type ChannelId = (typeof CHANNEL_IDS)[number];
+
+export function isChannelId(value: unknown): value is ChannelId {
+  return typeof value === 'string' && (CHANNEL_IDS as readonly string[]).includes(value);
+}
+
+export const ORDER_VERIFICATIONS = ['unverified', 'verified', 'not_found'] as const;
+export type OrderVerification = (typeof ORDER_VERIFICATIONS)[number];
+
+export function isOrderVerification(value: unknown): value is OrderVerification {
+  return (
+    typeof value === 'string' && (ORDER_VERIFICATIONS as readonly string[]).includes(value)
+  );
+}
+
 export interface TimelineEvent {
   status: ServiceJobStatus;
   title: string;
@@ -68,4 +99,33 @@ export interface ServiceJob {
   // hash. The raw code is issued once by a trusted boundary and is never a
   // normal Service Job update field.
   publicTrackingCodeHash: string | null;
+  // F5d-69 / DECISIONS.md #041 — contact/order/external-evidence metadata for
+  // THIS service event. These are an authoritative *event snapshot*, not a
+  // customer record: they are staff-correctable on this Service Job (typo, or
+  // the wrong channel recorded at intake) but are NEVER automatically
+  // synchronized from a customer document or from another Service Job, so a
+  // customer later changing their marketplace username can never silently
+  // rewrite historical jobs. A customer's channel history is a derived read
+  // model computed from these snapshots; no canonical customer-level channel
+  // store exists in Firestore (#013 is only partially implemented).
+  //
+  // All eight are `T | null` two-state fields, deliberately not optional —
+  // same rationale as closedAt above. A legacy document missing them reads
+  // back as null, so application code never sees `undefined`.
+  contactChannel: ChannelId | null;
+  contactChannelIdentity: string | null;
+  orderNumber: string | null;
+  orderVerification: OrderVerification | null;
+  // Calendar dates in the project's existing YYYY-MM-DD convention
+  // (services/bangkokTime.ts's bangkokIsoDate). orderDeliveredDate is
+  // deliberately NOT named receivedDate: `createdAt` is already printed as
+  // "วันที่รับสินค้า" (the date the service center received the unit), a
+  // genuinely different event from the marketplace delivering the order.
+  purchaseDate: string | null;
+  orderDeliveredDate: string | null;
+  // Optional HTTPS link to evidence hosted elsewhere (Drive/Photos/OneDrive).
+  // Stored as text only — no backend ever fetches it, and it is never
+  // rendered as HTML.
+  externalEvidenceUrl: string | null;
+  externalEvidenceNote: string | null;
 }

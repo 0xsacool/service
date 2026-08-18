@@ -62,7 +62,8 @@ service cloud.firestore {
         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'brandId', 'id', 'createdAt', 'publicTrackingCodeHash', 'publicTrackingTokenHash'
         ]) &&
-        validClosedAtTransition();
+        validClosedAtTransition() &&
+        validServiceEventMetadata();
       allow delete: if false;
 
       function validClosedAtTransition() {
@@ -72,6 +73,102 @@ service cloud.firestore {
             (request.resource.data.status == 'Completed' ||
               request.resource.data.status == 'Cancelled' ||
               request.resource.data.status == 'Rejected'));
+      }
+
+      // F5d-69 / DECISIONS.md #041 — Service Jobs are updated DIRECTLY from
+      // the browser (ServiceJobDetails -> useUpdateServiceJob ->
+      // firestoreServiceJobRepository.update()'s runTransaction), so these
+      // rules are the only thing standing between an authenticated staff
+      // session and arbitrary values in these fields. The Worker validates
+      // the same contract on creation, where it bypasses Rules entirely with
+      // privileged credentials; neither boundary can substitute for the other.
+      //
+      // Every accessor below is absence-tolerant: reading a field that a
+      // legacy document (or a partial write) never had would throw
+      // "Property ... is undefined on object" and deny the whole update, the
+      // exact F5d-33/F5d-34 B-2 defect this rule block already carries a
+      // comment about. `null` is a first-class accepted value here — it is
+      // how the UI clears a field — so absent and null deliberately collapse
+      // to the same result.
+      function fieldOrNull(key) {
+        return key in request.resource.data ? request.resource.data[key] : null;
+      }
+      function validOptionalString(key, maxLength) {
+        return fieldOrNull(key) == null ||
+          (fieldOrNull(key) is string && fieldOrNull(key).size() <= maxLength);
+      }
+      function validOptionalEnum(key, allowed) {
+        return fieldOrNull(key) == null || fieldOrNull(key) in allowed;
+      }
+      // Syntactic YYYY-MM-DD with real month/day ranges. Rules deliberately
+      // stop here: there is no date arithmetic available to reject an
+      // impossible calendar date such as 2026-02-30, which the Worker DOES
+      // reject on creation. That asymmetry is documented rather than hidden —
+      // Rules enforce shape and range, the Worker enforces true calendar
+      // validity.
+      function validOptionalCalendarDate(key) {
+        return fieldOrNull(key) == null ||
+          (fieldOrNull(key) is string &&
+            fieldOrNull(key).matches('[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])'));
+      }
+      // matches() is a whole-string RE2 match, so the https:// prefix cannot
+      // be spoofed by a suffix, and RE2's '.' never matches a newline — a
+      // value carrying a line break therefore fails closed here. Rules cannot
+      // parse a URL, so scheme enforcement is textual; the Worker performs
+      // real URL parsing and protocol inspection on the creation path.
+      function validOptionalHttpsUrl(key, maxLength) {
+        return fieldOrNull(key) == null ||
+          (fieldOrNull(key) is string &&
+            fieldOrNull(key).size() <= maxLength &&
+            fieldOrNull(key).matches('https://.*'));
+      }
+      function validServiceEventMetadata() {
+        return validOptionalEnum('contactChannel',
+            ['shopee', 'lazada', 'line', 'store', 'website', 'phone', 'other']) &&
+          validOptionalString('contactChannelIdentity', 120) &&
+          validOptionalString('orderNumber', 64) &&
+          validOptionalEnum('orderVerification', ['unverified', 'verified', 'not_found']) &&
+          validOptionalCalendarDate('purchaseDate') &&
+          validOptionalCalendarDate('orderDeliveredDate') &&
+          validOptionalHttpsUrl('externalEvidenceUrl', 2048) &&
+          validOptionalString('externalEvidenceNote', 1000) &&
+          validServiceEventMetadataInvariants();
+      }
+      // The same cross-field invariants the Worker resolves at creation, so a
+      // later browser edit cannot reintroduce a state the creation path would
+      // never have produced: verification without an order number, an order
+      // number without a verification state, an identity without a channel,
+      // or a 'phone' channel carrying its own identity (the customer's
+      // canonical phone is that identity).
+      //
+      // F5d-69 Phase 2A-FIX: the order/verification pair was originally only
+      // checked in one direction (verification implies an order number),
+      // which let a resulting document carry a non-null orderNumber with a
+      // null/missing orderVerification — a state the Worker's own
+      // resolveIntakeMetadata() never produces (it always resolves
+      // verification to at least 'unverified' whenever an order number is
+      // present). The second clause below closes that direction. Both
+      // clauses together only constrain the RESULTING document
+      // (request.resource.data) — they never compare against resource.data
+      // (the pre-write state) — which is deliberate, not an oversight: this
+      // app's own update path (firestoreServiceJobRepository.ts's
+      // toFirestoreUpdateFields()) always re-sends all eight F5d-69 fields
+      // explicitly on every single edit, echoing a legacy document's absent
+      // fields back as explicit nulls, so a legacy document's first-ever
+      // edit through this app already produces a resulting orderNumber/
+      // orderVerification pair of (null, null) — satisfying this invariant
+      // with no migration needed. A raw partial Firestore write that
+      // legitimately leaves both fields untouched (as a legacy document that
+      // has never had either field does) resolves the same way through
+      // fieldOrNull()'s absence tolerance: both sides read as null, and the
+      // biconditional holds. The only state this newly denies is a
+      // resulting document with exactly one of the two set — which no
+      // legitimate legacy or Worker-created document can already be in.
+      function validServiceEventMetadataInvariants() {
+        return (fieldOrNull('orderNumber') != null || fieldOrNull('orderVerification') == null) &&
+          (fieldOrNull('orderVerification') != null || fieldOrNull('orderNumber') == null) &&
+          (fieldOrNull('contactChannel') != null || fieldOrNull('contactChannelIdentity') == null) &&
+          (fieldOrNull('contactChannel') != 'phone' || fieldOrNull('contactChannelIdentity') == null);
       }
     }
 

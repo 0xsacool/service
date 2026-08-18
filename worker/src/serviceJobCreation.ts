@@ -3,7 +3,13 @@ import type {
   ServiceJobIntakePayload,
 } from '../../src/services/serviceJobCreation.ts';
 import { bangkokIsoDate, bangkokNumberingYear } from '../../src/services/bangkokTime.ts';
-import type { ServiceJob } from '../../src/types/serviceJob.ts';
+import {
+  CHANNEL_IDS,
+  ORDER_VERIFICATIONS,
+  type ChannelId,
+  type OrderVerification,
+  type ServiceJob,
+} from '../../src/types/serviceJob.ts';
 import type { BrandId } from './brands.ts';
 import { logAllocatorTransactionRetriesExhausted } from './allocatorDiagnostics.ts';
 
@@ -51,7 +57,10 @@ function brandCode(brandId: BrandId): string {
 // wrong by up to 7 hours, and specifically wrong across the Bangkok
 // midnight boundary where `date` and `time` would disagree on the day.
 // Both now derive from the same explicit Asia/Bangkok zone.
-function buildServerJob(
+// F5d-69 — exported (previously module-private) so the intake-metadata test
+// can assert what actually gets persisted, matching the same
+// export-for-reuse precedent F5d-66 set for record()/string()/strings().
+export function buildServerJob(
   brandId: BrandId,
   intake: ServiceJobIntakePayload,
   now: Date
@@ -104,6 +113,18 @@ function buildServerJob(
     closedAt: null,
     publicTrackingTokenHash: null,
     publicTrackingCodeHash: null,
+    // F5d-69 — already validated and invariant-resolved by
+    // parseServiceJobIntake(); persisted verbatim as part of the existing
+    // atomic Service Job write, with no additional Firestore write and no
+    // customer-document mutation.
+    contactChannel: intake.contactChannel ?? null,
+    contactChannelIdentity: intake.contactChannelIdentity ?? null,
+    orderNumber: intake.orderNumber ?? null,
+    orderVerification: intake.orderVerification ?? null,
+    purchaseDate: intake.purchaseDate ?? null,
+    orderDeliveredDate: intake.orderDeliveredDate ?? null,
+    externalEvidenceUrl: intake.externalEvidenceUrl ?? null,
+    externalEvidenceNote: intake.externalEvidenceNote ?? null,
   };
 }
 
@@ -132,6 +153,132 @@ export function strings(value: unknown, maxItems: number, maxLength: number): st
     ? value
     : null;
 }
+// F5d-69 — bounded parsers for the optional contact/order/evidence metadata.
+//
+// SECURITY: the Worker holds privileged Firestore credentials and therefore
+// bypasses Firestore Rules entirely, so these are the ONLY validation that
+// runs on the creation path. Firestore Rules validate the same fields on
+// later browser updates; the frontend's own validation is UX only. Every
+// parser returns an explicit ok/value pair rather than reusing `null` as
+// both "absent" and "invalid" — for these fields null is a legitimate
+// accepted value, so the two outcomes must stay distinguishable.
+export interface ParsedField<T> {
+  ok: boolean;
+  value: T;
+}
+const invalidField = <T>(): ParsedField<T | null> => ({ ok: false, value: null });
+const nullField = <T>(): ParsedField<T | null> => ({ ok: true, value: null });
+
+// Used only by nullableHttpsUrl below — see that function's comment for why
+// the URL field alone screens for control characters. Ordinary text fields
+// deliberately do not use this; see nullableBoundedString's comment.
+function hasControlCharacters(value: string): boolean {
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0;
+    if (code < 0x20 || code === 0x7f) return true;
+  }
+  return false;
+}
+
+// Trim policy (explicit, per the locked contract): surrounding whitespace —
+// including a CR/LF/tab paste artifact from another app — is always
+// trimmed, a value that is blank after trimming resolves to null rather
+// than persisting an empty string, and the length bound applies to the
+// trimmed value. Trimming does not alter the display value itself, so
+// orderNumber's "preserve exactly what staff typed" requirement still holds.
+//
+// F5d-69 Phase 2A-FIX: no interior-character screening is performed here.
+// The original version rejected any control character outright (including
+// before trimming, so a value like "ABC\r\n" failed even though trimming
+// alone would have produced a clean "ABC") on the theory that Firestore
+// Rules' RE2 `.` never matches a newline. That theory only holds for
+// nullableHttpsUrl's whole-string `matches('https://.*')` pattern — Rules'
+// validOptionalString for these plain fields has no character-class check
+// at all, so the Worker's blanket rejection was a Worker-only invariant
+// Rules did not mirror: exactly the divergence this contract exists to
+// avoid, in the wrong direction (the Worker refusing something Rules would
+// have accepted right back). Rules also has no per-character iteration, so
+// there is no robust way to make it mirror a generic "no control character
+// anywhere" rule. Ordinary text fields therefore rely on type + trimmed-
+// length bounds only, matching exactly what Rules enforce on later edits.
+// externalEvidenceUrl keeps its own stricter check — see nullableHttpsUrl.
+export function nullableBoundedString(value: unknown, max: number): ParsedField<string | null> {
+  if (value === undefined || value === null) return nullField();
+  if (typeof value !== 'string') return invalidField();
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return nullField();
+  if (trimmed.length > max) return invalidField();
+  return { ok: true, value: trimmed };
+}
+
+export function nullableEnum<T extends string>(
+  value: unknown,
+  allowed: readonly T[]
+): ParsedField<T | null> {
+  if (value === undefined || value === null) return nullField();
+  if (typeof value !== 'string') return invalidField();
+  return (allowed as readonly string[]).includes(value)
+    ? { ok: true, value: value as T }
+    : invalidField();
+}
+
+// Strict YYYY-MM-DD plus real calendar validation — 2026-02-30 and
+// 2026-13-01 are both rejected here. Firestore Rules cannot perform this
+// second step (no date arithmetic is available for it), so Rules enforce
+// only the syntactic form with month/day ranges; see DECISIONS.md #041 and
+// the Rules comment for that deliberate, documented asymmetry.
+export function nullableCalendarDate(value: unknown): ParsedField<string | null> {
+  const parsed = nullableBoundedString(value, 10);
+  if (!parsed.ok) return invalidField();
+  if (parsed.value === null) return nullField();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(parsed.value)) return invalidField();
+  const year = Number(parsed.value.slice(0, 4));
+  const month = Number(parsed.value.slice(5, 7));
+  const day = Number(parsed.value.slice(8, 10));
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  if (
+    utc.getUTCFullYear() !== year ||
+    utc.getUTCMonth() !== month - 1 ||
+    utc.getUTCDate() !== day
+  )
+    return invalidField();
+  return { ok: true, value: parsed.value };
+}
+
+// Robust URL parsing, never a startsWith() prefix test: `new URL()` resolves
+// the real scheme, so javascript:, data:, http: and malformed input are all
+// rejected on their actual protocol rather than on string shape. The value
+// is only ever stored and displayed — no Worker code path fetches it.
+//
+// This field stays strict even though nullableBoundedString's generic text
+// fields no longer screen for control characters (see that function's
+// comment): the WHATWG URL parser silently *strips* ASCII tab/CR/LF from
+// its input instead of rejecting it (verified directly —
+// `new URL('https://example.com/\na')` parses cleanly to a href with no
+// newline in it) rather than throwing, so relying on `new URL()` alone here
+// would silently rewrite a control-character-bearing value instead of
+// failing closed on it, contradicting "keeps its strict HTTPS contract".
+// The explicit check below makes any control character anywhere in the raw
+// value — including a trailing paste artifact the other fields would
+// simply trim away — fail closed instead. This mirrors Rules'
+// validOptionalHttpsUrl, whose whole-string `matches('https://.*')` also
+// fails closed on an embedded newline (RE2's `.` never matches one), so
+// Worker and Rules stay aligned specifically for this field.
+export function nullableHttpsUrl(value: unknown, max: number): ParsedField<string | null> {
+  if (typeof value === 'string' && hasControlCharacters(value)) return invalidField();
+  const parsed = nullableBoundedString(value, max);
+  if (!parsed.ok) return invalidField();
+  if (parsed.value === null) return nullField();
+  let url: URL;
+  try {
+    url = new URL(parsed.value);
+  } catch {
+    return invalidField();
+  }
+  if (url.protocol !== 'https:') return invalidField();
+  return { ok: true, value: parsed.value };
+}
+
 // Bounds both each photo individually and the sum across all of them, so
 // the aggregate stays inside MAX_PHOTOS_TOTAL_BYTES regardless of how the
 // per-photo allowance is split across the (up to maxItems) photos.
@@ -170,6 +317,16 @@ export function parseServiceJobIntake(value: unknown): ServiceJobIntakePayload |
     'internalNotes',
     'photos',
     'warranty',
+    // F5d-69 — all optional; an older client that sends none of these still
+    // parses to a fully valid intake with every new field resolved to null.
+    'contactChannel',
+    'contactChannelIdentity',
+    'orderNumber',
+    'orderVerification',
+    'purchaseDate',
+    'orderDeliveredDate',
+    'externalEvidenceUrl',
+    'externalEvidenceNote',
   ];
   if (Object.keys(intake).some((key) => !allowed.includes(key))) return null;
   const customerName = string(intake.customerName, 200);
@@ -196,6 +353,14 @@ export function parseServiceJobIntake(value: unknown): ServiceJobIntakePayload |
     MAX_PHOTO_DATA_URL_BYTES,
     MAX_PHOTOS_TOTAL_BYTES
   );
+  const contactChannel = nullableEnum(intake.contactChannel, CHANNEL_IDS);
+  const contactChannelIdentity = nullableBoundedString(intake.contactChannelIdentity, 120);
+  const orderNumber = nullableBoundedString(intake.orderNumber, 64);
+  const orderVerification = nullableEnum(intake.orderVerification, ORDER_VERIFICATIONS);
+  const purchaseDate = nullableCalendarDate(intake.purchaseDate);
+  const orderDeliveredDate = nullableCalendarDate(intake.orderDeliveredDate);
+  const externalEvidenceUrl = nullableHttpsUrl(intake.externalEvidenceUrl, 2048);
+  const externalEvidenceNote = nullableBoundedString(intake.externalEvidenceNote, 1000);
   if (
     customerName === null ||
     customerPhone === null ||
@@ -208,7 +373,15 @@ export function parseServiceJobIntake(value: unknown): ServiceJobIntakePayload |
     accessories === null ||
     internalNotes === null ||
     photos === null ||
-    typeof intake.warranty !== 'boolean'
+    typeof intake.warranty !== 'boolean' ||
+    !contactChannel.ok ||
+    !contactChannelIdentity.ok ||
+    !orderNumber.ok ||
+    !orderVerification.ok ||
+    !purchaseDate.ok ||
+    !orderDeliveredDate.ok ||
+    !externalEvidenceUrl.ok ||
+    !externalEvidenceNote.ok
   )
     return null;
   return {
@@ -224,6 +397,58 @@ export function parseServiceJobIntake(value: unknown): ServiceJobIntakePayload |
     internalNotes,
     photos,
     warranty: intake.warranty,
+    ...resolveIntakeMetadata({
+      contactChannel: contactChannel.value,
+      contactChannelIdentity: contactChannelIdentity.value,
+      orderNumber: orderNumber.value,
+      orderVerification: orderVerification.value,
+      purchaseDate: purchaseDate.value,
+      orderDeliveredDate: orderDeliveredDate.value,
+      externalEvidenceUrl: externalEvidenceUrl.value,
+      externalEvidenceNote: externalEvidenceNote.value,
+    }),
+  };
+}
+
+// F5d-69 cross-field invariants, applied once here so the parsed payload and
+// the persisted document can never disagree. These are resolutions, not
+// rejections: a client that omits orderVerification alongside a real
+// orderNumber is expressing "not checked yet", and a phone-channel identity
+// is redundant rather than malicious, so both normalize rather than failing
+// the whole Service Job creation. Firestore Rules enforce the same
+// invariants on later browser updates.
+export interface ServiceJobIntakeMetadata {
+  contactChannel: ChannelId | null;
+  contactChannelIdentity: string | null;
+  orderNumber: string | null;
+  orderVerification: OrderVerification | null;
+  purchaseDate: string | null;
+  orderDeliveredDate: string | null;
+  externalEvidenceUrl: string | null;
+  externalEvidenceNote: string | null;
+}
+
+export function resolveIntakeMetadata(
+  metadata: ServiceJobIntakeMetadata
+): ServiceJobIntakeMetadata {
+  // (C) identity cannot outlive the channel it belongs to; (D) the 'phone'
+  // channel never carries its own identity — the customer's canonical phone
+  // is the identity, and duplicating it here would create a second, driftable
+  // copy of the same fact.
+  const contactChannelIdentity =
+    metadata.contactChannel === null || metadata.contactChannel === 'phone'
+      ? null
+      : metadata.contactChannelIdentity;
+  // (A) verification state is meaningless without an order number; (B) an
+  // order number with no stated verification defaults to 'unverified'.
+  const orderVerification =
+    metadata.orderNumber === null
+      ? null
+      : (metadata.orderVerification ?? 'unverified');
+  return {
+    ...metadata,
+    contactChannelIdentity,
+    orderVerification,
   };
 }
 

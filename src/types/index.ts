@@ -1,4 +1,17 @@
-export type { ServiceJobStatus, Priority, TimelineEvent, ServiceJob } from './serviceJob';
+export type {
+  ServiceJobStatus,
+  Priority,
+  TimelineEvent,
+  ServiceJob,
+  ChannelId,
+  OrderVerification,
+} from './serviceJob';
+export {
+  CHANNEL_IDS,
+  ORDER_VERIFICATIONS,
+  isChannelId,
+  isOrderVerification,
+} from './serviceJob';
 export {
   CANONICAL_BRAND_IDS,
   getBrandCode,

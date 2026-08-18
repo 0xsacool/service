@@ -113,6 +113,14 @@ async function seed() {
       setDoc(doc(db, 'serviceJobs', 'job-bruno'), serviceJob('bruno-thailand')),
       setDoc(doc(db, 'serviceJobs', 'job-join-lux'), serviceJob('join-lux-club')),
       setDoc(doc(db, 'serviceJobs', 'job-legacy'), serviceJob(null)),
+      // F5d-69 — brand-owned but seeded WITHOUT any F5d-69 metadata field,
+      // and deliberately never mutated by another test, so the legacy
+      // missing-field case stays genuinely untouched.
+      setDoc(doc(db, 'serviceJobs', 'job-legacy-bruno'), serviceJob('bruno-thailand')),
+      // F5d-69 Phase 2A-FIX — a second, otherwise-identical legacy fixture
+      // reserved for the order/verification truth-table cases, so those
+      // writes never share state with job-legacy-bruno's own assertions.
+      setDoc(doc(db, 'serviceJobs', 'job-legacy-bruno-2'), serviceJob('bruno-thailand')),
       setDoc(
         doc(db, 'serviceJobAttachments', 'attachment-bruno'),
         attachment('job-bruno')
@@ -251,6 +259,189 @@ test('existing authorized ServiceJob updates preserve privileged fields and deny
     })
   );
   await assertFails(deleteDoc(doc(brunoDb, 'serviceJobs', 'job-bruno')));
+});
+
+// F5d-69 / DECISIONS.md #041 — Service Jobs are updated directly from the
+// browser, so these rules are the only enforcement on later staff edits of
+// the contact/order/external-evidence metadata (the Worker validates the
+// same contract at creation, where it bypasses Rules with privileged
+// credentials).
+
+test('F5d-69 authorized staff can set, correct, and clear all service-event metadata', async () => {
+  const brunoDb = staffDb(brunoUid);
+  const jobRef = doc(brunoDb, 'serviceJobs', 'job-bruno');
+
+  await assertSucceeds(
+    updateDoc(jobRef, {
+      contactChannel: 'shopee',
+      contactChannelIdentity: 'customer_123',
+      orderNumber: '250731SHP04821',
+      orderVerification: 'unverified',
+      purchaseDate: '2026-07-31',
+      orderDeliveredDate: '2026-08-02',
+      externalEvidenceUrl: 'https://drive.google.com/file/d/abc/view',
+      externalEvidenceNote: 'เครื่องดับหลังเปิดประมาณ 5 นาที',
+    })
+  );
+  // Correcting a typo on this event's own snapshot is explicitly allowed.
+  await assertSucceeds(updateDoc(jobRef, { contactChannelIdentity: 'customer_1234' }));
+  await assertSucceeds(updateDoc(jobRef, { orderVerification: 'verified' }));
+  await assertSucceeds(updateDoc(jobRef, { orderVerification: 'not_found' }));
+  await assertSucceeds(updateDoc(jobRef, { purchaseDate: '2026-01-01' }));
+  // Every approved channel is accepted.
+  for (const channel of ['lazada', 'line', 'store', 'website', 'other']) {
+    await assertSucceeds(updateDoc(jobRef, { contactChannel: channel }));
+  }
+  // Clearing to null is how the UI removes a value.
+  await assertSucceeds(
+    updateDoc(jobRef, {
+      externalEvidenceUrl: null,
+      externalEvidenceNote: null,
+      purchaseDate: null,
+      orderDeliveredDate: null,
+    })
+  );
+  await assertSucceeds(
+    updateDoc(jobRef, { orderNumber: null, orderVerification: null })
+  );
+  await assertSucceeds(
+    updateDoc(jobRef, { contactChannel: null, contactChannelIdentity: null })
+  );
+  // 'phone' carries no separate identity — the canonical phone is the identity.
+  await assertSucceeds(updateDoc(jobRef, { contactChannel: 'phone' }));
+});
+
+test('F5d-69 invalid service-event metadata is denied', async () => {
+  const brunoDb = staffDb(brunoUid);
+  const jobRef = doc(brunoDb, 'serviceJobs', 'job-bruno');
+
+  await assertFails(updateDoc(jobRef, { contactChannel: 'tiktok_shop' }));
+  await assertFails(updateDoc(jobRef, { contactChannel: 42 }));
+  await assertFails(
+    updateDoc(jobRef, { contactChannel: 'line', contactChannelIdentity: 'a'.repeat(121) })
+  );
+  await assertFails(updateDoc(jobRef, { orderNumber: 'a'.repeat(65) }));
+  await assertFails(
+    updateDoc(jobRef, { orderNumber: 'ABC-1', orderVerification: 'approved' })
+  );
+  for (const badDate of ['18-08-2026', '2026/08/18', '2026-8-1', '2026-13-01', '2026-08-32']) {
+    await assertFails(updateDoc(jobRef, { purchaseDate: badDate }));
+    await assertFails(updateDoc(jobRef, { orderDeliveredDate: badDate }));
+  }
+  await assertFails(updateDoc(jobRef, { externalEvidenceUrl: 'http://example.com/a' }));
+  await assertFails(updateDoc(jobRef, { externalEvidenceUrl: 'javascript:alert(1)' }));
+  await assertFails(updateDoc(jobRef, { externalEvidenceUrl: 'data:text/html,x' }));
+  // F5d-69 Phase 2A-FIX section 3: an embedded newline stays denied even
+  // though RE2's '.' never matches one is the reason it fails, not an
+  // explicit control-character screen — externalEvidenceUrl keeps zero
+  // tolerance here, unlike the plain string fields below.
+  await assertFails(updateDoc(jobRef, { externalEvidenceUrl: 'https://example.com/a\nb' }));
+  await assertFails(
+    updateDoc(jobRef, { externalEvidenceUrl: `https://example.com/${'a'.repeat(2048)}` })
+  );
+  await assertFails(updateDoc(jobRef, { externalEvidenceNote: 'a'.repeat(1001) }));
+});
+
+// F5d-69 Phase 2A-FIX section 1/6: Rules never had a control-character
+// screen for the plain string fields (validOptionalString checks only type
+// and length), so the Worker's relaxed policy for contactChannelIdentity/
+// orderNumber/externalEvidenceNote is symmetric with what was already true
+// here — proven explicitly rather than left implicit.
+test('F5d-69 plain string fields tolerate embedded control characters, matching the relaxed Worker policy', async () => {
+  const brunoDb = staffDb(brunoUid);
+  const jobRef = doc(brunoDb, 'serviceJobs', 'job-bruno');
+
+  await assertSucceeds(
+    updateDoc(jobRef, { contactChannel: 'line', contactChannelIdentity: 'a\nb' })
+  );
+  await assertSucceeds(updateDoc(jobRef, { orderNumber: 'ABC\t1', orderVerification: 'verified' }));
+  await assertSucceeds(updateDoc(jobRef, { externalEvidenceNote: 'line one\r\nline two' }));
+});
+
+test('F5d-69 cross-field invariants are enforced on the resulting document', async () => {
+  const brunoDb = staffDb(brunoUid);
+  const jobRef = doc(brunoDb, 'serviceJobs', 'job-bruno');
+
+  // Reset to a known clean state first.
+  await assertSucceeds(
+    updateDoc(jobRef, {
+      contactChannel: null,
+      contactChannelIdentity: null,
+      orderNumber: null,
+      orderVerification: null,
+    })
+  );
+  // Verification cannot exist without an order number.
+  await assertFails(updateDoc(jobRef, { orderVerification: 'verified' }));
+  // An identity cannot exist without a channel.
+  await assertFails(updateDoc(jobRef, { contactChannelIdentity: 'orphan' }));
+  // 'phone' cannot carry its own identity.
+  await assertFails(
+    updateDoc(jobRef, { contactChannel: 'phone', contactChannelIdentity: '0812345678' })
+  );
+  // The same pairs are accepted when set together consistently.
+  await assertSucceeds(
+    updateDoc(jobRef, { orderNumber: 'ABC-1', orderVerification: 'verified' })
+  );
+  await assertSucceeds(
+    updateDoc(jobRef, { contactChannel: 'shopee', contactChannelIdentity: 'shop_user' })
+  );
+  // Clearing the parent while leaving the child behind is denied.
+  await assertFails(updateDoc(jobRef, { orderNumber: null }));
+  await assertFails(updateDoc(jobRef, { contactChannel: null }));
+
+  // F5d-69 Phase 2A-FIX section 4: the reverse direction — an order number
+  // set while leaving verification null/missing — is now also denied. The
+  // pre-fix invariant only checked the direction above (verification
+  // without an order number); this closes the asymmetry the Phase 2A-R
+  // audit found. Reset to a clean (null, null) pair first so the write
+  // under test is the only thing touching either field.
+  await assertSucceeds(
+    updateDoc(jobRef, { orderNumber: null, orderVerification: null })
+  );
+  await assertFails(updateDoc(jobRef, { orderNumber: 'NEW-1' }));
+  // The valid transition — both set together in the same write — remains
+  // allowed.
+  await assertSucceeds(
+    updateDoc(jobRef, { orderNumber: 'NEW-1', orderVerification: 'unverified' })
+  );
+});
+
+test('F5d-69 a legacy Service Job missing every new field remains editable', async () => {
+  const brunoDb = staffDb(brunoUid);
+  // job-legacy-bruno is seeded without any F5d-69 field. An ordinary,
+  // unrelated update must not be denied by a missing-field dereference —
+  // the exact F5d-33/F5d-34 B-2 defect class this rule block guards against.
+  await assertSucceeds(
+    updateDoc(doc(brunoDb, 'serviceJobs', 'job-legacy-bruno'), { status: 'Diagnosing' })
+  );
+  await assertSucceeds(
+    updateDoc(doc(brunoDb, 'serviceJobs', 'job-legacy-bruno'), { technician: 'Somsak' })
+  );
+  // And it can still receive valid new metadata for the first time.
+  await assertSucceeds(
+    updateDoc(doc(brunoDb, 'serviceJobs', 'job-legacy-bruno'), {
+      contactChannel: 'store',
+      contactChannelIdentity: 'CentralWorld',
+    })
+  );
+
+  // F5d-69 Phase 2A-FIX section 4 — explicit LEGACY vs F5d-69-state truth
+  // table for the order/verification pair, on a second legacy document so
+  // this test's own prior writes above don't influence it:
+  //   legacy (both absent) + unrelated edit         -> ALLOW (already above)
+  //   legacy (both absent) + orderNumber alone       -> DENY (new state,
+  //                                                      missing its pair)
+  //   legacy (both absent) + both set together       -> ALLOW
+  await assertFails(
+    updateDoc(doc(brunoDb, 'serviceJobs', 'job-legacy-bruno-2'), { orderNumber: 'FIRST-1' })
+  );
+  await assertSucceeds(
+    updateDoc(doc(brunoDb, 'serviceJobs', 'job-legacy-bruno-2'), {
+      orderNumber: 'FIRST-1',
+      orderVerification: 'unverified',
+    })
+  );
 });
 
 test('attachments authorize through the parent ServiceJob and reject destructive metadata changes', async () => {
