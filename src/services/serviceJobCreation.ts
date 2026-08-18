@@ -13,6 +13,7 @@ import type { BackendKind } from '../config/backend';
 import type { CreatePathAssertion } from '../config/runtimeDiagnostics';
 import { formatTime } from '../utils/formatDate';
 import { bangkokIsoDate } from './bangkokTime';
+import { resolveServiceEventMetadataInvariants } from './serviceEventMetadataInvariants';
 
 export function createReceivedTimelineEvent(receivedAt: Date): TimelineEvent {
   return {
@@ -91,9 +92,32 @@ export interface ServiceJobIntakePayload {
   externalEvidenceNote?: string | null;
 }
 
+// F5d-69 — the one place intake free text collapses blank-after-trim to
+// null, so both backend modes see identical behavior: the Worker applies
+// this same rule server-side (nullableBoundedString), but Mock mode's
+// buildServerOwnedServiceJob only ever does `intake.field ?? null` — it
+// never trims — so a blank string would otherwise persist as `''` in Mock
+// while collapsing to `null` in Firestore. Doing it once here, at payload
+// build, keeps both modes identical instead of duplicating the rule in
+// every input's onChange handler.
+function trimmedOrNull(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 export function buildServiceJobIntakePayload(
   input: Omit<NewServiceJobInput, 'brandId'>
 ): ServiceJobIntakePayload {
+  // orderVerification is never a directly-edited intake field (see
+  // ServiceIntakeData's own comment) — passing `null` in here lets the
+  // shared resolver apply its one rule uniformly: 'unverified' whenever an
+  // order number is present, null otherwise.
+  const resolved = resolveServiceEventMetadataInvariants({
+    contactChannel: input.intake.contactChannel,
+    contactChannelIdentity: trimmedOrNull(input.intake.contactChannelIdentity),
+    orderNumber: trimmedOrNull(input.intake.orderNumber),
+    orderVerification: null,
+  });
   return {
     customerName: input.customer.name,
     customerPhone: input.customer.phone,
@@ -107,6 +131,11 @@ export function buildServiceJobIntakePayload(
     internalNotes: input.intake.internalNotes,
     photos: input.intake.photos.map((photo) => photo.dataUrl),
     warranty: input.product.warrantyStatus === 'in_warranty',
+    ...resolved,
+    purchaseDate: trimmedOrNull(input.intake.purchaseDate),
+    orderDeliveredDate: trimmedOrNull(input.intake.orderDeliveredDate),
+    externalEvidenceUrl: trimmedOrNull(input.intake.externalEvidenceUrl),
+    externalEvidenceNote: trimmedOrNull(input.intake.externalEvidenceNote),
   };
 }
 

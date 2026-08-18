@@ -39,7 +39,13 @@ import {
   PageContainer,
   AsyncErrorAlert,
 } from '../../../shared/components';
-import { DeliveryNotePrintPreview, ServiceReportsSection } from '../components';
+import {
+  DeliveryNotePrintPreview,
+  ServiceReportsSection,
+  ServiceEventMetadataEditSection,
+  type ServiceEventMetadataEditValue,
+} from '../components';
+import { serviceEventMetadataDraftError } from '../../../validation';
 import {
   formatCurrencyTHB,
   formatDate,
@@ -109,6 +115,20 @@ function ServiceJobDetailsView({
   const [tech, setTech] = useState(claim.technician);
   const [note, setNote] = useState('');
   const [notes, setNotes] = useState(claim.notes);
+  // F5d-69 / DECISIONS.md #041 — one local draft object mirroring
+  // ServiceEventMetadataEditValue exactly, initialized from the persisted
+  // ServiceJob (null fields become '' for controlled inputs, matching
+  // ServiceIntakeData's own string-not-null convention — see its comment).
+  const [eventMetadata, setEventMetadata] = useState<ServiceEventMetadataEditValue>({
+    contactChannel: claim.contactChannel,
+    contactChannelIdentity: claim.contactChannelIdentity ?? '',
+    orderNumber: claim.orderNumber ?? '',
+    orderVerification: claim.orderVerification,
+    purchaseDate: claim.purchaseDate ?? '',
+    orderDeliveredDate: claim.orderDeliveredDate ?? '',
+    externalEvidenceUrl: claim.externalEvidenceUrl ?? '',
+    externalEvidenceNote: claim.externalEvidenceNote ?? '',
+  });
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showDeliveryNotePreview, setShowDeliveryNotePreview] = useState(false);
@@ -127,13 +147,29 @@ function ServiceJobDetailsView({
 
   const saveChanges = async () => {
     if (isSaving) return;
-    setIsSaving(true);
     setSaveError(null);
+    // F5d-69 — blocks on a genuinely invalid entered date/URL before ever
+    // reaching Firestore; a blank value is never an error here (every one
+    // of these fields is optional).
+    const metadataError = serviceEventMetadataDraftError(eventMetadata);
+    if (metadataError) {
+      setSaveError(metadataError);
+      return;
+    }
+    setIsSaving(true);
     try {
       await updateServiceJob(claim.id, {
         status,
         notes,
         ...(canReassignTechnician ? { technician: tech } : {}),
+        contactChannel: eventMetadata.contactChannel,
+        contactChannelIdentity: eventMetadata.contactChannelIdentity.trim() || null,
+        orderNumber: eventMetadata.orderNumber.trim() || null,
+        orderVerification: eventMetadata.orderVerification,
+        purchaseDate: eventMetadata.purchaseDate || null,
+        orderDeliveredDate: eventMetadata.orderDeliveredDate || null,
+        externalEvidenceUrl: eventMetadata.externalEvidenceUrl.trim() || null,
+        externalEvidenceNote: eventMetadata.externalEvidenceNote.trim() || null,
       });
       onDone();
     } catch (error) {
@@ -431,6 +467,8 @@ function ServiceJobDetailsView({
           </GlassCard>
         </div>
       </div>
+
+      <ServiceEventMetadataEditSection value={eventMetadata} onChange={setEventMetadata} />
 
       {/* Bottom actions */}
       <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:justify-between animate-[fade-in_0.6s_ease_both]">

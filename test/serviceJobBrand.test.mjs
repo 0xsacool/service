@@ -34,6 +34,14 @@ const input = {
     accessories: [],
     photos: [],
     internalNotes: '',
+    // F5d-69 — matches createEmptyServiceIntake()'s own defaults.
+    contactChannel: null,
+    contactChannelIdentity: '',
+    orderNumber: '',
+    purchaseDate: '',
+    orderDeliveredDate: '',
+    externalEvidenceUrl: '',
+    externalEvidenceNote: '',
   },
 };
 

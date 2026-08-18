@@ -42,5 +42,12 @@ export function createEmptyServiceIntake(): ServiceIntakeData {
     accessories: [],
     internalNotes: '',
     photos: [],
+    contactChannel: null,
+    contactChannelIdentity: '',
+    orderNumber: '',
+    purchaseDate: '',
+    orderDeliveredDate: '',
+    externalEvidenceUrl: '',
+    externalEvidenceNote: '',
   };
 }

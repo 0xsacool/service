@@ -1,11 +1,19 @@
-import type { CustomerSearchResult } from '../types';
+import type { CustomerSearchResult, ServiceJob } from '../types';
 import type {
   CustomersRepository,
   SearchRepository,
   ServiceJobsRepository,
 } from './types';
-import { matches, matchesPhone, normalizeDigits } from './searchMatching';
+import {
+  matches,
+  matchesChannelIdentity,
+  matchesOrderNumber,
+  matchesPhone,
+  normalizeDigits,
+} from './searchMatching';
 import { normalizeCanonicalPhone } from './canonicalPhone';
+import { compareServiceJobsByRecency, mostRecentJobWithContactChannel } from '../services/serviceJobHistory';
+import { channelLabel } from '../services/serviceJobPresentation';
 
 // Firestore implementation of SearchRepository (F5d-49). Built the same way
 // as the Mock implementation (searchRepository.ts) and sharing its matching
@@ -16,13 +24,19 @@ import { normalizeCanonicalPhone } from './canonicalPhone';
 // (customers via `brandIds array-contains`, serviceJobs via `brandId ==`),
 // so this module inherits that scoping by construction.
 //
-// Marketplace username and order number (DATABASE_SCHEMA.md
-// `customer_channel_contacts` / `product_instances.order_reference`) have
-// no Firestore collection at all — no Product Instance or channel-contact
-// entity has ever been migrated (DECISIONS.md #012/#013/#037). Those two
-// search dimensions are therefore genuinely unsupported here: every result
-// leaves `marketplace`/`username`/`orderNumber` undefined rather than
-// inventing a value.
+// F5d-69 / DECISIONS.md #041 — marketplace username and order number are
+// now real fields on ServiceJob itself (contactChannelIdentity/orderNumber),
+// so this dimension is genuinely supported here — no separate
+// `customer_channel_contacts`/`product_instances` collection was ever
+// created (#012/#013/#037 remain otherwise unimplemented), no new Firestore
+// query, and no new index: every match is computed in memory against the
+// already brand-scoped, already-loaded `serviceJobs` list this module reads
+// for tracking/serial matching too. `marketplace`/`username`/`orderNumber`
+// on the returned CustomerSearchResult are a deterministic *projection* of
+// whichever Service Job actually matched (or, for a name/phone/tracking/
+// serial match, the customer's own most recent job with a non-null
+// contactChannel) — never a canonical customer-level value, since no such
+// value exists (#013 stays only partially implemented).
 //
 // F5d-49B (Terra P1 remediation): a customer's Firestore document ID is
 // identity only, never a phone number. Service Job job-history attribution
@@ -78,6 +92,9 @@ function findAmbiguousCanonicalPhones(customers: CustomersRepository): Set<strin
 
 // Rebuilt on every call, same rationale as the Mock implementation: reflects
 // the live Firestore snapshot without separate cache-invalidation logic.
+// Leaves marketplace/username/orderNumber unset — search() below fills
+// those in per result, since which job's data is "correct" to show depends
+// on how (or whether) each customer actually matched this particular query.
 function buildCustomerSearchResults(
   customers: CustomersRepository,
   serviceJobs: ServiceJobsRepository
@@ -115,11 +132,11 @@ function buildCustomerSearchResults(
 // the same canonical phone as everything else in this module.
 function findCustomerByJobField(
   query: string,
-  serviceJobs: ServiceJobsRepository,
+  allJobs: ServiceJob[],
   customerSearchResults: CustomerSearchResult[]
 ): CustomerSearchResult[] {
   const matchedPhones = new Set<string>();
-  for (const job of serviceJobs.getAll()) {
+  for (const job of allJobs) {
     if (matches(job.id, query) || matches(job.serialNumber, query)) {
       const phone = normalizeCanonicalPhone(job.customerPhone);
       if (phone) matchedPhones.add(phone);
@@ -129,6 +146,45 @@ function findCustomerByJobField(
     const phone = normalizeCanonicalPhone(c.phone);
     return phone !== null && matchedPhones.has(phone);
   });
+}
+
+function groupJobsByCanonicalPhone(allJobs: ServiceJob[]): Map<string, ServiceJob[]> {
+  const byPhone = new Map<string, ServiceJob[]>();
+  for (const job of allJobs) {
+    const phone = normalizeCanonicalPhone(job.customerPhone);
+    if (!phone) continue;
+    const existing = byPhone.get(phone);
+    if (existing) existing.push(job);
+    else byPhone.set(phone, [job]);
+  }
+  return byPhone;
+}
+
+// Deterministic "which job matched" selection for a search dimension —
+// createdAt DESC, then job id DESC (compareServiceJobsByRecency), never
+// dependent on Map/array iteration order.
+function findMostRecentMatch(
+  jobs: ServiceJob[],
+  predicate: (job: ServiceJob) => boolean
+): ServiceJob | null {
+  let best: ServiceJob | null = null;
+  for (const job of jobs) {
+    if (!predicate(job)) continue;
+    if (!best || compareServiceJobsByRecency(job, best) < 0) best = job;
+  }
+  return best;
+}
+
+// The fallback projection for a customer matched by name/phone/tracking/
+// serial — their own most recent job carrying a non-null contact channel,
+// independent of what (if anything) about this query matched.
+function fallbackChannelProjection(jobs: ServiceJob[]): Partial<CustomerSearchResult> {
+  const recent = mostRecentJobWithContactChannel(jobs);
+  if (!recent?.contactChannel) return {};
+  return {
+    marketplace: channelLabel(recent.contactChannel),
+    username: recent.contactChannelIdentity ?? undefined,
+  };
 }
 
 export function createFirestoreSearchRepository(
@@ -141,23 +197,49 @@ export function createFirestoreSearchRepository(
       if (!q) return [];
       const qDigits = normalizeDigits(q);
 
+      const allJobs = serviceJobs.getAll();
       const customerSearchResults = buildCustomerSearchResults(customers, serviceJobs);
+      const jobsByPhone = groupJobsByCanonicalPhone(allJobs);
+      const jobsFor = (customer: CustomerSearchResult): ServiceJob[] => {
+        const phone = normalizeCanonicalPhone(customer.phone);
+        return phone ? (jobsByPhone.get(phone) ?? []) : [];
+      };
 
       const directMatches = customerSearchResults.filter(
         (c) => matches(c.name, q) || matchesPhone(c.phone, q, qDigits)
       );
+      const jobFieldMatches = findCustomerByJobField(q, allJobs, customerSearchResults);
 
-      const jobFieldMatches = findCustomerByJobField(
-        q,
-        serviceJobs,
-        customerSearchResults
-      );
-
-      const byId = new Map<string, CustomerSearchResult>();
+      const results = new Map<string, CustomerSearchResult>();
       for (const c of [...directMatches, ...jobFieldMatches]) {
-        byId.set(c.id, c);
+        results.set(c.id, { ...c, ...fallbackChannelProjection(jobsFor(c)) });
       }
-      return Array.from(byId.values());
+
+      // Order number / channel identity matches. Each customer's own jobs
+      // are checked independently of the two match sets above, and a match
+      // here always overrides the generic "most recent channel" fallback
+      // with the specific job that actually matched — a customer can match
+      // (and project) both dimensions at once if two different jobs each
+      // matched a different one.
+      for (const c of customerSearchResults) {
+        const jobs = jobsFor(c);
+        if (jobs.length === 0) continue;
+        const orderMatch = findMostRecentMatch(jobs, (job) => matchesOrderNumber(job.orderNumber, q));
+        const identityMatch = findMostRecentMatch(jobs, (job) =>
+          matchesChannelIdentity(job.contactChannelIdentity, q)
+        );
+        if (!orderMatch && !identityMatch) continue;
+        const projection: Partial<CustomerSearchResult> = {};
+        if (orderMatch) projection.orderNumber = orderMatch.orderNumber ?? undefined;
+        if (identityMatch?.contactChannel) {
+          projection.marketplace = channelLabel(identityMatch.contactChannel);
+          projection.username = identityMatch.contactChannelIdentity ?? undefined;
+        }
+        const existing = results.get(c.id) ?? { ...c, ...fallbackChannelProjection(jobs) };
+        results.set(c.id, { ...existing, ...projection });
+      }
+
+      return Array.from(results.values());
     },
 
     // No session/persistence layer exists for tracked search history in

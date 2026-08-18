@@ -1,22 +1,16 @@
 import { useId } from 'react';
 import { Search } from 'lucide-react';
 import { GlassCard } from '../GlassCard';
-import { backendKind } from '../../../config/backend';
 
-// F5d-49B (Terra P2 UX honesty): Firestore-mode search has no backing data
-// for marketplace username or order number (DATABASE_SCHEMA.md
-// `customer_channel_contacts`/`product_instances` were never migrated —
-// DECISIONS.md #038) — advertising them here would promise a search that
-// silently never matches. Mock mode keeps the full, actually-supported
-// dimension list.
-const DEFAULT_PLACEHOLDER =
-  backendKind === 'mock'
-    ? 'ค้นหาชื่อผู้ใช้ ออเดอร์ โทรศัพท์ เลขติดตาม หรือหมายเลขเครื่อง…'
-    : 'ค้นหาชื่อ โทรศัพท์ เลขติดตาม หรือหมายเลขเครื่อง…';
-const CAPTION =
-  backendKind === 'mock'
-    ? 'ค้นหาได้จากชื่อ โทรศัพท์ ชื่อผู้ใช้ ออเดอร์ เลขติดตาม หรือหมายเลขเครื่อง'
-    : 'ค้นหาได้จากชื่อ โทรศัพท์ เลขติดตาม หรือหมายเลขเครื่อง';
+// F5d-49B (Terra P2 UX honesty) established that this copy must never
+// promise a search dimension that silently never matches. F5d-69 closes
+// that gap for Firestore mode specifically: orderNumber/contactChannelIdentity
+// are now real ServiceJob fields, matched in memory by
+// firestoreSearchRepository.ts (DECISIONS.md #041) — the two modes'
+// dimension lists are therefore the same today, so no backendKind branch is
+// needed here anymore.
+const DEFAULT_PLACEHOLDER = 'ค้นหาชื่อผู้ใช้ ออเดอร์ โทรศัพท์ เลขติดตาม หรือหมายเลขเครื่อง…';
+const CAPTION = 'ค้นหาได้จากชื่อ โทรศัพท์ ชื่อผู้ใช้ ออเดอร์ เลขติดตาม หรือหมายเลขเครื่อง';
 
 export function SearchInput({
   value,

@@ -2,14 +2,11 @@ import { Search } from 'lucide-react';
 import type { CustomerSearchResult } from '../../../types';
 import { RecentSearches } from './RecentSearches';
 import { RecentCustomers } from './RecentCustomers';
-import { backendKind } from '../../../config/backend';
 
-// F5d-49B (Terra P2 UX honesty) — see SearchInput.tsx's identical rationale:
-// Firestore mode does not advertise marketplace/order search here either.
-const BARE_PROMPT =
-  backendKind === 'mock'
-    ? 'เริ่มพิมพ์ชื่อ โทรศัพท์ ชื่อผู้ใช้ ออเดอร์ เลขติดตาม หรือหมายเลขเครื่อง'
-    : 'เริ่มพิมพ์ชื่อ โทรศัพท์ เลขติดตาม หรือหมายเลขเครื่อง';
+// F5d-49B (Terra P2 UX honesty) — see SearchInput.tsx's identical rationale.
+// F5d-69 closed the Firestore-mode gap this used to branch around; both
+// modes advertise the same dimensions now.
+const BARE_PROMPT = 'เริ่มพิมพ์ชื่อ โทรศัพท์ ชื่อผู้ใช้ ออเดอร์ เลขติดตาม หรือหมายเลขเครื่อง';
 
 // The idle state (no query typed yet) — Recent Searches and Recent
 // Customers, each only rendered when non-empty. The bare prompt below only

@@ -31,27 +31,28 @@ import {
   NewCustomerSummaryCard,
 } from '../components';
 import { ROUTES, createEmptyServiceIntake } from '../../../constants';
-import { isServiceIntakeComplete } from '../../../validation';
+import { isServiceIntakeComplete, serviceIntakeMetadataError } from '../../../validation';
 import { useCreateServiceJob } from '../../../hooks/useCreateServiceJob';
-import { backendKind } from '../../../config/backend';
+import { useServiceJobs } from '../../../hooks/useServiceJobs';
 import {
   serviceJobCreateErrorMessage,
   serviceJobIntakeTooLargeMessage,
 } from '../serviceJobErrorMessages';
 import { photoValidationErrorMessage } from '../photoEvidenceErrorMessages';
 import { validatePhotosForSubmission } from '../../../services/imageEvidenceProcessing';
+import { normalizeCanonicalPhone } from '../../../repositories/canonicalPhone';
+import { mostRecentJobWithContactChannel } from '../../../services/serviceJobHistory';
 
-// F5d-49D (Terra P2 UX honesty follow-up): same rationale as SearchInput.tsx
-// — Firestore mode has no marketplace username/order number backing data
-// (DECISIONS.md #038), so this prompt must not promise those dimensions.
+// F5d-49D (Terra P2 UX honesty follow-up) — same rationale as
+// SearchInput.tsx. F5d-69 closed the Firestore-mode gap this used to branch
+// around (DECISIONS.md #041), so this prompt is the same in both modes now.
 const START_SEARCH_PROMPT =
-  backendKind === 'mock'
-    ? 'เริ่มจากค้นหาลูกค้า — ค้นหาด้วยชื่อ โทรศัพท์ ชื่อผู้ใช้ ออเดอร์ เลขติดตาม หรือหมายเลขเครื่อง'
-    : 'เริ่มจากค้นหาลูกค้า — ค้นหาด้วยชื่อ โทรศัพท์ เลขติดตาม หรือหมายเลขเครื่อง';
+  'เริ่มจากค้นหาลูกค้า — ค้นหาด้วยชื่อ โทรศัพท์ ชื่อผู้ใช้ ออเดอร์ เลขติดตาม หรือหมายเลขเครื่อง';
 
 export function NewServiceJob() {
   const navigate = useNavigate();
   const { createServiceJob } = useCreateServiceJob();
+  const { serviceJobs } = useServiceJobs();
 
   const [selectedCustomer, setSelectedCustomer] = useState<IntakeCustomer | null>(null);
   // F5d-65 — a separate step, not a modal: search stays visible-then-replaced
@@ -90,8 +91,28 @@ export function NewServiceJob() {
     }
   }, [savedJob]);
 
+  // F5d-69 / DECISIONS.md #041 — canonical customer-level channel storage
+  // does not exist; the most recent known channel is derived in memory from
+  // this customer's own real Service Job history (never fabricated, never
+  // written to the customer document) and only ever prefills this new
+  // intake draft — staff may freely change it, and doing so affects only
+  // this Service Job's own snapshot, never the historical jobs it was
+  // derived from.
   const selectExistingCustomer = (customer: CustomerSearchResult) => {
     setSelectedCustomer({ kind: 'existing', ...customer });
+    const phone = normalizeCanonicalPhone(customer.phone);
+    const priorJob = phone
+      ? mostRecentJobWithContactChannel(
+          serviceJobs.filter((job) => normalizeCanonicalPhone(job.customerPhone) === phone)
+        )
+      : null;
+    if (priorJob?.contactChannel) {
+      setIntake((current) => ({
+        ...current,
+        contactChannel: priorJob.contactChannel,
+        contactChannelIdentity: priorJob.contactChannelIdentity ?? '',
+      }));
+    }
   };
 
   const startCreatingCustomer = (query: string) => {
@@ -134,6 +155,14 @@ export function NewServiceJob() {
     const photoValidation = validatePhotosForSubmission(intake.photos);
     if (!photoValidation.ok) {
       setSaveError(photoValidationErrorMessage(photoValidation.reason));
+      return;
+    }
+    // F5d-69 — blocks on a genuinely invalid entered date/URL before ever
+    // reaching the network; a blank value is never an error here (every
+    // field this checks is optional).
+    const metadataError = serviceIntakeMetadataError(intake);
+    if (metadataError) {
+      setSaveError(metadataError);
       return;
     }
     // F5d-67 Phase 2R — the whole-request defense-in-depth check. Per-photo

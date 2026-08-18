@@ -9,6 +9,7 @@ import {
 } from '../../../shared/components';
 import { APP_NAME, ROUTES } from '../../../constants';
 import { formatThaiDate } from '../../../utils/formatDate';
+import { channelLabel } from '../../../services/serviceJobPresentation';
 
 function PrintField({ label, value }: { label: string; value: string }) {
   return (
@@ -101,15 +102,42 @@ export function ServiceRequestPrintPreview({
           ใบนำส่งเข้ารับบริการ
         </h1>
 
-        {/* Customer */}
+        {/* Customer + order metadata — F5d-69 / DECISIONS.md #041. Every new
+            field is rendered only when present: most Service Jobs won't
+            carry all (or any) of them, and printing a run of empty rows
+            would waste the vertical budget this document's one-page
+            regression gate depends on (PRINT_SPECIFICATIONS.md, F5d-68).
+            externalEvidenceUrl/externalEvidenceNote never print — only the
+            fixed short indicator below, when a link exists. */}
         <section className="mt-6 print:mt-4">
           <h2 className="mb-2 border-b border-neutral-300 pb-1 text-xs font-bold uppercase tracking-wide">
             ลูกค้า
           </h2>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 print:grid-cols-3">
             <PrintField label="ชื่อ" value={job.customerName} />
             <PrintField label="โทรศัพท์" value={job.customerPhone} />
             <PrintField label="อีเมล" value={job.customerEmail} />
+            {job.contactChannel && (
+              <PrintField label="ช่องทางติดต่อ" value={channelLabel(job.contactChannel)} />
+            )}
+            {job.contactChannelIdentity && (
+              <PrintField label="บัญชี / ชื่อผู้ใช้" value={job.contactChannelIdentity} />
+            )}
+            {job.orderNumber && (
+              <PrintField label="เลขที่คำสั่งซื้อ" value={job.orderNumber} />
+            )}
+            {job.purchaseDate && (
+              <PrintField label="วันที่ซื้อ" value={formatThaiDate(job.purchaseDate)} />
+            )}
+            {job.orderDeliveredDate && (
+              <PrintField
+                label="วันที่ลูกค้าได้รับสินค้า"
+                value={formatThaiDate(job.orderDeliveredDate)}
+              />
+            )}
+            {job.externalEvidenceUrl && (
+              <PrintField label="หลักฐานเพิ่มเติม" value="มีหลักฐานเพิ่มเติมออนไลน์" />
+            )}
           </div>
         </section>
 

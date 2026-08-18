@@ -1,6 +1,5 @@
 import { SearchX, UserPlus } from 'lucide-react';
 import { GlassCard } from '../GlassCard';
-import { backendKind } from '../../../config/backend';
 
 // F5d-49B (Terra P2 UX honesty) established that this control must never
 // look live while unwired. F5d-65 wires it — NewServiceJob.tsx now passes a
@@ -8,12 +7,9 @@ import { backendKind } from '../../../config/backend';
 // creation, DECISIONS.md-style fail-closed — see
 // src/services/serviceJobCreation.ts) — so the mode-conditional hide is
 // removed for the button itself. The search-dimension wording split
-// (marketplace/order only exist in Mock — DECISIONS.md #038) is unrelated
-// and stays exactly as it was.
-const RETRY_HINT =
-  backendKind === 'mock'
-    ? 'ลองค้นหาด้วยชื่อ โทรศัพท์ ชื่อผู้ใช้ ออเดอร์ เลขติดตาม หรือหมายเลขเครื่องอื่น'
-    : 'ลองค้นหาด้วยชื่อ โทรศัพท์ เลขติดตาม หรือหมายเลขเครื่องอื่น';
+// (marketplace/order only in Mock) no longer applies either — F5d-69 added
+// real Firestore-mode support for both (DECISIONS.md #041).
+const RETRY_HINT = 'ลองค้นหาด้วยชื่อ โทรศัพท์ ชื่อผู้ใช้ ออเดอร์ เลขติดตาม หรือหมายเลขเครื่องอื่น';
 
 export function SearchNoResults({
   query,

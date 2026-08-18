@@ -528,6 +528,14 @@ test('buildServiceJobIntakePayload/buildCustomerIntakeSelector output plugs dire
       accessories: [],
       internalNotes: '',
       photos: [],
+      // F5d-69 — matches createEmptyServiceIntake()'s own defaults.
+      contactChannel: null,
+      contactChannelIdentity: '',
+      orderNumber: '',
+      purchaseDate: '',
+      orderDeliveredDate: '',
+      externalEvidenceUrl: '',
+      externalEvidenceNote: '',
     },
   });
   const customer = buildCustomerIntakeSelector({

@@ -5,32 +5,32 @@ import { test } from 'node:test';
 const readSource = async (path) =>
   await readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-// F5d-49B (Terra P2 UX honesty). Firestore-mode search only supports name,
-// phone, tracking number, and serial number (no marketplace/order backing
-// collection exists — DECISIONS.md #038); the UI text must not promise more
-// than that, and the unwired "+ New Customer" action must not look live.
-// Source-text assertions, not rendering, matching this project's existing
-// no-React-renderer testing approach.
+// F5d-49B (Terra P2 UX honesty) established that this copy must never
+// promise a search dimension that silently never matches — at the time,
+// Firestore-mode search only supported name/phone/tracking/serial (no
+// marketplace/order backing collection existed — DECISIONS.md #038). F5d-69
+// closed that gap: orderNumber/contactChannelIdentity are now real
+// ServiceJob fields, matched in memory by firestoreSearchRepository.ts
+// (DECISIONS.md #041), so both modes advertise the same dimensions today
+// and the backendKind branches these tests used to check are gone by
+// design — asserted below as their *absence*, not re-added. The unwired
+// "+ New Customer" action must still not look live where it genuinely
+// isn't (superseded by F5d-65 below). Source-text assertions, not
+// rendering, matching this project's existing no-React-renderer testing
+// approach.
 
-test('SearchInput branches its wording on backendKind and the Firestore-mode copy omits marketplace/order', async () => {
+test('SearchInput no longer branches on backendKind, and the single copy advertises marketplace/order (F5d-69 closed the gap)', async () => {
   const source = await readSource('src/shared/components/search/SearchInput.tsx');
-  assert.match(source, /backendKind === 'mock'/);
-  const firestoreBranchMatch = source.match(
-    /: ['"]ค้นหาชื่อ โทรศัพท์ เลขติดตาม หรือหมายเลขเครื่อง[^'"]*['"]/
-  );
-  assert.ok(firestoreBranchMatch, 'expected a Firestore-mode placeholder branch');
-  for (const branch of firestoreBranchMatch) {
-    assert.doesNotMatch(branch, /ชื่อผู้ใช้|ออเดอร์/);
-  }
+  assert.doesNotMatch(source, /backendKind\s*===/);
+  assert.match(source, /ชื่อผู้ใช้/);
+  assert.match(source, /ออเดอร์/);
 });
 
-test('SearchEmptyState branches its bare prompt on backendKind and the Firestore-mode copy omits marketplace/order', async () => {
+test('SearchEmptyState no longer branches on backendKind, and the single bare prompt advertises marketplace/order', async () => {
   const source = await readSource('src/shared/components/search/SearchEmptyState.tsx');
-  assert.match(source, /backendKind === 'mock'/);
-  const firestoreBranchMatch = source.match(
-    /: ['"]เริ่มพิมพ์ชื่อ โทรศัพท์ เลขติดตาม หรือหมายเลขเครื่อง['"]/
-  );
-  assert.ok(firestoreBranchMatch, 'expected a Firestore-mode bare-prompt branch');
+  assert.doesNotMatch(source, /backendKind\s*===/);
+  assert.match(source, /ชื่อผู้ใช้/);
+  assert.match(source, /ออเดอร์/);
 });
 
 test('F5d-65: SearchNoResults offers a live "+ New Customer" action in every backend mode', async () => {
@@ -46,16 +46,12 @@ test('F5d-65: SearchNoResults offers a live "+ New Customer" action in every bac
   assert.match(source, /สร้างลูกค้าใหม่/);
 });
 
-test('NewServiceJob branches its start-search subtitle on backendKind and the Firestore-mode copy omits marketplace/order', async () => {
+test('NewServiceJob no longer branches its start-search subtitle on backendKind, and the single copy advertises marketplace/order', async () => {
   const source = await readSource('src/features/service-jobs/pages/NewServiceJob.tsx');
-  assert.match(source, /backendKind === 'mock'/);
-  const firestoreBranchMatch = source.match(
-    /: ['"]เริ่มจากค้นหาลูกค้า — ค้นหาด้วยชื่อ โทรศัพท์ เลขติดตาม หรือหมายเลขเครื่อง['"]/
-  );
-  assert.ok(firestoreBranchMatch, 'expected a Firestore-mode start-search prompt branch');
-  const mockBranchMatch = source.match(/\? ['"]เริ่มจากค้นหาลูกค้า[^'"]*['"]/);
-  assert.ok(mockBranchMatch, 'expected a Mock-mode start-search prompt branch');
-  assert.match(mockBranchMatch[0], /ชื่อผู้ใช้|ออเดอร์/);
+  const promptDeclaration = source.match(/const START_SEARCH_PROMPT =[\s\S]*?;/)[0];
+  assert.doesNotMatch(promptDeclaration, /backendKinds*===/);
+  assert.match(promptDeclaration, /ชื่อผู้ใช้/);
+  assert.match(promptDeclaration, /ออเดอร์/);
 });
 
 test('Mock search behavior is unchanged: still matches by marketplace username', async () => {

@@ -1,4 +1,4 @@
-import type { ServiceJobStatus, Priority } from '../types';
+import type { ServiceJobStatus, Priority, ChannelId, OrderVerification } from '../types';
 
 export function statusColor(status: ServiceJobStatus): {
   text: string;
@@ -154,4 +154,41 @@ export function timelineTitle(title: string): string {
 
 export function timelineDescription(title: string, description: string): string {
   return TIMELINE_TEXT[title]?.description ?? description;
+}
+
+// F5d-69 / DECISIONS.md #041 — the single source of Thai display labels for
+// the seven approved contact channels, shared by the intake channel picker,
+// Service Job Details' edit section, Universal Search's projected result,
+// and the Service Request print document, so all four never drift apart.
+export function channelLabel(channel: ChannelId): string {
+  switch (channel) {
+    case 'shopee':
+      return 'Shopee';
+    case 'lazada':
+      return 'Lazada';
+    case 'line':
+      return 'LINE';
+    case 'store':
+      return 'ห้าง / หน้าร้าน';
+    case 'website':
+      return 'Website';
+    case 'phone':
+      return 'โทรศัพท์';
+    case 'other':
+      return 'อื่นๆ';
+  }
+}
+
+// Shared by Service Job Details' verification control and its own display —
+// order verification is never edited during intake (see ServiceIntakeData's
+// comment), only corrected later here.
+export function orderVerificationLabel(verification: OrderVerification): string {
+  switch (verification) {
+    case 'unverified':
+      return 'ยังไม่ได้ตรวจสอบ';
+    case 'verified':
+      return 'ยืนยันแล้ว';
+    case 'not_found':
+      return 'ไม่พบคำสั่งซื้อ';
+  }
 }
