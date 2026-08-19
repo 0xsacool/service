@@ -91,10 +91,18 @@ await expectDisabled(
   'TRUE'
 );
 
+// F5d-69G Phase 3A — this single assertion is the one deliberate, approved
+// transition in this file: production has moved from "opt-in absent" to
+// "opt-in explicitly present," per that phase's separate approval. Every
+// other check above is unchanged and still enforces the code-level
+// fail-closed contract regardless of what wrangler.toml contains — a
+// wrangler.toml opt-in only ever takes effect once separately deployed, and
+// even then only the exact string "true" (never "TRUE", never any other
+// value) is honored, as already proven above.
 const wranglerConfig = await readFile(new URL('../wrangler.toml', import.meta.url), 'utf8');
 check(
-  'the default deployment configuration contains no Public Tracking opt-in',
-  !/^\s*PUBLIC_TRACKING_ENABLED\s*=\s*"true"\s*$/m.test(wranglerConfig)
+  'the production deployment configuration explicitly and deliberately enables Public Tracking (F5d-69G Phase 3A approved activation)',
+  /^\s*PUBLIC_TRACKING_ENABLED\s*=\s*"true"\s*$/m.test(wranglerConfig)
 );
 
 if (failures > 0) {

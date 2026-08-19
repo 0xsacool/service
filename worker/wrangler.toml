@@ -35,6 +35,8 @@ ALLOWED_ORIGINS = "http://localhost:5173,https://luxace-service.web.app"
 # Google auth entirely, and a real deploy must never accidentally have it set.
 FIRESTORE_PROJECT_ID = "luxace-service"
 
+PUBLIC_TRACKING_ENABLED = "true"
+
 # Cron is deliberately absent from the default deployment configuration.
 # A future activation requires its own explicitly approved configuration and
 # deploy action; deploying ordinary Worker code must never register a trigger.
