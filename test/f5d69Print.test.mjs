@@ -84,10 +84,14 @@ test('when externalEvidenceUrl exists, only the fixed short indicator string pri
   );
 });
 
-test('no QR code is rendered for the evidence link (only the existing tracking QR placeholder remains, unchanged)', async () => {
+test('no QR code is rendered for the evidence link (only the one tracking QR remains, unchanged)', async () => {
+  // F5d-69G Phase 5A — the tracking QR is now a real <QRCode> element rather
+  // than placeholder text; the invariant this test protects is unchanged
+  // (evidence links never get their own QR), only the detection mechanism
+  // updates to match the real component.
   const source = await previewSourcePromise;
-  const qrOccurrences = (source.match(/คิวอาร์โค้ด/g) ?? []).length;
-  assert.equal(qrOccurrences, 1, 'expected exactly the one pre-existing tracking QR placeholder, no new one for evidence');
+  const qrOccurrences = (source.match(/<QRCode\s/g) ?? []).length;
+  assert.equal(qrOccurrences, 1, 'expected exactly the one tracking QR element, no separate one for evidence');
 });
 
 // --- three photos remain supported on the same physical page ----------------

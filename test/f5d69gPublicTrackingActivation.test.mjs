@@ -266,12 +266,17 @@ test('STATE A print: a genuinely inactive job prints the truthful inactive messa
 });
 
 test('STATE B print: only the credentialed state renders the QR and the real credentialed URL', async () => {
+  // F5d-69G Phase 5A — the QR is now a real <QRCode value={trackingUrl}>
+  // element rather than placeholder text; the invariant (only this exact
+  // state ever renders a QR, bound to the real credentialed URL) is
+  // unchanged, only the detection mechanism updates.
   const source = await printSourcePromise;
   const credentialedBlock = source.match(
-    /publicTrackingState === 'credentialed' &&[\s\S]*?\n {14}\)\}/
+    /publicTrackingState === 'credentialed' && trackingUrl && \([\s\S]*?\n {14}\)\}/
   );
   assert.notEqual(credentialedBlock, null, 'expected a credentialed print branch');
-  assert.match(credentialedBlock[0], /คิวอาร์โค้ด/);
+  assert.match(credentialedBlock[0], /<QRCode\s/);
+  assert.match(credentialedBlock[0], /value=\{trackingUrl\}/);
   assert.match(credentialedBlock[0], /\{trackingUrl\}/);
 });
 

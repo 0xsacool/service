@@ -247,11 +247,14 @@ test('break-inside-avoid is not applied to the whole document root (avoids worse
 
 test('every required Service Request field/section remains present in source', async () => {
   const source = await previewSourcePromise;
+  // F5d-69G Phase 5A — the tracking QR is now a real <QRCode> element
+  // rather than placeholder text; checked separately from the plain-text
+  // label list below, which the real component has no equivalent of.
+  assert.match(source, /<QRCode\s/);
   for (const required of [
     'APP_NAME',
     'เลขติดตาม',
     'เลขที่ใบรับบริการ',
-    'คิวอาร์โค้ด',
     'ลูกค้า',
     'สินค้า',
     'การรับประกัน',

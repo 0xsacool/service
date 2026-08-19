@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Check, Printer, Plus } from 'lucide-react';
+import QRCode from 'react-qr-code';
 import type { ServiceJob } from '../../../types';
 import {
   GlassCard,
@@ -109,10 +110,15 @@ export function ServiceRequestPrintPreview({
               </p>
             )}
             <div className="mt-2 flex flex-col items-end gap-1">
-              {publicTrackingState === 'credentialed' && (
+              {publicTrackingState === 'credentialed' && trackingUrl && (
                 <>
-                  <div className="flex h-16 w-16 items-center justify-center border border-neutral-400 text-[8px] font-medium text-neutral-400">
-                    คิวอาร์โค้ด
+                  <div className="flex h-16 w-16 items-center justify-center bg-white p-1">
+                    <QRCode
+                      value={trackingUrl}
+                      size={64}
+                      level="L"
+                      className="h-full w-full"
+                    />
                   </div>
                   <p className="max-w-[160px] break-all text-right text-[7px] text-neutral-400">
                     {trackingUrl}
