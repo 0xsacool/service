@@ -11,6 +11,7 @@ export {
   ServiceEventMetadataEditSection,
   type ServiceEventMetadataEditValue,
 } from './ServiceEventMetadataEditSection';
+export { PublicTrackingSection } from './PublicTrackingSection';
 export { ChipToggleGroup } from './ChipToggleGroup';
 export { ServiceRequestPrintPreview } from './ServiceRequestPrintPreview';
 export { DeliveryNotePrintPreview } from './DeliveryNotePrintPreview';

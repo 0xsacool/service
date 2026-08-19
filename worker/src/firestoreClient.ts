@@ -15,6 +15,7 @@ import {
   type PublicTrackingTimelineEvent,
 } from './publicTracking.ts';
 import type { PublicTrackingTokenHashStore } from './publicTrackingIssuance.ts';
+import type { PublicTrackingCodeIssuanceDataAccess } from './publicTrackingCodeIssuance.ts';
 import {
   TransactionConflictError,
   type AllocationTransaction,
@@ -77,6 +78,7 @@ export interface FirestoreClient
   extends
     StaffAuthorizationDataAccess,
     PublicTrackingTokenHashStore,
+    PublicTrackingCodeIssuanceDataAccess,
     ServiceJobCreationDataAccess,
     ServiceReportCreationDataAccess,
     ServiceReportFinalizationDataAccess {
@@ -779,6 +781,63 @@ export function createFirestoreClient(env: Env): FirestoreClient {
     async getPublicTrackingCode(code) {
       const doc = await getDocument(env, baseUrl, 'publicTrackingCodes', code);
       return doc ? parsePublicTrackingCodeDocument(doc) : null;
+    },
+
+    // F5d-69G — reuses the exact same generic beginTransactionImpl() the
+    // Service Report allocator uses; this is not a Service-Job-specific
+    // Firestore operation, just a generic transaction start.
+    async beginPublicTrackingCodeIssuanceTransaction() {
+      return beginTransactionImpl();
+    },
+
+    async publicTrackingCodeExists(transaction, code) {
+      const doc = await getDocument(env, baseUrl, 'publicTrackingCodes', code, transaction);
+      return doc !== null;
+    },
+
+    // Two writes, one atomic :commit: the Service Job's publicTrackingCodeHash
+    // is patched only if the document still exists (currentDocument.exists:
+    // true — defense in depth against a job deleted between authorization and
+    // this write, though this codebase has no delete path today), and the new
+    // publicTrackingCodes/{code} index document is created only if that exact
+    // code is not already taken (currentDocument.exists: false). A 409
+    // ABORTED response — e.g. a same-microsecond collision with a concurrent
+    // issuance choosing the same code — surfaces as TransactionConflictError
+    // so issuePublicTrackingCodeForServiceJob() can retry with a fresh code,
+    // matching allocateServiceJob()'s existing conflict-retry convention.
+    async commitPublicTrackingCodeIssuance(transaction, input) {
+      const token = await getAccessToken(env);
+      const response = await fetch(`${baseUrl}:commit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({
+          transaction: transaction.id,
+          writes: [
+            {
+              update: {
+                name: resourceName('serviceJobs', input.serviceJobId),
+                fields: fields({ publicTrackingCodeHash: input.codeHash }),
+              },
+              updateMask: { fieldPaths: ['publicTrackingCodeHash'] },
+              currentDocument: { exists: true },
+            },
+            createWrite('publicTrackingCodes', input.code, {
+              serviceJobId: input.serviceJobId,
+            }),
+          ],
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.text();
+        if (response.status === 409 && sanitizedGoogleErrorStatus(body) === 'ABORTED') {
+          throw new TransactionConflictError();
+        }
+        throw new FirestoreRequestError(
+          'commitPublicTrackingCodeIssuance',
+          response.status,
+          body
+        );
+      }
     },
 
     async writeExistingPublicTrackingTokenHash(trackingReference, tokenHash) {

@@ -29,10 +29,12 @@ import {
   ServiceRequestPrintPreview,
   NewCustomerForm,
   NewCustomerSummaryCard,
+  PublicTrackingSection,
 } from '../components';
 import { ROUTES, createEmptyServiceIntake } from '../../../constants';
 import { isServiceIntakeComplete, serviceIntakeMetadataError } from '../../../validation';
 import { useCreateServiceJob } from '../../../hooks/useCreateServiceJob';
+import { useIssuePublicTrackingCode } from '../../../hooks/useIssuePublicTrackingCode';
 import { useServiceJobs } from '../../../hooks/useServiceJobs';
 import {
   serviceJobCreateErrorMessage,
@@ -52,6 +54,7 @@ const START_SEARCH_PROMPT =
 export function NewServiceJob() {
   const navigate = useNavigate();
   const { createServiceJob } = useCreateServiceJob();
+  const { issuePublicTrackingCode, readServiceJob } = useIssuePublicTrackingCode();
   const { serviceJobs } = useServiceJobs();
 
   const [selectedCustomer, setSelectedCustomer] = useState<IntakeCustomer | null>(null);
@@ -63,6 +66,12 @@ export function NewServiceJob() {
   const [selectedProduct, setSelectedProduct] = useState<RegisteredProduct | null>(null);
   const [intake, setIntake] = useState<ServiceIntakeData>(createEmptyServiceIntake);
   const [savedJob, setSavedJob] = useState<ServiceJob | null>(null);
+  // F5d-69G Phase 2-FIX — Service Job creation never issues a tracking code
+  // (an idempotent create whose response is lost would strand the credential
+  // as committed-but-unknowable). This stays null until staff explicitly
+  // click "สร้างรหัสติดตาม" below; only then can the printed QR carry a real
+  // credential. Transient component state only — never persisted anywhere.
+  const [savedPublicTrackingCode, setSavedPublicTrackingCode] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const successPreviewRef = useRef<HTMLDivElement>(null);
@@ -143,6 +152,7 @@ export function NewServiceJob() {
     setSelectedProduct(null);
     setIntake(createEmptyServiceIntake());
     setSavedJob(null);
+    setSavedPublicTrackingCode(null);
   };
 
   const handleSaveAndPrint = async () => {
@@ -235,8 +245,21 @@ export function NewServiceJob() {
           aria-label={`สร้างงานบริการ ${savedJob.id} แล้ว`}
           className="service-request-print-host focus:outline-none"
         >
+          {/* F5d-69G Phase 2-FIX — the explicit issuance step. Wrapped in
+              service-request-preview-toolbar so it is hidden under @media
+              print exactly like the existing success card/action row, leaving
+              the one-page A4 document geometry untouched. */}
+          <div className="service-request-preview-toolbar mb-6">
+            <PublicTrackingSection
+              job={savedJob}
+              onIssue={issuePublicTrackingCode}
+              onRefreshJob={readServiceJob}
+              onIssued={setSavedPublicTrackingCode}
+            />
+          </div>
           <ServiceRequestPrintPreview
             job={savedJob}
+            publicTrackingCode={savedPublicTrackingCode}
             onPrintAgain={() => window.print()}
             onNewServiceJob={startNewServiceJob}
           />

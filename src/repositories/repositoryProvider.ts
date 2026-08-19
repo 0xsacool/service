@@ -71,6 +71,7 @@ function createUnavailableRepositoryProvider(): RepositoryProvider {
       getByTrackingNumber: () => undefined,
       create: reject,
       update: reject,
+      issuePublicTrackingCode: reject,
     },
     customers: { getAll: () => [] },
     products: { getAll: () => [] },

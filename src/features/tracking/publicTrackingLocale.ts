@@ -138,7 +138,8 @@ export const publicTrackingMessages: Record<
       manualLabel: 'กรอกรหัสติดตามงานบริการ',
       manualPlaceholder: 'SRV-2026-0810-K7M2QX',
       manualSubmit: 'ตรวจสอบสถานะ',
-      manualHelp: 'รหัสติดตามอยู่ในเอกสารหรือข้อความที่ได้รับจากเจ้าหน้าที่',
+      manualHelp:
+        'กรอกรหัสติดตามรูปแบบ SRV-... ที่ระบุในเอกสารหรือลิงก์ที่ได้รับจากเจ้าหน้าที่ (ไม่ใช่เลขที่งานบริการที่ขึ้นต้นด้วย BRN)',
       manualPrivate: 'โปรดเก็บรหัสนี้ไว้เป็นส่วนตัว',
       manualInvalid: 'ไม่พบข้อมูลหรือรหัสไม่ถูกต้อง',
       features: [

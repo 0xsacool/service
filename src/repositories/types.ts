@@ -50,12 +50,55 @@ export type ServiceJobCreateInput =
 // satisfy the same contract without touching any hook or component that
 // consumes it — only the object assigned to e.g. `serviceJobsRepository`
 // changes.
+// F5d-69G — the raw public tracking code (SRV-YYYY-MMDD-XXXXXX) is only ever
+// knowable for the single moment it is issued (DECISIONS.md #041's one-way-
+// hash security property): it is never re-derivable from a stored
+// ServiceJob, which only ever carries the hash. It is therefore returned
+// only by the explicit issuance operation below — never by create(), whose
+// idempotent replay could otherwise commit a credential and then lose it.
+export interface PublicTrackingCodeIssuance {
+  code: string;
+  job: ServiceJob;
+}
+
+// F5d-69G Phase 2-FIX — carries the HTTP status (when there was one) so the
+// staff UI can tell a CONCLUSIVE rejection (401/403/400 — nothing was
+// written, issuance definitely did not happen) apart from an AMBIGUOUS
+// outcome (network failure, or 5xx — the request's real server-side effect
+// is unknown, so the credential may in fact be active and simply undelivered).
+// The two must never be reported to staff with the same wording, and an
+// ambiguous outcome must never trigger an automatic retry/rotation: the only
+// safe recovery is an explicit staff-initiated rotation. Same shape and
+// rationale as WorkerServiceReportError above, kept at this repository seam
+// for the same dependency reason (DECISIONS.md #006/#017).
+export class PublicTrackingIssuanceError extends Error {
+  public readonly status: number | null;
+  constructor(message: string, status: number | null) {
+    super(message);
+    this.name = 'PublicTrackingIssuanceError';
+    this.status = status;
+  }
+  // A conclusive rejection means the Worker positively refused before any
+  // write. Anything else (no status at all, or a server-side failure) leaves
+  // the outcome genuinely unknown.
+  get isConclusive(): boolean {
+    return this.status !== null && this.status >= 400 && this.status < 500;
+  }
+}
+
 export interface ServiceJobsRepository {
   getAll(): ServiceJob[];
   getById(id: string): ServiceJob | undefined;
   getByTrackingNumber(trackingNumber: string): ServiceJob | undefined;
   create(job: ServiceJobCreateInput): Promise<ServiceJob>;
   update(id: string, patch: ServiceJobUpdate): Promise<ServiceJob>;
+  // F5d-69G — staff-triggered only, never automatic and never part of
+  // creation. Serves both "issue" (job currently inactive) and "rotate" (job
+  // already active) — see worker/src/publicTrackingCodeIssuance.ts's module
+  // comment for why there is deliberately only one operation for both, and
+  // why an ambiguous/lost response is safely recovered by rotating again
+  // rather than by any form of plaintext recovery.
+  issuePublicTrackingCode(id: string): Promise<PublicTrackingCodeIssuance>;
 }
 
 export interface CustomersRepository {

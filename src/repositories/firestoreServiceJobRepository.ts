@@ -30,6 +30,7 @@ import {
   recordFirestoreInitFailure,
 } from './firestoreInitDiagnostics';
 import { getFilesWorkerBaseUrl } from '../config/workerUrl';
+import { PublicTrackingIssuanceError } from './types';
 
 function isIntakeAttempt(value: ServiceJobCreateInput): value is ServiceJobIntakeAttempt {
   return 'idempotencyKey' in value && 'intake' in value;
@@ -212,6 +213,62 @@ export async function createFirestoreServiceJobRepository(
         },
         (updated) => jobsById.set(updated.id, updated)
       );
+    },
+
+    // F5d-69G — staff-triggered issue/rotate. Worker-mediated: Firestore
+    // Rules already deny an ordinary browser update from touching
+    // publicTrackingCodeHash (see firestore.rules), so this is the only
+    // path that can ever set it. The raw code is returned to the caller
+    // exactly once and is never persisted or re-derivable afterward
+    // (DECISIONS.md #041's one-way-hash property) — this method does not
+    // cache it. The returned `job` is a fresh server read (not the Worker's
+    // response, which never echoes the hash back) so the local cache
+    // reflects the real persisted publicTrackingCodeHash immediately,
+        // without waiting on the onSnapshot listener's next event.
+    async issuePublicTrackingCode(id) {
+      let response: Response;
+      try {
+        response = await fetchWithWorkerToken(
+          tokenProvider,
+          `${getFilesWorkerBaseUrl()}/service-jobs/${encodeURIComponent(id)}/public-tracking-code`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }
+        );
+      } catch {
+        // No status at all — the request may or may not have reached the
+        // Worker and committed. Deliberately ambiguous; never auto-retried.
+        throw new PublicTrackingIssuanceError(
+          'Public tracking code issuance could not be confirmed',
+          null
+        );
+      }
+      if (!response.ok) {
+        const errorBody: unknown = await response.json().catch(() => null);
+        const message =
+          errorBody &&
+          typeof errorBody === 'object' &&
+          'error' in errorBody &&
+          typeof errorBody.error === 'string'
+            ? errorBody.error
+            : `Worker public tracking code issuance failed (${response.status})`;
+        throw new PublicTrackingIssuanceError(message, response.status);
+      }
+      const body: unknown = await response.json();
+      if (!body || typeof body !== 'object' || !('code' in body) || typeof body.code !== 'string') {
+        // A 2xx whose body could not be read/parsed: the commit almost
+        // certainly succeeded, so this is ambiguous, not a clean failure.
+        throw new PublicTrackingIssuanceError(
+          'Worker returned a malformed public tracking code response',
+          null
+        );
+      }
+      const reference = doc(firestore, SERVICE_JOBS_COLLECTION, id);
+      const committed = await getDocFromServer(reference);
+      if (!committed.exists()) {
+        throw new Error(`Firestore did not return Service Job "${id}" after issuance`);
+      }
+      const job = fromFirestoreData(committed.id, committed.data());
+      jobsById.set(job.id, job);
+      return { code: body.code, job };
     },
   };
 }

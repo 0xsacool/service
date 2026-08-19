@@ -15,7 +15,9 @@ import {
   hashPublicTrackingCode,
   isValidPublicTrackingCode,
   normalizePublicTrackingCodeInput,
+  PublicTrackingCodeCollisionError,
 } from '../../src/services/publicTrackingCode.ts';
+import { issuePublicTrackingCodeForServiceJob } from './publicTrackingCodeIssuance.ts';
 import {
   isValidPublicTrackingToken,
   verifyPublicTrackingToken,
@@ -257,6 +259,14 @@ async function handleServiceJobCreate(request: Request, env: Env, dependencies: 
     const parsed = parseServiceJobCreateRequest(JSON.parse(new TextDecoder().decode(raw)));
     if (!parsed) return json({ error: 'Invalid Service Job intake' }, { status: 400 });
     const job = await allocateServiceJob({ brandId: authorization.profile.brandId, key, intake: parsed.intake, customer: parsed.customer, dataAccess: authorization.client });
+    // F5d-69G Phase 2-FIX — Service Job creation performs NO public tracking
+    // issuance. The SRV code is a one-way bearer secret: issuing it inside an
+    // idempotent create means a create whose response is lost leaves the
+    // credential committed server-side but permanently unknowable to staff
+    // (an "active but lost" job recoverable only by rotation). Creation and
+    // issuance are therefore separate operations — staff issue explicitly via
+    // POST /service-jobs/{jobId}/public-tracking-code, where a lost response
+    // is trivially recoverable by rotating again.
     try {
       return json({ job }, { status: 201 });
     } catch (buildError) {
@@ -389,6 +399,47 @@ async function handleServiceReportFinalize(
     }
     console.error('[files-worker] Service Report finalize failed');
     return json({ error: 'Unable to finalize Service Report' }, { status: 500 });
+  }
+}
+
+// F5d-69G — POST /service-jobs/{jobId}/public-tracking-code. Staff-only,
+// brand-scoped (same authorizeStaffCreation()/isServiceJobInBrand() pattern
+// as the Service Report routes above — Worker-mediated because ordinary
+// Firestore Rules browser updates already explicitly deny writing
+// publicTrackingCodeHash, so issuance/rotation can only ever happen through
+// this privileged path). Serves both "issue" (job currently inactive) and
+// "rotate" (job already active) — issuePublicTrackingCodeForServiceJob()
+// always writes a fresh code unconditionally, so there is deliberately no
+// separate rotate endpoint; the frontend decides what confirmation copy to
+// show based on the job's current publicTrackingCodeHash.
+async function handlePublicTrackingCodeIssuance(
+  request: Request,
+  env: Env,
+  jobId: string,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  if (!isSafeJobId(jobId)) return json({ error: 'Invalid jobId' }, { status: 400 });
+
+  const authorization = await authorizeStaffCreation(request, env, dependencies);
+  if (authorization instanceof Response) return authorization;
+  if (!(await isServiceJobInBrand(jobId, authorization.profile.brandId, authorization.client))) {
+    return json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  try {
+    const issued = await issuePublicTrackingCodeForServiceJob(jobId, authorization.client);
+    // Only the raw code is returned — never the hash. This is the one and
+    // only moment the plaintext code is ever knowable outside Firestore's
+    // own publicTrackingCodes/{code} document id; the frontend must display/
+    // copy it now or the staff member has to rotate to get a new one (see
+    // DECISIONS.md #041's one-way-hash security property).
+    return json({ code: issued.code }, { status: 201 });
+  } catch (error) {
+    if (error instanceof PublicTrackingCodeCollisionError) {
+      return json({ error: 'Unable to issue a public tracking code' }, { status: 503 });
+    }
+    console.error('[files-worker] Public tracking code issuance failed');
+    return json({ error: 'Unable to issue a public tracking code' }, { status: 500 });
   }
 }
 
@@ -628,6 +679,13 @@ export function createWorkerHandler(
       if (segments.length === 4 && segments[1] === 'service-reports' && segments[3] === 'finalize') {
         return withCors(
           await handleServiceReportFinalize(request, env, segments[0]!, segments[2]!, dependencies),
+          request,
+          env
+        );
+      }
+      if (segments.length === 2 && segments[1] === 'public-tracking-code') {
+        return withCors(
+          await handlePublicTrackingCodeIssuance(request, env, segments[0]!, dependencies),
           request,
           env
         );

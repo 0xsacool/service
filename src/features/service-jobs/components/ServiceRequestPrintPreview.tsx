@@ -7,9 +7,10 @@ import {
   SecondaryButton,
   Logo,
 } from '../../../shared/components';
-import { APP_NAME, ROUTES } from '../../../constants';
+import { APP_NAME } from '../../../constants';
 import { formatThaiDate } from '../../../utils/formatDate';
 import { channelLabel } from '../../../services/serviceJobPresentation';
+import { buildPublicTrackingUrl } from '../../../services/publicTrackingLink';
 
 function PrintField({ label, value }: { label: string; value: string }) {
   return (
@@ -31,14 +32,34 @@ function PrintField({ label, value }: { label: string; value: string }) {
 // printable. See the @media print rules in index.css.
 export function ServiceRequestPrintPreview({
   job,
+  publicTrackingCode,
   onPrintAgain,
   onNewServiceJob,
 }: {
   job: ServiceJob;
+  // F5d-69G — only ever non-null when the code was explicitly issued in THIS
+  // browser session; the raw code is never re-derivable from `job` itself
+  // (only its one-way hash is persisted — DECISIONS.md #041). This component
+  // never calls the issuance endpoint — printing must never cause an implicit
+  // credential write/rotation, so it only ever displays what it's given.
+  publicTrackingCode: string | null;
   onPrintAgain: () => void;
   onNewServiceJob: () => void;
 }) {
-  const trackingUrl = `${window.location.origin}${ROUTES.track(job.id)}`;
+  // F5d-69G Phase 2-FIX (audit finding D2) — three distinct states, because
+  // "no code in hand" and "not activated" are NOT the same thing. Printing
+  // "ยังไม่ได้เปิดใช้งาน" for a job whose credential is genuinely live would
+  // hand the customer a false statement.
+  const publicTrackingState: 'credentialed' | 'active-unavailable' | 'inactive' =
+    publicTrackingCode !== null
+      ? 'credentialed'
+      : job.publicTrackingCodeHash !== null
+        ? 'active-unavailable'
+        : 'inactive';
+  const trackingUrl =
+    publicTrackingCode !== null
+      ? buildPublicTrackingUrl(window.location.origin, job.id, publicTrackingCode)
+      : null;
 
   useEffect(() => {
     document.body.classList.add('service-request-print-mode');
@@ -88,12 +109,26 @@ export function ServiceRequestPrintPreview({
               </p>
             )}
             <div className="mt-2 flex flex-col items-end gap-1">
-              <div className="flex h-16 w-16 items-center justify-center border border-neutral-400 text-[8px] font-medium text-neutral-400">
-                คิวอาร์โค้ด
-              </div>
-              <p className="max-w-[160px] break-all text-right text-[7px] text-neutral-400">
-                {trackingUrl}
-              </p>
+              {publicTrackingState === 'credentialed' && (
+                <>
+                  <div className="flex h-16 w-16 items-center justify-center border border-neutral-400 text-[8px] font-medium text-neutral-400">
+                    คิวอาร์โค้ด
+                  </div>
+                  <p className="max-w-[160px] break-all text-right text-[7px] text-neutral-400">
+                    {trackingUrl}
+                  </p>
+                </>
+              )}
+              {publicTrackingState === 'active-unavailable' && (
+                <p className="max-w-[160px] text-right text-[7px] text-neutral-400">
+                  เปิดใช้งานการติดตามแล้ว — กรุณาออกรหัสติดตามใหม่ก่อนพิมพ์ QR
+                </p>
+              )}
+              {publicTrackingState === 'inactive' && (
+                <p className="max-w-[160px] text-right text-[7px] text-neutral-400">
+                  ยังไม่ได้เปิดใช้งานการติดตามสาธารณะ
+                </p>
+              )}
             </div>
           </div>
         </div>

@@ -24,6 +24,7 @@ import {
 } from '../../../types';
 import { useServiceJobs } from '../../../hooks/useServiceJobs';
 import { useUpdateServiceJob } from '../../../hooks/useUpdateServiceJob';
+import { useIssuePublicTrackingCode } from '../../../hooks/useIssuePublicTrackingCode';
 import { technicians } from '../../../repositories/mockData/serviceJobs.mock';
 import {
   StatusBadge,
@@ -44,6 +45,7 @@ import {
   ServiceReportsSection,
   ServiceEventMetadataEditSection,
   type ServiceEventMetadataEditValue,
+  PublicTrackingSection,
 } from '../components';
 import { serviceEventMetadataDraftError } from '../../../validation';
 import {
@@ -109,6 +111,7 @@ function ServiceJobDetailsView({
   onDone: () => void;
 }) {
   const { updateServiceJob } = useUpdateServiceJob();
+  const { issuePublicTrackingCode, readServiceJob } = useIssuePublicTrackingCode();
   const { user } = useAuthSession();
   const canReassignTechnician = backendKind === 'mock';
   const [status, setStatus] = useState<ServiceJobStatus>(claim.status);
@@ -469,6 +472,12 @@ function ServiceJobDetailsView({
       </div>
 
       <ServiceEventMetadataEditSection value={eventMetadata} onChange={setEventMetadata} />
+
+      <PublicTrackingSection
+        job={claim}
+        onIssue={issuePublicTrackingCode}
+        onRefreshJob={readServiceJob}
+      />
 
       {/* Bottom actions */}
       <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:justify-between animate-[fade-in_0.6s_ease_both]">
