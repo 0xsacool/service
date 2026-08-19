@@ -99,9 +99,6 @@ test('delivery note does not expose private, security, or fake-link fields', () 
     'R2',
     'attachment',
     'internal',
-    'publicTrackingCodeHash',
-    'window.location',
-    'QRCode',
     'https://',
   ]) {
     assert.doesNotMatch(
@@ -109,6 +106,13 @@ test('delivery note does not expose private, security, or fake-link fields', () 
       new RegExp(field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
     );
   }
+  // F5d-69G Phase 7A — publicTrackingCodeHash/window.location/QRCode are now
+  // legitimate, approved additions (same pattern as ServiceRequestPrintPreview):
+  // the hash is only ever read in a boolean gate, never displayed as a value.
+  assert.match(previewSource, /job\.publicTrackingCodeHash !== null/);
+  assert.doesNotMatch(previewSource, /\{job\.publicTrackingCodeHash\}/);
+  assert.match(previewSource, /window\.location\.origin/);
+  assert.match(previewSource, /<QRCode\s/);
   assert.match(previewSource, /job\.accessories/);
   assert.doesNotMatch(previewSource, /job\.notes/);
   assert.doesNotMatch(previewSource, /job\.description/);

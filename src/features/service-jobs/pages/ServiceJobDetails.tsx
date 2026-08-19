@@ -135,6 +135,14 @@ function ServiceJobDetailsView({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showDeliveryNotePreview, setShowDeliveryNotePreview] = useState(false);
+  // F5d-69G Phase 7A — the plaintext SRV only ever exists in
+  // PublicTrackingSection's own local state (never persisted, never
+  // re-derivable from `claim`). Lifting it here — the nearest common parent
+  // of PublicTrackingSection and the delivery-note print branch below — is
+  // the smallest in-memory handoff that survives the print toggle (a
+  // conditional render within this same mounted component, not a route
+  // change) while still disappearing on any real remount (refresh/reopen).
+  const [issuedTrackingCode, setIssuedTrackingCode] = useState<string | null>(null);
   const [notificationFeedback, setNotificationFeedback] = useState<{
     tone: 'success' | 'error';
     message: string;
@@ -218,6 +226,7 @@ function ServiceJobDetailsView({
     return (
       <DeliveryNotePrintPreview
         job={claim}
+        publicTrackingCode={issuedTrackingCode ?? undefined}
         onClose={() => {
           shouldRestoreDeliveryNoteFocus.current = true;
           setShowDeliveryNotePreview(false);
@@ -477,6 +486,7 @@ function ServiceJobDetailsView({
         job={claim}
         onIssue={issuePublicTrackingCode}
         onRefreshJob={readServiceJob}
+        onIssued={setIssuedTrackingCode}
       />
 
       {/* Bottom actions */}

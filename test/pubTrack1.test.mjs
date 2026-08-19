@@ -114,9 +114,16 @@ test('public DTO, Delivery Note, and Share message keep code/hash boundaries nar
   );
   assert.doesNotMatch(dto, /publicTrackingCodeHash/);
   assert.match(delivery, /publicTrackingCode\?/);
-  assert.match(delivery, /รหัสติดตามงานบริการ/);
+  // F5d-69G Phase 7A — DeliveryNotePrintPreview now renders a real QR (same
+  // approved pattern as ServiceRequestPrintPreview): it legitimately
+  // references job.publicTrackingCodeHash for the three-state gate (never
+  // displaying the hash value itself) and builds its QR value only through
+  // the canonical helper — never a hand-built URL string.
+  assert.match(delivery, /buildPublicTrackingUrl\(window\.location\.origin, job\.id, publicTrackingCode\)/);
+  assert.match(delivery, /job\.publicTrackingCodeHash !== null/);
+  assert.doesNotMatch(delivery, /\{job\.publicTrackingCodeHash\}/);
+  assert.doesNotMatch(delivery, /R2/);
   assert.match(share, /publicTrackingCode\?/);
   assert.match(share, /รหัสติดตาม:/);
-  assert.doesNotMatch(delivery, /publicTrackingCodeHash|https:\/\/|QRCode|R2/);
   assert.doesNotMatch(share, /publicTrackingCodeHash|publicTrackingTokenHash|https:\/\//);
 });

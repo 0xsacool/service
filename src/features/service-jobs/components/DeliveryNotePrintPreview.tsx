@@ -1,10 +1,11 @@
 import { ArrowLeft, Printer } from 'lucide-react';
+import QRCode from 'react-qr-code';
 import type { ServiceJob } from '../../../types';
 import { PrimaryButton } from '../../../shared/components';
 import { APP_NAME } from '../../../constants';
 import { formatThaiDate } from '../../../utils/formatDate';
 import { statusLabel } from '../../../services/serviceJobPresentation';
-import { normalizePublicTrackingCodeInput } from '../../../services/publicTrackingCode';
+import { buildPublicTrackingUrl } from '../../../services/publicTrackingLink';
 import { useEffect, useRef } from 'react';
 
 function DeliveryNoteField({ label, value }: { label: string; value: string }) {
@@ -37,9 +38,20 @@ export function DeliveryNotePrintPreview({
 }) {
   const backButtonRef = useRef<HTMLButtonElement>(null);
   const accessories = job.accessories?.filter((accessory) => accessory.trim()) ?? [];
-  const normalizedTrackingCode = publicTrackingCode
-    ? normalizePublicTrackingCodeInput(publicTrackingCode)
-    : null;
+  // F5d-69G Phase 7A — same three-state contract as ServiceRequestPrintPreview
+  // (Phase 2-FIX audit finding D2): "no code in hand" and "not activated" are
+  // never the same state, so this must never print "not activated" for a job
+  // whose tracking is genuinely live.
+  const publicTrackingState: 'credentialed' | 'active-unavailable' | 'inactive' =
+    publicTrackingCode != null
+      ? 'credentialed'
+      : job.publicTrackingCodeHash !== null
+        ? 'active-unavailable'
+        : 'inactive';
+  const trackingUrl =
+    publicTrackingCode != null
+      ? buildPublicTrackingUrl(window.location.origin, job.id, publicTrackingCode)
+      : null;
 
   useEffect(() => {
     document.body.classList.add('delivery-note-print-mode');
@@ -82,12 +94,31 @@ export function DeliveryNotePrintPreview({
           <div className="delivery-note-print__identity">
             <DeliveryNoteField label="เลขที่งาน" value={job.id} />
             <DeliveryNoteField label="วันที่" value={formatThaiDate(job.createdAt)} />
-            {normalizedTrackingCode ? (
-              <DeliveryNoteField
-                label="รหัสติดตามงานบริการ"
-                value={normalizedTrackingCode}
-              />
-            ) : null}
+            {publicTrackingState === 'credentialed' && trackingUrl && (
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex h-16 w-16 items-center justify-center bg-white p-1">
+                  <QRCode
+                    value={trackingUrl}
+                    size={64}
+                    level="L"
+                    className="h-full w-full"
+                  />
+                </div>
+                <p className="max-w-[160px] break-all text-right text-[7px] text-neutral-400">
+                  {trackingUrl}
+                </p>
+              </div>
+            )}
+            {publicTrackingState === 'active-unavailable' && (
+              <p className="max-w-[160px] text-right text-[7px] text-neutral-400">
+                เปิดใช้งานการติดตามแล้ว — กรุณาออกรหัสติดตามใหม่ก่อนพิมพ์ QR
+              </p>
+            )}
+            {publicTrackingState === 'inactive' && (
+              <p className="max-w-[160px] text-right text-[7px] text-neutral-400">
+                ยังไม่ได้เปิดใช้งานการติดตามสาธารณะ
+              </p>
+            )}
           </div>
         </header>
 
