@@ -23,6 +23,7 @@ dist-ssr
 .env
 .env.*
 !.env.example
+!.env.production
 worker/.dev.vars
 worker/.dev.vars.*
 !worker/.dev.vars.example
