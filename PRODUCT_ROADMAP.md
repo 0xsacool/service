@@ -27,9 +27,22 @@ Every service job for Bruno Thailand and Join Lux Club — from drop-off to pick
 
 Features that exist and work in the running app today, not just on paper — see [PROJECT_STATE.md](PROJECT_STATE.md) "Completed Milestones" for the sprint-by-sprint history behind each:
 
-- **Customer-facing tracking UI** — no-login lookup UX and safe "not found"
-  states exist, but production Public Tracking remains intentionally
-  unavailable until its issuance and fail-closed rate-limit scope is approved.
+- **Customer-facing tracking UI** — no-login lookup UX, safe "not found"
+  states, and production Public Tracking are all live (F5d-69G): staff
+  explicitly issue/rotate a plaintext SRV tracking code per Service Job,
+  which exists only in the issuing browser session and is never persisted
+  in plaintext anywhere.
+- **Service Job event metadata** — contact channel, order number/verification,
+  purchase/delivery dates, and an external evidence link are captured as an
+  authoritative per-service-event snapshot (F5d-69), with a derived
+  customer-channel read model; canonical customer-level channel storage
+  remains deferred ([DECISIONS.md](DECISIONS.md) #041).
+- **Service Job Details reactivity and Internal Notes persistence** — F5d-70
+  is live: a mounted Service Job list/detail view reactively reflects
+  changes made elsewhere, unsaved in-progress edits survive an unrelated
+  update (LOCAL LAST WRITE WINS, DIRTY FIELDS ONLY — [DECISIONS.md](DECISIONS.md) #042),
+  and the Internal Notes "เพิ่ม" quick-add persists immediately instead of
+  requiring the separate page-level Save.
 - **Production staff service job queue & intake** — the staff-only app is live
   at `https://luxace-service.web.app` on the Firestore + Worker runtime, with
   filterable/searchable jobs, progressive intake, and Save & Print.
@@ -76,7 +89,7 @@ Not yet built. Listed in roughly the order the current sprint trajectory (F-seri
   dialog, route, form, and screen-reader hardening are live. F5d-64 production
   verification matched all 21/21 user files and the approved SPA routes after
   one Hosting deployment, with the Worker unchanged and zero production data
-  writes. Public Tracking remains unavailable. The explicitly deferred P2/P3
+  writes. The explicitly deferred P2/P3
   accessibility work, responsive-content QA, and remaining Thai-copy pass
   remain open (see [DECISIONS.md](DECISIONS.md) #003).
 - **Technician workload view** — who's assigned what, to help staff balance the queue.

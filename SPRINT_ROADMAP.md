@@ -378,6 +378,65 @@ release `1786984404257000` / version `234caccc3034c98f`.
 
 ---
 
+### F5d-69/F5d-69G — Contact/order/evidence metadata and Public Tracking activation *(Production, 2026-08-18–19)*
+
+Condensed bridge entry — see `PROJECT_STATE.md`'s F5d-69/F5d-69G entry for
+what this repository can currently support with directly-verified evidence.
+F5d-69 added an authoritative Service Job event-metadata snapshot (contact
+channel, order number/verification, purchase/delivery dates, external
+evidence link) with Worker/Rules validation and frontend surfacing
+([DECISIONS.md](DECISIONS.md) #041). F5d-69G activated the public
+customer-facing tracking flow in production for the first time — staff
+explicitly issue/rotate a plaintext SRV credential that lives only in the
+issuing browser session, never persisted in plaintext anywhere.
+
+**Estimated Scope:** M
+
+---
+
+### F5d-70 — Core reactivity, UI reconciliation, and Internal Notes persistence fix *(Production, 2026-08-20)*
+
+**Objective:** Make a mounted Service Job list/detail view reactively reflect
+changes made elsewhere (`useSyncExternalStore` over the existing
+`dataVersion` singleton), establish a safe local-draft conflict policy for
+Service Job Details now that it re-renders reactively, and — discovered
+during this rollout's own production acceptance — fix a pre-existing,
+unrelated Internal Notes data-loss bug.
+
+**Delivered:** Phase 2A core reactivity (tag `f5d-70`). Phase 5B/5B.1–5B.3
+UI reconciliation on `ServiceJobDetails` — approved **LOCAL LAST WRITE
+WINS, DIRTY FIELDS ONLY** conflict policy, dirty-only Save, `key={claim.id}`
+entity boundary (a React key, not a passive reset effect — an independent
+security review required this correction), `useLayoutEffect` reconciliation
+timing, and a StrictMode-safe stale-issuance ownership guard in
+`PublicTrackingSection` (tag `f5d-70-ui`). See
+[DECISIONS.md](DECISIONS.md) #042 for the full reasoning.
+
+**Corrective patch:** production acceptance found the Internal Notes "เพิ่ม"
+quick-add button was draft-only — it looked completed but never persisted,
+so a reload before the separate global Save silently lost the note. Fixed
+to perform its own immediate, notes-only persistence write, with mutual
+exclusion against the page-level Save (two independent review passes were
+required to close a typing-during-pending race and a Quick-Add/Save overlap
+race) (tag `f5d-70-ui-notes`).
+
+**Validation:** 150/150 focused tests, full application suite passing aside
+from the one established Firestore Rules emulator-wrapper requirement,
+dual-manifest (raw + Git-canonical) source freezing to correctly handle this
+Windows machine's `core.autocrlf=true` CRLF↔LF normalization, and a real
+production browser acceptance pass against a clearly-marked synthetic
+Service Job (`BRN-2026-000009`) covering durability, duplicate safety,
+pending-state UI, Save/Quick-Add mutual exclusion, and unrelated dirty-draft
+preservation. Both the UI-reconciliation and corrective rollouts were
+Hosting-only — Worker (`c7a29282-...@100%`) and Firestore Rules
+(`463d4c8c-...`) confirmed unchanged throughout. See `PROJECT_STATE.md`'s
+F5d-70 entry for the complete evidence record. Production is now F5d-70
+(`f5d-70-ui-notes`).
+
+**Estimated Scope:** M
+
+---
+
 ### Sprint F3/F4 repository expansion *(delivered through later F-series work)*
 
 Customer, Service Job, Search, Registered Product, attachment, and related

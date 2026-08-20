@@ -10,9 +10,11 @@ The business entity is the **Service Job** (a single repair event), not "Claim" 
 
 **Service Tech** is a service job (repair) tracking system built for two Thailand-based retail brands, **Bruno Thailand** and **Join Lux Club**. It gives three groups of people a shared view of a repair's lifecycle:
 
-- **Customers** are intended to track a repair using a tracking number, with no
-  login required. That UI exists, but production Public Tracking remains
-  intentionally unavailable.
+- **Customers** track a repair using a staff-issued SRV tracking code, with no
+  login required. **Production Public Tracking is live** (F5d-69G) — staff
+  explicitly issue/rotate a plaintext SRV code per Service Job; the code is
+  never persisted server-side in plaintext and exists only in the issuing
+  staff member's browser memory for that session.
 - **Service Staff** log intake, update status, assign technicians, and manage the repair queue.
 - **Admins** oversee operations across both brands.
 
@@ -191,10 +193,10 @@ Grouped by what shipped, not by exact sprint label (many sprints predate a forma
   defects. Timeline/progress semantics, PhotoGallery, DownloadMenu, the import
   chooser, broader ProductFieldsForm cleanup, contrast, reduced motion, and
   other P2/P3 polish remain separately gated.
-- **Public Tracking is unavailable in production.** Its Worker binding,
-  issuance flow, and fail-closed rate-limit scope remain separately gated.
-- **Limited app test coverage** — Service Job retention-anchor regression tests run through Vite and Node’s built-in test runner; broader application test coverage remains to be established.
+- ~~**Public Tracking is unavailable in production.**~~ **Live in production since F5d-69G** (2026-08-19) — staff explicitly issue/rotate a plaintext SRV code (component-memory-only, never persisted); the Worker binding, issuance flow, and fail-closed rate-limit scope are deployed. See the F5d-69G entry below.
+- **Limited app test coverage** — no jsdom/React Testing Library dependency exists in this repository; React-component-level behavior (hook wiring, effect timing, JSX structure, lifecycle contracts) is proven via source-structural regex assertions against `.tsx`/`.ts` source text, not mounted-component rendering. Pure/non-React logic is exercised with real runtime execution via Vite's `ssrLoadModule`. Service Job retention-anchor and reactivity regression tests run through Node's built-in test runner; broader mounted-UI test coverage remains a known, accepted gap (see F5d-70 entry below).
 - ~~**Known bug, tracked as F5d-68: Service Request print/PDF spills to 2 physical pages.**~~ **Resolved in production by F5d-68** (2026-08-17) — the root cause was that this print flow, unlike its two sibling print documents, never activated a print-mode body class, so the staff shell, page heading, and on-screen success card/actions all printed alongside the document. Verified one physical page by a real production Print → Save as PDF. See the F5d-68 entry below.
+- ~~**Known bug: Internal Notes quick-add ("เพิ่ม") on Service Job Details did not persist.**~~ **Resolved in production by F5d-70 Phase 6F.2–6F.11** (2026-08-20) — the button appended to local React state and cleared the input, looking completed, but performed no repository write; a reload/navigation before the separate page-level "บันทึกการเปลี่ยนแปลง" silently destroyed the note. "เพิ่ม" now performs its own immediate, notes-only persistence write. See the F5d-70 entry below.
 
 ## F5d-26 Auth + Data Access Integration Readiness (source/emulator only)
 
@@ -3200,6 +3202,203 @@ Hosting rollback baseline is F5d-67 release
 `sites/luxace-service/versions/234caccc3034c98f`, confirmed still retained
 (`FINALIZED`) after this deploy. Zero synthetic or durable production writes
 were made during automated verification. Production is now F5d-68.
+
+## F5d-69/F5d-69G — Contact/order/evidence metadata and Public Tracking activation (Production, 2026-08-18–19)
+
+**Condensed bridge entry.** This entry summarizes two production rollouts
+between F5d-68 and F5d-70 at a level supported by this repository's git tags
+(`f5d-69a`, `f5d-69b`, `f5d-69g`, `f5d-69g-a` through `f5d-69g-d`),
+[DECISIONS.md](DECISIONS.md) #041, and directly-verified live production
+state (Worker version, Rules baseline) confirmed during F5d-70's own
+deployment gates. It intentionally does not restate a full phase-by-phase
+narrative (frozen hashes, exact release timestamps for every phase) the way
+earlier entries in this file do, since that detail was not captured in this
+file at the time and should not be reconstructed after the fact.
+
+**F5d-69 — Service Job event metadata.** Added `contactChannel`,
+`contactChannelIdentity`, `orderNumber`, `orderVerification`, `purchaseDate`,
+`orderDeliveredDate`, `externalEvidenceUrl`, and `externalEvidenceNote` as an
+authoritative snapshot on `serviceJobs` (never a customer record — see
+DECISIONS.md #041), plus a derived customer-channel read model. Worker
+contract and Firestore Rules validation, then frontend metadata edit/search
+surfacing and Service Request print. Firestore-mode search remains
+name/phone/tracking-number/serial-number only (DECISIONS.md #038 stays open).
+
+**F5d-69G — Public Tracking activation.** The public customer-facing tracking
+flow (`TrackHome`/`TrackResult`, `SRV-...` codes) went live in production for
+the first time. Staff explicitly issue or rotate a plaintext SRV credential
+per Service Job from `ServiceJobDetails`; the plaintext exists only in the
+issuing component's own React state for that session — never written to
+Firestore, `dataVersion`, browser storage, the URL, or logs (only its hash is
+persisted). A stale-issuance ownership guard prevents a resolved-but-stale
+`issue()`/`rotate()` continuation from one Service Job leaking its plaintext
+into a different one reached via `NewServiceJob`. Delivery-note and Service
+Request print surfaces render a real QR from the same canonical
+`buildPublicTrackingUrl()` helper, truthfully reflecting one of three states
+(credentialed / active-but-no-code-in-hand / inactive) — never a fabricated
+or stale code.
+
+**Production identity at F5d-70's start (directly verified).** Cloudflare
+Worker `c7a29282-ac54-4e37-a9f0-e7d7bd1b25ce` at 100% traffic; Firestore
+Rules ruleset `463d4c8c-9f6c-4ac4-b887-7bcd197125e1`; Hosting release
+`sites/luxace-service/channels/live/releases/1787157710992000`
+(`2026-08-19 23:41:50` Asia/Bangkok) — the pre-F5d-70-ui baseline, immediately
+preceding the deploy below; its active bundle name was not independently
+recorded by this engagement. This is the baseline the F5d-70 entry below
+builds on and, for the Internal Notes corrective sub-rollout, deploys
+against.
+
+## F5d-70 — Core reactivity, UI state reconciliation, and Internal Notes persistence corrective patch (Production, 2026-08-20)
+
+**Phase 2A — core reactivity.** `useServiceJobs()` adopted
+`useSyncExternalStore(subscribeToDataVersion, getDataVersion, getDataVersion)`
+against the pre-existing `src/repositories/dataVersion.ts` singleton; both
+repository implementations call `bumpDataVersion()` immediately after their
+authoritative cache write (`create`/`update`/`issuePublicTrackingCode`). A
+mounted Service Job list/detail view now reactively reflects a change made
+elsewhere, without a manual refresh. Source checkpoint: commit
+`8210bc89c55d130900388d8d8e79b0105e3beb16` (tag `f5d-70`).
+
+**Phase 5B/5B.1–5B.3 — Service Job Details UI state reconciliation.**
+Approved conflict policy: **LOCAL LAST WRITE WINS — DIRTY FIELDS ONLY**
+(single-user product; deliberately not multi-user optimistic-locking/merge
+UX — see [DECISIONS.md](DECISIONS.md) #042). A local draft field/group
+rebases onto the freshest persisted value only while it remains *pristine*
+(unchanged since it was last shown); once a staff member has diverged from
+it, an unrelated incoming update never overwrites their in-progress edit.
+`saveChanges()` sends only dirty fields/groups, relying on the repositories'
+pre-existing `{...current, ...patch}` merge; an all-pristine save is a true
+no-op (no repository call, no `updatedAt`/`dataVersion` bump). The entity
+boundary is `key={claim.id}` on `ServiceJobDetailsView` — a React key change,
+not a passive reset effect — so React unmounts/remounts (destroying every
+local draft and the transient plaintext SRV) only when the Service Job
+identity itself changes, never on an ordinary same-job data refresh.
+Reconciliation itself runs in `useLayoutEffect`, closing the paint-timing
+window an independent security review found in an earlier draft (a fresh
+`claim` visible on-screen alongside not-yet-rebased local state). A parallel
+`mountedRef`-based ownership guard in `PublicTrackingSection` (re-armed on
+every `useLayoutEffect` setup, StrictMode-safe) prevents a stale, already-
+resolved `issue()`/`rotate()` continuation from one Service Job writing its
+plaintext into a different one reached via `NewServiceJob`.
+`NewServiceJob.tsx` displays the freshest repository row for a just-created
+Service Job (falling back to the original snapshot) without breaking the
+existing one-shot auto-print effect. Source checkpoint: commit
+`f187158609ac3f25ad58400cbc3554967442b7e7` (tag `f5d-70-ui`), 10 files, 1058
+insertions / 74 deletions.
+
+**Hosting-only rollout (UI reconciliation).** `firebase deploy --only
+hosting --project luxace-service` published bundle `index-BSJOMhpi.js`; the
+live channel's release timestamp read back as `2026-08-20 16:56:34`
+Asia/Bangkok immediately after this deploy. The raw numeric Hosting
+release/version ID for this specific deploy was not independently exposed by
+the available Firebase CLI read-only paths (same limitation recorded
+throughout this rollout — see `PRODUCTION_ROLLBACK_RUNBOOK.md`'s F5d-70
+entry); the timestamp above and the served `index.html` referencing
+`index-BSJOMhpi.js` are the verification evidence actually captured, not a
+fabricated ID. Worker and Rules confirmed unchanged before and after (this
+rollout never touched `worker/`, `firestore.rules`,
+`firestore.indexes.json`, `firebase.json`, or `.firebaserc`).
+
+**Production acceptance found a pre-existing, high-severity Internal Notes
+defect (not caused by this rollout).** The Service Job Details "เพิ่ม" quick-
+add button appended a note to local React state and cleared the input —
+looking completed — but performed no repository write at all; only the
+separate page-level "บันทึกการเปลี่ยนแปลง" action ever persisted it, so a
+reload or navigation before that global Save silently destroyed the note.
+This behavior predated F5d-70 and was unrelated to the dirty-only Save
+contract above, which itself worked correctly.
+
+**Corrective patch (Phase 6F.2–6F.11).** "เพิ่ม" now performs its own
+immediate, **notes-only** persistence write
+(`updateServiceJob(claim.id, { notes: nextNotes })`) — never the page-level
+`saveChanges()` dirty patch, so an unrelated in-progress edit (status,
+technician, event metadata) is never swept in and is never discarded by the
+same-job reconciliation effect once `claim.notes` reflects the new note. The
+note is not shown as added, and the input is not cleared, until persistence
+actually succeeds; failure retains the typed text and shows an inline,
+note-specific error. An independent review found and required a fix for two
+races, both corrected: (1) the note input remained editable while its own
+write was pending, so a newly-typed second note could be silently erased by
+the first request's success continuation; (2) Quick Add and the page-level
+Save had independent guards and could overlap, letting Save navigate away
+mid-flight or vice-versa. Both operations now share mutual exclusion
+(`addNote`/`saveChanges` each fail closed on `isAddingNote || isSaving`; the
+note input, Add button, and Save button are each disabled during either
+operation's pending window) — see
+[DECISIONS.md](DECISIONS.md) #042. Source checkpoint: commit
+`cdce581f39a0f27126bf154734b2a40be1f5246f` (tag `f5d-70-ui-notes`), 4 files,
+397 insertions / 18 deletions, on top of `f5d-70-ui`. `worker/`,
+`firestore.rules`, `firestore.indexes.json`, `firebase.json`, `.firebaserc`,
+`PublicTrackingSection.tsx`, `NewServiceJob.tsx`, `serviceJobUpdate.ts`, and
+`serviceJobDraftReconciliation.ts` are all zero-diff from `f5d-70-ui` — this
+correction touched only `ServiceJobDetails.tsx` and its tests.
+
+**Validation.** 150/150 focused tests across the full F5d-70 surface
+(Internal Notes 28, UI reconciliation 43, core reactivity 14, Service Job
+retention/brand 16, Public Tracking/QR 40, Production Trust 9); full
+application suite 636/635-pass-1-known-wrapper-fail (the sole non-pass is
+`firestoreRules.test.mjs`'s established bare-`node --test` wrapper
+requirement — 24/24 pass under its proper `npm run test:firestore-rules`
+emulator wrapper); clean `tsc -b`, `eslint`, and `git diff --check` at every
+gate. A dual-manifest (raw working-tree + Git-canonical, via an isolated
+temporary index) source-freeze methodology was used throughout this phase to
+correctly account for `core.autocrlf=true` CRLF↔LF normalization on this
+Windows development machine, after an earlier checkpoint attempt correctly
+caught and stopped on the resulting hash mismatch rather than committing
+unverified content.
+
+**Hosting-only corrective rollout.** `firebase deploy --only hosting
+--project luxace-service` published bundle `index-DyHA_yZ6.js`; the live
+channel's release timestamp read back as `2026-08-20 21:42:50` Asia/Bangkok
+immediately after this deploy — confirmed live via that newer release
+timestamp than the pre-deploy baseline, the served `index.html` referencing
+the new bundle (the prior `index-BSJOMhpi.js` no longer referenced), and
+both key assets returning HTTP 200. The raw numeric Hosting release/version
+ID for this deploy was again not independently exposed by available CLI
+tooling — not fabricated here. Worker (`c7a29282-...@100%`) and Firestore
+Rules (`463d4c8c-...`) reconfirmed unchanged before and after.
+
+**Real production browser acceptance passed (Claude in Chrome, synthetic
+record `BRN-2026-000009`, visually confirmed synthetic before use).** Quick
+Add durability (note survives a full reload with no global Save pressed),
+duplicate safety (no double-copy, including under a direct rapid
+double-click stress test — the pending guard held), pending-state UI
+(directly observed `"กำลังเพิ่ม…"`/`"กำลังบันทึก…"` mid-request), global-Save
+mutual exclusion (Save completed, correctly navigated, notes intact),
+unrelated dirty-draft preservation (Quick Add persisted only the note, never
+an unrelated unsaved field edit — confirmed the field reverted on reload
+since Quick Add never sent it), final reload persistence (all 6 notes exactly
+once, no duplicates/losses), and basic regression smoke (Dashboard, list,
+details, print preview, navigation) all passed. Zero non-test Service Jobs
+touched; zero Public Tracking issue/rotate performed; zero console errors.
+
+**Known non-blocking debt carried forward from this rollout:**
+
+- The production JS bundle still contains pre-existing, dead-code-bundled
+  mock-fixture-shaped `SRV-2026-xxxx` strings (from `src/repositories/mockData/serviceJobs.mock.ts`), unreachable at runtime since production
+  always resolves `backendKind === 'firestore'`. Predates F5d-70; a future
+  code-splitting cleanup candidate, not a security issue.
+- Internal Notes' new focused tests are source-structural (regex assertions
+  against `.tsx` source), not mounted-React/integration tests — this
+  repository has no jsdom/React Testing Library dependency (see Current
+  Limitations above); the browser acceptance pass above is the closest
+  available substitute for true mounted-component coverage.
+- Some Firebase CLI read-only paths still do not expose raw Hosting
+  version/release or Firestore ruleset IDs directly; every F5d-70 gate that
+  needed this evidence used the strongest available substitute (live release
+  timestamp deltas, `firestore.rules` source-diff plus absence of any Rules-
+  deploy command) rather than fabricating an ID.
+- Three synthetic acceptance records remain intentionally in production —
+  `BRN-2026-000009`, `BRN-2026-000010`, `BRN-2026-000011` — each clearly
+  marked "(synthetic)"/"F5d-70 ... Test" in its own customer/product/issue
+  fields. Tracked here as future controlled-cleanup candidates, not a defect.
+- An isolated authorization/loading stall observed once earlier in this
+  rollout's acceptance testing was non-reproducible and self-resolved; not
+  tracked as an open defect.
+
+Zero synthetic or durable production writes were made outside the explicit,
+synthetic-record-scoped browser acceptance pass above. Production is now
+F5d-70 (`f5d-70-ui-notes`).
 
 ## Development Principles
 

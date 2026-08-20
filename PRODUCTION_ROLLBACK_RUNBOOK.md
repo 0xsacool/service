@@ -657,6 +657,96 @@ config/` pattern) and must never be committed; this repository records
   production mutation requiring approval; since this rollout touched Hosting
   only, a rollback requires no corresponding Worker/Rules rollback.
 
+## F5d-70/F5d-70-ui/F5d-70-ui-notes — Core reactivity, UI reconciliation, and Internal Notes corrective — Hosting-only production evidence
+
+- **Scope: Hosting-only, across both rollouts in this release.** Worker
+  (`c7a29282-ac54-4e37-a9f0-e7d7bd1b25ce`, 100% traffic) and Firestore Rules
+  (ruleset `463d4c8c-9f6c-4ac4-b887-7bcd197125e1`) were confirmed unchanged
+  before and after both the F5d-70-ui deploy and the F5d-70-ui-notes
+  corrective deploy — `worker/`, `firestore.rules`,
+  `firestore.indexes.json`, `firebase.json`, and `.firebaserc` all zero diff
+  across every F5d-70 source checkpoint. No Worker or Rules deployment
+  occurred as part of F5d-70.
+- **F5d-70 core reactivity (source checkpoint only, no deploy of its own).**
+  Commit `8210bc89c55d130900388d8d8e79b0105e3beb16` (tag `f5d-70`) — 4 files,
+  `useServiceJobs()` adopted `useSyncExternalStore` over the existing
+  `dataVersion.ts` singleton. Deployed to production as part of the
+  F5d-70-ui Hosting release below, not separately.
+- **F5d-70-ui UI reconciliation deployment.** Commit
+  `f187158609ac3f25ad58400cbc3554967442b7e7` (tag `f5d-70-ui`), 10 files —
+  `key={claim.id}` entity boundary, LOCAL LAST WRITE WINS/DIRTY FIELDS ONLY
+  Service Job Details reconciliation, and a StrictMode-safe stale-issuance
+  ownership guard in `PublicTrackingSection`
+  ([DECISIONS.md](DECISIONS.md) #042). `firebase deploy --only hosting
+  --project luxace-service` published bundle `index-BSJOMhpi.js`; the live
+  channel's release timestamp read back as `2026-08-20 16:56:34`
+  Asia/Bangkok immediately after this deploy. **The raw numeric Hosting
+  release/version ID for this specific deploy was not exposed by the
+  available Firebase CLI read-only paths** (same limitation recorded for
+  every F5d-70 gate); the timestamp above and the served `index.html`
+  referencing `index-BSJOMhpi.js` are the verification evidence actually
+  captured, not a fabricated ID.
+- **Production acceptance found a pre-existing, unrelated Internal Notes
+  defect.** The Service Job Details "เพิ่ม" quick-add button appended a note
+  to local React state only and cleared the input — looking completed — but
+  made no repository write; a reload or navigation before the separate
+  page-level "บันทึกการเปลี่ยนแปลง" action silently lost the note. This
+  predates F5d-70 and was unrelated to the dirty-only Save contract, which
+  worked correctly.
+- **F5d-70-ui-notes corrective deployment.** Commit
+  `cdce581f39a0f27126bf154734b2a40be1f5246f` (tag `f5d-70-ui-notes`, tag
+  object `dc0447a2129476da4dac006fde955c954a06e3a1`), 4 files on top of
+  `f5d-70-ui` — "เพิ่ม" now performs its own immediate, notes-only
+  persistence write, and Quick Add / global Save were given mutual
+  exclusion (each fails closed on `isAddingNote || isSaving`; the note
+  input, Add button, and Save button are each disabled during either
+  operation's pending window) after an independent review found two races
+  (typing into the note field while its own write was pending; Quick Add
+  and Save overlapping). `firebase deploy --only hosting --project
+  luxace-service` published bundle `index-DyHA_yZ6.js`; the live channel's
+  release timestamp read back as `2026-08-20 21:42:50` Asia/Bangkok
+  immediately after this deploy. **The raw numeric Hosting release/version
+  ID was again not exposed by available CLI tooling** — same evidence
+  standard as the F5d-70-ui deploy above.
+- **Postdeploy verification passed** on both automated and real production
+  browser checks. Automated (both deploys): `/` returned 200; the served
+  `index.html` referenced the new bundle for that deploy (the prior bundle
+  no longer referenced); both key assets (`index-*.js`, `firebase-*.js`)
+  returned 200; a public tracking route (`/track/...`) returned 200 via the
+  SPA rewrite; Worker and Rules re-confirmed unchanged after each deploy.
+  **Real production browser acceptance (Claude in Chrome, synthetic record
+  `BRN-2026-000009`, visually confirmed synthetic — customer "F5d70 Test
+  Acceptance", product "F5d-70 Test Device (synthetic)" — before any
+  modification):** Quick Add durability across a full reload with no global
+  Save pressed; duplicate safety including under a direct rapid
+  double-click stress test; directly observed pending-state UI
+  (`"กำลังเพิ่ม…"`/`"กำลังบันทึก…"`); global-Save mutual exclusion (Save
+  completed and correctly navigated, notes intact); unrelated dirty-draft
+  preservation (Quick Add persisted only the note, confirmed via reload
+  that the unrelated unsaved field was never sent); final reload
+  persistence (6 notes, no duplicates or losses); and basic regression
+  smoke (Dashboard, list, details, print preview, navigation) all passed.
+  Zero non-test Service Jobs touched; zero Public Tracking issue/rotate
+  performed; zero console errors.
+- **Rollback ordering and constraint.** Both F5d-70-ui and F5d-70-ui-notes
+  are Hosting-only changes — **a frontend rollback of either must not
+  redeploy the Worker or Firestore Rules**, which were never touched by
+  either rollout and remain at the versions/ruleset stated above. If a
+  rollback of the corrective deploy is ever separately approved, the
+  immediate pre-corrective frontend anchor is: source
+  `f187158609ac3f25ad58400cbc3554967442b7e7` (tag `f5d-70-ui`), bundle
+  `index-BSJOMhpi.js`, live at `2026-08-20 16:56:34` Asia/Bangkok
+  immediately before the corrective deploy. This runbook does not define a
+  supported command for redeploying an arbitrary prior Hosting artifact by
+  ID beyond the existing `firebase deploy --only hosting` path already used
+  for every F5d-70 deploy above; no new or unverified rollback command is
+  introduced here.
+- **Final current production identity.** Source
+  `cdce581f39a0f27126bf154734b2a40be1f5246f` (tag `f5d-70-ui-notes`);
+  bundle `index-DyHA_yZ6.js`; live release timestamp `2026-08-20 21:42:50`
+  Asia/Bangkok; Worker `c7a29282-ac54-4e37-a9f0-e7d7bd1b25ce` at 100%
+  traffic; Firestore Rules ruleset `463d4c8c-9f6c-4ac4-b887-7bcd197125e1`.
+
 ## Deferred test improvement
 
 The Rules emulator suite covers legacy updates and hash immutability. A future
