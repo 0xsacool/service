@@ -12,6 +12,7 @@ import {
   serviceJobNumberingYear,
 } from './firestore/serviceJobAllocation';
 import { generatePublicTrackingCode, hashPublicTrackingCode } from '../services/publicTrackingCode';
+import { bumpDataVersion } from './dataVersion';
 
 // Session-only persistence, same pattern as productMasterRepository.ts — a
 // Map (not the previous mockServiceJobs/createdServiceJobs array split)
@@ -46,6 +47,7 @@ export const serviceJobsRepository: ServiceJobsRepository = {
         throw new Error(`Cannot create Service Job "${job.id}": target already exists`);
       }
       jobsById.set(job.id, job);
+      bumpDataVersion();
       return job;
     }
     const draft: NewDurableServiceJob = job;
@@ -83,6 +85,7 @@ export const serviceJobsRepository: ServiceJobsRepository = {
       ),
     };
     jobsById.set(created.id, created);
+    bumpDataVersion();
     return created;
   },
   async update(id, patch) {
@@ -101,6 +104,7 @@ export const serviceJobsRepository: ServiceJobsRepository = {
     }
     const updated = { ...existing, ...patch };
     jobsById.set(id, updated);
+    bumpDataVersion();
     return updated;
   },
   async issuePublicTrackingCode(id) {
@@ -112,6 +116,7 @@ export const serviceJobsRepository: ServiceJobsRepository = {
     const codeHash = await hashPublicTrackingCode(code);
     const updated: ServiceJob = { ...existing, publicTrackingCodeHash: codeHash };
     jobsById.set(id, updated);
+    bumpDataVersion();
     return { code, job: updated };
   },
 };

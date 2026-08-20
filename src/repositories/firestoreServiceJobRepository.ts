@@ -164,7 +164,16 @@ export async function createFirestoreServiceJobRepository(
             throw new Error('Worker returned malformed Service Job');
           return created as ServiceJob;
         },
-        (created) => jobsById.set(created.id, created)
+        // F5d-70 Phase 2A — a direct authoritative cache write, not routed
+        // through the onSnapshot listener, so it must bump dataVersion
+        // itself for mounted useServiceJobs() consumers to observe it. The
+        // later onSnapshot event for this same write bumps again — harmless
+        // (useSyncExternalStore only re-renders on an actual change), and
+        // simpler than trying to deduplicate the two notifications.
+        (created) => {
+          jobsById.set(created.id, created);
+          bumpDataVersion();
+        }
       );
     },
     async update(id, patch) {
@@ -211,7 +220,11 @@ export async function createFirestoreServiceJobRepository(
           }
           return fromFirestoreData(committed.id, committed.data());
         },
-        (updated) => jobsById.set(updated.id, updated)
+        // F5d-70 Phase 2A — same rationale as create() above.
+        (updated) => {
+          jobsById.set(updated.id, updated);
+          bumpDataVersion();
+        }
       );
     },
 
@@ -268,6 +281,11 @@ export async function createFirestoreServiceJobRepository(
       }
       const job = fromFirestoreData(committed.id, committed.data());
       jobsById.set(job.id, job);
+      // F5d-70 Phase 2A — same rationale as create()/update() above. The
+      // plaintext code itself is returned to the caller only, never stored
+      // here or passed to bumpDataVersion() — only the (already-hashed) job
+      // object enters the repository cache, unchanged from before.
+      bumpDataVersion();
       return { code: body.code, job };
     },
   };
