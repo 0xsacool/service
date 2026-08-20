@@ -150,6 +150,20 @@ test('save actions disable themselves during their existing in-flight states', a
   ]);
 
   assert.match(newJob, /disabled=\{isSaving\}/);
-  assert.match(details, /disabled=\{isSaving\}/);
+  // F5d-70 Phase 6F.4 — ServiceJobDetails' global Save button now also
+  // disables while a Quick Add note is in flight (approved mutual
+  // exclusion between the two mutation operations, protecting against a
+  // navigation/unmount race independent review found). This is a strict
+  // superset of the original protection — isSaving still unconditionally
+  // disables the button — so the assertion is scoped specifically to the
+  // <PrimaryButton onClick={() => void saveChanges()}> Save action (not
+  // the Internal Notes Add button, which also disables on isAddingNote ||
+  // isSaving but is a different action) and requires both conditions.
+  const saveButtonMatch = details.match(
+    /<PrimaryButton onClick=\{\(\) => void saveChanges\(\)\} disabled=\{([^}]+)\}>/
+  );
+  assert.notEqual(saveButtonMatch, null, 'expected to find the global Save button');
+  assert.match(saveButtonMatch[1], /\bisSaving\b/);
+  assert.match(saveButtonMatch[1], /\bisAddingNote\b/);
   assert.match(login, /disabled=\{isSigningIn\}/);
 });

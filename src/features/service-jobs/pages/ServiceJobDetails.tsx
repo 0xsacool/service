@@ -150,6 +150,8 @@ function ServiceJobDetailsView({
   const [tech, setTech] = useState(claim.technician);
   const [note, setNote] = useState('');
   const [notes, setNotes] = useState(claim.notes);
+  const [isAddingNote, setIsAddingNote] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
   // F5d-69 / DECISIONS.md #041 — one local draft object mirroring
   // ServiceEventMetadataEditValue exactly, initialized from the persisted
   // ServiceJob (null fields become '' for controlled inputs, matching
@@ -273,7 +275,12 @@ function ServiceJobDetailsView({
   }, [showDeliveryNotePreview]);
 
   const saveChanges = async () => {
-    if (isSaving) return;
+    // F5d-70 Phase 6F.4 — mutual exclusion with Quick Add: without this,
+    // a pending notes-only write and a page-level Save could both be
+    // in flight together, letting Save navigate away while Quick Add's
+    // continuation still runs against an unmounted component (its error,
+    // if any, becomes invisible and the note is silently lost).
+    if (isSaving || isAddingNote) return;
     setSaveError(null);
     // F5d-69 — blocks on a genuinely invalid entered date/URL before ever
     // reaching Firestore; a blank value is never an error here (every one
@@ -364,17 +371,40 @@ function ServiceJobDetailsView({
     }
   };
 
-  const addNote = () => {
-    if (!note.trim()) return;
-    setNotes((n) => [
-      ...n,
+  // F5d-70 Phase 6F.2 — "เพิ่ม" persists immediately: production acceptance
+  // found the prior draft-only append (visually complete, no repository
+  // call) silently lost notes on reload/navigation before the page-level
+  // Save. This sends ONLY { notes: nextNotes } — never saveChanges()'s
+  // full dirty patch — so unrelated in-progress edits (status, technician,
+  // event metadata) stay local and dirty, untouched by this call and by
+  // the same-job reconciliation effect above once claim.notes reflects it.
+  const addNote = async () => {
+    // F5d-70 Phase 6F.4 — mutual exclusion with global Save: without this,
+    // Quick Add could begin while a page-level Save is mid-flight, so its
+    // success continuation (setNotes/setNote) could run after Save has
+    // already navigated away via onDone().
+    if (isAddingNote || isSaving) return;
+    const text = note.trim();
+    if (!text) return;
+    setIsAddingNote(true);
+    setNoteError(null);
+    const nextNotes = [
+      ...notes,
       {
         author: user?.email ?? 'เจ้าหน้าที่',
         date: toIsoDate(new Date()),
-        text: note.trim(),
+        text,
       },
-    ]);
-    setNote('');
+    ];
+    try {
+      await updateServiceJob(claim.id, { notes: nextNotes });
+      setNotes(nextNotes);
+      setNote('');
+    } catch (error) {
+      setNoteError(serviceJobUpdateErrorMessage(error));
+    } finally {
+      setIsAddingNote(false);
+    }
   };
 
   const notifyCustomer = async () => {
@@ -551,18 +581,21 @@ function ServiceJobDetailsView({
                 id="service-job-team-note"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && addNote()}
+                onKeyDown={(e) => e.key === 'Enter' && void addNote()}
                 placeholder="เพิ่มหมายเหตุสำหรับทีม…"
-                className="flex-1 rounded-2xl bg-white/80 px-4 py-3 text-sm ring-1 ring-black/10 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-400"
+                disabled={isAddingNote || isSaving}
+                className="flex-1 rounded-2xl bg-white/80 px-4 py-3 text-sm ring-1 ring-black/10 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-400 disabled:cursor-not-allowed disabled:opacity-60"
               />
               <button
-                onClick={addNote}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-brand-500 px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-brand-600"
+                onClick={() => void addNote()}
+                disabled={isAddingNote || isSaving}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-brand-500 px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <MessageSquarePlus className="h-4 w-4" />
-                เพิ่ม
+                {isAddingNote ? 'กำลังเพิ่ม…' : 'เพิ่ม'}
               </button>
             </div>
+            <AsyncErrorAlert message={noteError} className="mt-2" />
           </GlassCard>
         </div>
 
@@ -669,7 +702,7 @@ function ServiceJobDetailsView({
           <ArrowLeft className="h-4 w-4" />
           งานบริการทั้งหมด
         </SecondaryButton>
-        <PrimaryButton onClick={() => void saveChanges()} disabled={isSaving}>
+        <PrimaryButton onClick={() => void saveChanges()} disabled={isSaving || isAddingNote}>
           <Check className="h-5 w-5" />
           {isSaving ? 'กำลังบันทึก…' : 'บันทึกการเปลี่ยนแปลง'}
         </PrimaryButton>

@@ -236,12 +236,17 @@ test('saveChanges computes anyDirty and skips updateServiceJob entirely when not
   assert.match(skipBlock[0], /onDone\(\);/);
   assert.match(skipBlock[0], /return;/);
   // The skip branch appears strictly before the updateServiceJob call in
-  // source order, and updateServiceJob appears exactly once overall — so
-  // the skip really does bypass it, not run alongside it.
+  // source order, and updateServiceJob appears exactly once WITHIN
+  // saveChanges — so the skip really does bypass it, not run alongside it.
+  // F5d-70 Phase 6F.2 — scoped to saveChanges' own body rather than the
+  // whole file: addNote() now has its own, entirely separate
+  // updateServiceJob call (notes-only quick-add persistence), so a
+  // whole-file count would no longer isolate this specific invariant.
   const skipIndex = source.indexOf(skipBlock[0]);
   const updateCallIndex = source.indexOf('await updateServiceJob(claim.id,');
   assert.ok(skipIndex < updateCallIndex);
-  assert.equal((source.match(/await updateServiceJob\(/g) ?? []).length, 1);
+  const saveChangesBody = source.match(/const saveChanges = async \(\) => \{[\s\S]*?\n {2}\};/)[0];
+  assert.equal((saveChangesBody.match(/await updateServiceJob\(/g) ?? []).length, 1);
 });
 
 test('an empty save still performs the existing completion/navigation behavior (onDone), just without a repository mutation', async () => {
