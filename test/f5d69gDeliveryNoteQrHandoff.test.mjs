@@ -144,12 +144,26 @@ test('DeliveryNotePrintPreview never calls or receives an issuance function — 
 
 // --- F: refresh/new-session semantics ----------------------------------------
 
-test('issuedTrackingCode has no persisted source — it is only ever set by the onIssued callback, defaulting to null on every fresh mount', async () => {
+test('issuedTrackingCode has no persisted source — every writer either passes the real onIssued callback reference or clears to null, never a value derived from claim/job/storage', async () => {
   const source = await detailsSourcePromise;
-  // The ONLY writer of this state is the onIssued callback wired above;
-  // there is no read from claim/job, localStorage, or any other source.
-  const setterUsages = source.match(/setIssuedTrackingCode/g) ?? [];
-  assert.equal(setterUsages.length, 2, 'expected exactly the declaration + the one onIssued wiring');
+  // F5d-70 Phase 5B.1 — the entity-boundary reset call this test used to
+  // require (setIssuedTrackingCode(null) inside a reset effect) was
+  // removed: entity isolation is now React's key={claim.id} mechanism
+  // (a fresh mount naturally re-initializes this state to null via its
+  // own useState(null), with no explicit call needed at all). The
+  // invariant this test actually protects — no source other than a real
+  // onIssued callback result can ever give this state a non-null value —
+  // is checked directly here instead of pinning an exact call count that
+  // has legitimately changed twice now across phases.
+  const declarationMatch = source.match(
+    /const \[issuedTrackingCode, setIssuedTrackingCode\] = useState<string \| null>\(null\);/
+  );
+  assert.notEqual(declarationMatch, null, 'expected the useState(null) declaration');
+  assert.match(source, /onIssued=\{setIssuedTrackingCode\}/, 'expected the real onIssued callback wiring');
+  const explicitCalls = source.match(/setIssuedTrackingCode\(([^)]*)\)/g) ?? [];
+  for (const call of explicitCalls) {
+    assert.doesNotMatch(call, /claim\.|job\.|localStorage|sessionStorage|indexedDB/);
+  }
 });
 
 // --- G/H: no persistence, no query-string/path credential --------------------

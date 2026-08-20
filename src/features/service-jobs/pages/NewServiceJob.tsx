@@ -92,6 +92,15 @@ export function NewServiceJob() {
   // makes the very first automatic print correct regardless of effect
   // ordering, with zero risk: classList.add() of an already-present token
   // is a no-op.
+  //
+  // F5d-70 Phase 5B — the dependency array stays exactly [savedJob], never
+  // a fresher repository-resolved job. savedJob is set exactly once by
+  // handleSaveAndPrint()'s success path and never reassigned afterward, so
+  // its reference never changes again for the lifetime of this success
+  // screen — a later dataVersion-driven repository refresh (see displayJob
+  // below) re-renders this component but does not change savedJob's
+  // identity, so this effect cannot re-fire from that. Only startNewServiceJob()
+  // resets it (to null), for a genuinely new creation.
   useEffect(() => {
     if (savedJob) {
       document.body.classList.add('service-request-print-mode');
@@ -99,6 +108,21 @@ export function NewServiceJob() {
       window.print();
     }
   }, [savedJob]);
+
+  // F5d-70 Phase 5B — savedJob is a one-shot creation-result snapshot; it
+  // does not itself become fresher when the repository changes underneath
+  // it (F5d-70's core reactivity re-renders this component, but nothing
+  // re-assigns savedJob). displayJob is what the UI actually shows for
+  // truthfulness (public-tracking active/hash state, the success-screen
+  // job, and the print preview): the freshest repository row for the same
+  // id when the repository has one, falling back to the original snapshot
+  // only if that row is ever unavailable. This never creates another
+  // Service Job, never re-triggers the print effect above (which depends
+  // on savedJob, not this), and never issues/rotates a credential by
+  // itself.
+  const displayJob = savedJob
+    ? (serviceJobs.find((job) => job.id === savedJob.id) ?? savedJob)
+    : null;
 
   // F5d-69 / DECISIONS.md #041 — canonical customer-level channel storage
   // does not exist; the most recent known channel is derived in memory from
@@ -251,14 +275,14 @@ export function NewServiceJob() {
               the one-page A4 document geometry untouched. */}
           <div className="service-request-preview-toolbar mb-6">
             <PublicTrackingSection
-              job={savedJob}
+              job={displayJob ?? savedJob}
               onIssue={issuePublicTrackingCode}
               onRefreshJob={readServiceJob}
               onIssued={setSavedPublicTrackingCode}
             />
           </div>
           <ServiceRequestPrintPreview
-            job={savedJob}
+            job={displayJob ?? savedJob}
             publicTrackingCode={savedPublicTrackingCode}
             onPrintAgain={() => window.print()}
             onNewServiceJob={startNewServiceJob}

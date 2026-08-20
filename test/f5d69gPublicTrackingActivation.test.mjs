@@ -168,7 +168,16 @@ const sectionSourcePromise = readSource(
 
 test('STATE A (inactive): shows the inactive badge and the issue action', async () => {
   const source = await sectionSourcePromise;
-  assert.match(source, /useState\(job\.publicTrackingCodeHash !== null\)/, 'active-ness must derive from the persisted hash');
+  // F5d-70 Phase 5B — active-ness is now derived every render (job prop OR
+  // this session's own issuedCode), not read once into state at mount —
+  // stronger than the original assertion: it can no longer go stale while
+  // mounted. Same protective intent: it must always derive from the
+  // persisted hash (or a real local issuance), never anything else.
+  assert.match(
+    source,
+    /const isActive = job\.publicTrackingCodeHash !== null \|\| issuedCode !== null;/,
+    'active-ness must derive from the persisted hash (or a real local issuance)'
+  );
   assert.match(source, /ยังไม่ได้เปิดใช้งาน/);
   assert.match(source, /สร้างรหัสติดตาม/);
 });
@@ -207,11 +216,20 @@ test('an ambiguous failure uses neutral wording and re-reads the real persisted 
   const source = await sectionSourcePromise;
   assert.match(source, /ไม่สามารถยืนยันผลการสร้างรหัสติดตามได้/);
   assert.match(source, /หากระบบแสดงว่าเปิดใช้งานแล้ว ให้กด “ออกใหม่” เพื่อรับรหัสใหม่/);
+  // F5d-70 Phase 5B — onRefreshJob is still called on an ambiguous outcome
+  // (still triggers a fresh repository row), but isActive is no longer
+  // manually set from its result: it is derived directly from the `job`
+  // prop, so once the parent re-renders with that fresh row, "still
+  // inactive" vs "active but undelivered" resolves itself with no
+  // separate flag to keep in sync — a stronger version of the same intent.
+  const issueBody = source.match(/const issue = async \(\) => \{([\s\S]*?)\n {2}\};/);
+  assert.notEqual(issueBody, null, 'expected to find the issue() handler');
   assert.match(
-    source,
-    /const refreshed = onRefreshJob\?\.\(job\.id\);\s*\n\s*if \(refreshed && refreshed\.publicTrackingCodeHash !== null\) setIsActive\(true\);/,
-    'an ambiguous outcome must re-read the job so staff can tell inactive from active-but-undelivered'
+    issueBody[1],
+    /onRefreshJob\?\.\(job\.id\);/,
+    'an ambiguous outcome must still re-read the job so a fresh row becomes available'
   );
+  assert.doesNotMatch(issueBody[1], /setIsActive/, 'isActive must not be independently set anymore — it is derived');
 });
 
 test('the section never attempts plaintext recovery — no scan, no query, no hash-to-code path', async () => {

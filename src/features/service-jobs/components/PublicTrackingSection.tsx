@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Copy, Link as LinkIcon, RotateCw, ShieldCheck } from 'lucide-react';
 import type { ServiceJob } from '../../../types';
 import { GlassCard, PrimaryButton, SecondaryButton } from '../../../shared/components';
@@ -32,13 +32,97 @@ export function PublicTrackingSection({
   onRefreshJob?: (id: string) => ServiceJob | undefined;
   onIssued?: (code: string) => void;
 }) {
-  const [isActive, setIsActive] = useState(job.publicTrackingCodeHash !== null);
   const [issuedCode, setIssuedCode] = useState<string | null>(null);
   const [isIssuing, setIsIssuing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isOutcomeUnconfirmed, setIsOutcomeUnconfirmed] = useState(false);
   const [confirmingRotate, setConfirmingRotate] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<'code' | 'link' | null>(null);
+
+  // F5d-70 Phase 5B.1 — entity boundary: no reset effect here. Both real
+  // call sites now guarantee job.id can never change within one mounted
+  // instance of this component: ServiceJobDetails.tsx renders its
+  // ServiceJobDetailsView parent with key={claim.id}, so a different job
+  // always arrives via a fresh mount of this whole subtree (fresh
+  // useState(null) for issuedCode, not a reset effect racing the paint);
+  // NewServiceJob.tsx only ever swaps to a different job's id by first
+  // passing through savedJob === null (which unmounts this component
+  // entirely, since it only renders inside the `savedJob ? (...) : (...)`
+  // branch) before a new job can ever be set. An in-flight issue()
+  // promise from a since-unmounted instance resolving late is a no-op —
+  // React 18+ silently drops a state update targeting an unmounted
+  // function component's own closure; it cannot reach a different,
+  // separately-mounted instance's state, because there is no shared
+  // mutable reference between them. A passive same-component reset effect
+  // was removed rather than kept as inert defense-in-depth: independent
+  // review's point stands generally — a passive effect cannot be the
+  // entity-isolation mechanism, since it only runs after a render (and,
+  // for useEffect, after paint) has already committed with mismatched
+  // state — so the actual boundary must be (and now is) the mount/unmount
+  // lifecycle itself, not an effect layered on top of it.
+
+  // F5d-70 Phase 5B.2/5B.3 — a mount-LIFETIME guard for the async issue()/
+  // rotate() continuation only. This is NOT an entity-boundary or
+  // reconciliation mechanism (Phase 5B.1 correctly removed those, and
+  // job.id still cannot change within one mounted instance — see the
+  // comment above). It exists because a request this component started
+  // can outlive this specific mounted instance: e.g. NewServiceJob's
+  // startNewServiceJob() unmounts this component while an issue()/
+  // rotate() promise is still in flight for the OLD job, and that promise
+  // resolving afterward must not call the parent's onIssued(...) — doing
+  // so would repopulate the parent's transient plaintext state with the
+  // old job's credential just before a new job is created, letting it
+  // leak into the new job's UI.
+  //
+  // Lifecycle semantics (Phase 5B.3 correction — the Phase 5B.2 version
+  // only ever set the ref to false in cleanup and never re-armed it in
+  // setup, which is wrong under StrictMode): setup unconditionally
+  // establishes current ownership (mountedRef.current = true); cleanup
+  // revokes it (mountedRef.current = false). In development, React
+  // StrictMode deliberately exercises setup -> cleanup -> setup once for
+  // every effect on a component that stays mounted, specifically to
+  // surface effects whose cleanup doesn't correctly undo their own setup —
+  // the previous cleanup-only version failed exactly that check, since the
+  // simulated cleanup left the ref false with no second setup to flip it
+  // back, permanently misclassifying a still-mounted component's own
+  // legitimate in-flight issuance as stale. With setup re-arming the ref
+  // every time it runs, the sequence ends with mountedRef.current === true
+  // whenever the component is actually still mounted (StrictMode's extra
+  // pair included), and only a REAL unmount — one whose cleanup is not
+  // followed by another setup — leaves it false.
+  //
+  // useLayoutEffect (not useEffect): this control ref has no rendering/
+  // layout output of its own, but a layout effect's setup/cleanup pair
+  // runs synchronously as part of the same commit that mounts/unmounts the
+  // component, before the browser paints or any further scheduling can
+  // happen — removing any ambiguity about exactly when ownership flips,
+  // consistent with the same reasoning already applied to
+  // ServiceJobDetailsView's reconciliation effect. The dependency array
+  // stays empty — ownership must never be re-armed or revoked by a
+  // same-job re-render (a fresh `job` prop, a dataVersion bump, a status
+  // change, or anything else that doesn't destroy this component leaves
+  // mountedRef.current === true throughout, and any in-flight issuance is
+  // still allowed to complete normally).
+  const mountedRef = useRef(true);
+  useLayoutEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // F5d-70 Phase 5B — derived, not stored: "active" is true whenever EITHER
+  // the persisted hash says so (monotonic external activation — issue and
+  // rotate are the only writers of this field; there is no revoke path) OR
+  // this session issued/rotated a code itself (visible immediately, before
+  // the fresh hash has round-tripped back through the repository). Deriving
+  // this — rather than an independent `isActive` state that only ever got
+  // updated from this component's OWN actions — eliminates the P1 defect
+  // where a mounted page could remain stuck showing "inactive" (and its
+  // first-issuance action) after the job had already become active
+  // elsewhere in the same session; it can never drift from either source
+  // of truth, because it is never its own source of truth.
+  const isActive = job.publicTrackingCodeHash !== null || issuedCode !== null;
 
   const trackingUrl = issuedCode
     ? buildPublicTrackingUrl(window.location.origin, job.id, issuedCode)
@@ -51,11 +135,19 @@ export function PublicTrackingSection({
     setCopyFeedback(null);
     try {
       const result = await onIssue(job.id);
+      // F5d-70 Phase 5B.2 — stale-continuation guard, checked immediately
+      // after the await, before any state write or parent callback. The
+      // backend issuance may have already completed successfully — that is
+      // never undone here (see below) — this only stops the now-stale UI
+      // continuation from writing local state or, critically, calling the
+      // parent's onIssued(...) with a credential belonging to whatever job
+      // this component used to represent.
+      if (!mountedRef.current) return;
       setIssuedCode(result.code);
-      setIsActive(true);
       setConfirmingRotate(false);
       onIssued?.(result.code);
     } catch (issuanceError) {
+      if (!mountedRef.current) return;
       // A conclusive rejection (the Worker refused before writing anything)
       // is reported as a definite failure. Anything else is genuinely
       // unknown — the credential may already be live — so it is reported
@@ -68,14 +160,19 @@ export function PublicTrackingSection({
         setError('ไม่สามารถสร้างรหัสติดตามได้ กรุณาลองอีกครั้ง');
       } else {
         setIsOutcomeUnconfirmed(true);
-        // Re-read the job's real persisted state so staff can tell "still
-        // inactive" from "active but the code was never delivered".
-        const refreshed = onRefreshJob?.(job.id);
-        if (refreshed && refreshed.publicTrackingCodeHash !== null) setIsActive(true);
+        // Re-read the job's real persisted state so a fresh repository row
+        // is available immediately. `isActive` above is derived from the
+        // `job` prop, so once the parent re-renders with that fresh row
+        // (F5d-70 dataVersion reactivity), "still inactive" vs "active but
+        // the code was never delivered" resolves itself with no separate
+        // flag to keep in sync here.
+        onRefreshJob?.(job.id);
       }
       setConfirmingRotate(false);
     } finally {
-      setIsIssuing(false);
+      // Same guard: a stale continuation must not write even this
+      // purely-local flag once its owning instance is gone.
+      if (mountedRef.current) setIsIssuing(false);
     }
   };
 

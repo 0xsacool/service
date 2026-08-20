@@ -167,7 +167,15 @@ test('dataVersion.ts carries only a number — structurally incapable of holding
   assert.doesNotMatch(source, /string|code|Srv|SRV/i);
 });
 
-test('none of the F5d-69G transient plaintext SRV surfaces were touched by this phase', async () => {
+test('none of the F5d-69G transient plaintext SRV surfaces gained a dataVersion import or a bumpDataVersion() call', async () => {
+  // F5d-70 Phase 5B (a later, separately-approved phase) legitimately edited
+  // ServiceJobDetails.tsx and PublicTrackingSection.tsx for UI draft
+  // reconciliation, and its comments explain that work by name ("F5d-70
+  // dataVersion reactivity") without importing or calling either symbol —
+  // so this now checks for the actual surface (import/call), not a bare
+  // word match, which the original Phase 2A assertion could not have
+  // anticipated. The protective intent — the plaintext SRV must never be
+  // pushed through the dataVersion signal — is unchanged and still holds.
   for (const path of [
     'src/features/service-jobs/pages/ServiceJobDetails.tsx',
     'src/features/service-jobs/components/PublicTrackingSection.tsx',
@@ -175,6 +183,6 @@ test('none of the F5d-69G transient plaintext SRV surfaces were touched by this 
     'src/features/service-jobs/components/ServiceRequestPrintPreview.tsx',
   ]) {
     const source = await readSource(path);
-    assert.doesNotMatch(source, /bumpDataVersion|dataVersion/);
+    assert.doesNotMatch(source, /bumpDataVersion\(|from '.*dataVersion'/);
   }
 });

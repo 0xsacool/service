@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -63,6 +63,22 @@ import {
   shareCustomerNotification,
 } from '../../../services/customerNotificationShare';
 import { serviceJobUpdateErrorMessage } from '../serviceJobErrorMessages';
+import { notesEqual, reconcileField } from '../../../services/serviceJobDraftReconciliation';
+
+// F5d-70 Phase 5B — the single place claim -> local-draft-shape mapping is
+// defined, used to seed the initial local draft on mount.
+function eventMetadataFromClaim(claim: ServiceJob): ServiceEventMetadataEditValue {
+  return {
+    contactChannel: claim.contactChannel,
+    contactChannelIdentity: claim.contactChannelIdentity ?? '',
+    orderNumber: claim.orderNumber ?? '',
+    orderVerification: claim.orderVerification,
+    purchaseDate: claim.purchaseDate ?? '',
+    orderDeliveredDate: claim.orderDeliveredDate ?? '',
+    externalEvidenceUrl: claim.externalEvidenceUrl ?? '',
+    externalEvidenceNote: claim.externalEvidenceNote ?? '',
+  };
+}
 
 export function ServiceJobDetails() {
   const navigate = useNavigate();
@@ -93,7 +109,23 @@ export function ServiceJobDetails() {
   }
 
   return (
+    // F5d-70 Phase 5B.1 — keyed by business entity identity (claim.id)
+    // only, never by anything that changes on an ordinary same-job update
+    // (dataVersion, publicTrackingCodeHash, status, updatedAt, or claim's
+    // own object identity, which F5d-70's reactivity churns on every
+    // unrelated Service Job's change too). React unmounts/remounts this
+    // whole subtree — destroying every local draft and the transient
+    // plaintext SRV — only when the identity itself changes; an ordinary
+    // refresh of the SAME job never does, because the key doesn't change.
+    // This is the actual entity boundary: a passive reset effect can only
+    // ever run AFTER a render has already committed with the wrong
+    // job's local state attached to the new job's id, which is exactly
+    // what independent review found exploitable. A key change instead
+    // tears down and rebuilds the subtree atomically as part of one
+    // commit — there is no render in between where old-entity state and
+    // new-entity identity coexist.
     <ServiceJobDetailsView
+      key={claim.id}
       claim={claim}
       onBack={() => navigate(ROUTES.serviceJobs)}
       onDone={() => navigate(ROUTES.dashboard)}
@@ -122,16 +154,9 @@ function ServiceJobDetailsView({
   // ServiceEventMetadataEditValue exactly, initialized from the persisted
   // ServiceJob (null fields become '' for controlled inputs, matching
   // ServiceIntakeData's own string-not-null convention — see its comment).
-  const [eventMetadata, setEventMetadata] = useState<ServiceEventMetadataEditValue>({
-    contactChannel: claim.contactChannel,
-    contactChannelIdentity: claim.contactChannelIdentity ?? '',
-    orderNumber: claim.orderNumber ?? '',
-    orderVerification: claim.orderVerification,
-    purchaseDate: claim.purchaseDate ?? '',
-    orderDeliveredDate: claim.orderDeliveredDate ?? '',
-    externalEvidenceUrl: claim.externalEvidenceUrl ?? '',
-    externalEvidenceNote: claim.externalEvidenceNote ?? '',
-  });
+  const [eventMetadata, setEventMetadata] = useState<ServiceEventMetadataEditValue>(() =>
+    eventMetadataFromClaim(claim)
+  );
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showDeliveryNotePreview, setShowDeliveryNotePreview] = useState(false);
@@ -149,6 +174,97 @@ function ServiceJobDetailsView({
   } | null>(null);
   const deliveryNoteTriggerRef = useRef<HTMLButtonElement>(null);
   const shouldRestoreDeliveryNoteFocus = useRef(false);
+
+  // F5d-70 Phase 5B.1 — draft reconciliation for the SAME entity only. The
+  // entity boundary itself is no longer this effect's job: ServiceJobDetails()
+  // now renders this component with `key={claim.id}` (see below), so a
+  // genuinely different Service Job always arrives via a fresh mount — the
+  // `previous.id !== claim.id` branch this effect used to special-case can
+  // never actually fire anymore (a new mounted instance's very first
+  // `previousClaimRef` value is, by construction, that same instance's
+  // first `claim`), and keeping it around as apparently-live code was
+  // exactly the kind of "passive effect provides credential isolation"
+  // design independent review correctly rejected. Removed rather than left
+  // as dead code, per "prefer the simplest lifecycle / don't maintain two
+  // conflicting mechanisms for the same boundary".
+  //
+  // This runs as useLayoutEffect (not useEffect): react-hooks/refs still
+  // permits reading/writing a ref from either effect timing (only render
+  // itself is restricted), and running synchronously after the DOM commit
+  // but BEFORE the browser paints closes the exact timing window
+  // independent review flagged — a fresh `claim` can never be visible
+  // on-screen alongside not-yet-rebased pristine local state, because
+  // nothing paints between the commit and this effect running. Purely
+  // client-side SPA (no SSR render of this component anywhere in this
+  // codebase), so useLayoutEffect carries no hydration-mismatch risk here.
+  //
+  // `claim` gets a brand new object reference on every F5d-70 dataVersion
+  // re-render — including ones triggered by a completely unrelated Service
+  // Job changing — so every comparison below is by VALUE against the
+  // previous claim (never by reference), and every branch is a no-op
+  // unless something actually changed for a field/group that is currently
+  // pristine. Every metadata comparison reads `current` from inside
+  // setEventMetadata's functional updater (never the outer `eventMetadata`
+  // closure), and status/notes/technician use the same functional-updater
+  // form, so `claim`/`canReassignTechnician` are the only real dependencies
+  // — no stale-closure risk, and this effect never re-fires from the
+  // user's own edits, never writes the repository, and never bumps
+  // dataVersion.
+  const previousClaimRef = useRef(claim);
+  useLayoutEffect(() => {
+    const previous = previousClaimRef.current;
+    if (previous === claim) return;
+    previousClaimRef.current = claim;
+
+    setStatus((current) => reconcileField(current, previous.status, claim.status));
+    setNotes((current) => reconcileField(current, previous.notes, claim.notes, notesEqual));
+    if (canReassignTechnician) {
+      setTech((current) => reconcileField(current, previous.technician, claim.technician));
+    }
+    setEventMetadata((current) => {
+      const contactPristine =
+        current.contactChannel === previous.contactChannel &&
+        current.contactChannelIdentity === (previous.contactChannelIdentity ?? '');
+      const orderPristine =
+        current.orderNumber === (previous.orderNumber ?? '') &&
+        current.orderVerification === previous.orderVerification;
+      const purchaseDatePristine = current.purchaseDate === (previous.purchaseDate ?? '');
+      const orderDeliveredDatePristine =
+        current.orderDeliveredDate === (previous.orderDeliveredDate ?? '');
+      const evidenceUrlPristine =
+        current.externalEvidenceUrl === (previous.externalEvidenceUrl ?? '');
+      const evidenceNotePristine =
+        current.externalEvidenceNote === (previous.externalEvidenceNote ?? '');
+      if (
+        !contactPristine &&
+        !orderPristine &&
+        !purchaseDatePristine &&
+        !orderDeliveredDatePristine &&
+        !evidenceUrlPristine &&
+        !evidenceNotePristine
+      ) {
+        return current;
+      }
+      return {
+        contactChannel: contactPristine ? claim.contactChannel : current.contactChannel,
+        contactChannelIdentity: contactPristine
+          ? (claim.contactChannelIdentity ?? '')
+          : current.contactChannelIdentity,
+        orderNumber: orderPristine ? (claim.orderNumber ?? '') : current.orderNumber,
+        orderVerification: orderPristine ? claim.orderVerification : current.orderVerification,
+        purchaseDate: purchaseDatePristine ? (claim.purchaseDate ?? '') : current.purchaseDate,
+        orderDeliveredDate: orderDeliveredDatePristine
+          ? (claim.orderDeliveredDate ?? '')
+          : current.orderDeliveredDate,
+        externalEvidenceUrl: evidenceUrlPristine
+          ? (claim.externalEvidenceUrl ?? '')
+          : current.externalEvidenceUrl,
+        externalEvidenceNote: evidenceNotePristine
+          ? (claim.externalEvidenceNote ?? '')
+          : current.externalEvidenceNote,
+      };
+    });
+  }, [claim, canReassignTechnician]);
 
   useEffect(() => {
     if (showDeliveryNotePreview || !shouldRestoreDeliveryNoteFocus.current) return;
@@ -169,18 +285,76 @@ function ServiceJobDetailsView({
     }
     setIsSaving(true);
     try {
+      // F5d-70 Phase 5B — dirty-only patch: a field/group is included only
+      // when the local draft has actually diverged from the newest
+      // persisted claim (mirrors the same comparisons the reconciliation
+      // block above uses to decide what stays pristine). Sending only
+      // dirty fields, combined with the repository's existing
+      // {...current, ...patch} merge, is what makes "remote status
+      // changes + local notes dirty -> save updates notes only" true.
+      const statusDirty = status !== claim.status;
+      const notesDirty = !notesEqual(notes, claim.notes);
+      const techDirty = canReassignTechnician && tech !== claim.technician;
+      const contactDirty =
+        eventMetadata.contactChannel !== claim.contactChannel ||
+        eventMetadata.contactChannelIdentity !== (claim.contactChannelIdentity ?? '');
+      const orderDirty =
+        eventMetadata.orderNumber !== (claim.orderNumber ?? '') ||
+        eventMetadata.orderVerification !== claim.orderVerification;
+      const purchaseDateDirty = eventMetadata.purchaseDate !== (claim.purchaseDate ?? '');
+      const orderDeliveredDateDirty =
+        eventMetadata.orderDeliveredDate !== (claim.orderDeliveredDate ?? '');
+      const externalEvidenceUrlDirty =
+        eventMetadata.externalEvidenceUrl !== (claim.externalEvidenceUrl ?? '');
+      const externalEvidenceNoteDirty =
+        eventMetadata.externalEvidenceNote !== (claim.externalEvidenceNote ?? '');
+      const anyDirty =
+        statusDirty ||
+        notesDirty ||
+        techDirty ||
+        contactDirty ||
+        orderDirty ||
+        purchaseDateDirty ||
+        orderDeliveredDateDirty ||
+        externalEvidenceUrlDirty ||
+        externalEvidenceNoteDirty;
+
+      // F5d-70 Phase 5B.1 — nothing to save: skip the repository call
+      // entirely (no Firestore transaction, no updatedAt bump, no
+      // dataVersion bump merely from clicking Save). The existing
+      // completion behavior (navigate to dashboard) still runs — clicking
+      // Save with no changes is a no-op mutation, not an error.
+      if (!anyDirty) {
+        onDone();
+        return;
+      }
+
       await updateServiceJob(claim.id, {
-        status,
-        notes,
-        ...(canReassignTechnician ? { technician: tech } : {}),
-        contactChannel: eventMetadata.contactChannel,
-        contactChannelIdentity: eventMetadata.contactChannelIdentity.trim() || null,
-        orderNumber: eventMetadata.orderNumber.trim() || null,
-        orderVerification: eventMetadata.orderVerification,
-        purchaseDate: eventMetadata.purchaseDate || null,
-        orderDeliveredDate: eventMetadata.orderDeliveredDate || null,
-        externalEvidenceUrl: eventMetadata.externalEvidenceUrl.trim() || null,
-        externalEvidenceNote: eventMetadata.externalEvidenceNote.trim() || null,
+        ...(statusDirty ? { status } : {}),
+        ...(notesDirty ? { notes } : {}),
+        ...(techDirty ? { technician: tech } : {}),
+        ...(contactDirty
+          ? {
+              contactChannel: eventMetadata.contactChannel,
+              contactChannelIdentity: eventMetadata.contactChannelIdentity.trim() || null,
+            }
+          : {}),
+        ...(orderDirty
+          ? {
+              orderNumber: eventMetadata.orderNumber.trim() || null,
+              orderVerification: eventMetadata.orderVerification,
+            }
+          : {}),
+        ...(purchaseDateDirty ? { purchaseDate: eventMetadata.purchaseDate || null } : {}),
+        ...(orderDeliveredDateDirty
+          ? { orderDeliveredDate: eventMetadata.orderDeliveredDate || null }
+          : {}),
+        ...(externalEvidenceUrlDirty
+          ? { externalEvidenceUrl: eventMetadata.externalEvidenceUrl.trim() || null }
+          : {}),
+        ...(externalEvidenceNoteDirty
+          ? { externalEvidenceNote: eventMetadata.externalEvidenceNote.trim() || null }
+          : {}),
       });
       onDone();
     } catch (error) {

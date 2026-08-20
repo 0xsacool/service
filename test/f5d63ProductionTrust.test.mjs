@@ -66,7 +66,13 @@ test('production technician reassignment is read-only and omitted from save edit
   );
 
   assert.match(source, /canReassignTechnician = backendKind === 'mock'/);
-  assert.match(source, /canReassignTechnician \? \{ technician: tech \} : \{\}/);
+  // F5d-70 Phase 5B — save is now dirty-only: techDirty additionally
+  // requires the local value to have actually diverged from the persisted
+  // one, but canReassignTechnician is still a hard, unconditional gate —
+  // in production (canReassignTechnician === false) techDirty can never be
+  // true, so technician can never enter the save patch, exactly as before.
+  assert.match(source, /const techDirty = canReassignTechnician && tech !== claim\.technician;/);
+  assert.match(source, /techDirty \? \{ technician: tech \} : \{\}/);
   assert.match(source, /การเปลี่ยนช่างผู้รับผิดชอบยังไม่พร้อมใช้งานในระบบจริง/);
   assert.doesNotMatch(source, /แก้ไขการมอบหมาย|<Pencil/);
 });
