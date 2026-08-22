@@ -3400,14 +3400,17 @@ Zero synthetic or durable production writes were made outside the explicit,
 synthetic-record-scoped browser acceptance pass above. Production is now
 F5d-70 (`f5d-70-ui-notes`).
 
-## PI-3 — Product Master Production Import (source only, not deployed)
+## PI-3 — Product Master Production Import (Production, activated 2026-08-22)
 
 The privileged, Worker-mediated Product Master bulk import workflow #030
-deferred is now implemented in **source only** — see [DECISIONS.md](DECISIONS.md)
-#043 for the full decision record. This entry states plainly what "source
-only" means here: **no Worker route has been deployed, no staff profile has
-`canImportProducts: true` provisioned, Hosting has not been updated, and no
-production Product write of any kind has occurred as part of this work.**
+deferred is implemented and **live in Production** — see
+[DECISIONS.md](DECISIONS.md) #043 for the full decision record and its PI-9
+through PI-13 addendum for the activation evidence. The narrative immediately
+below (Slice 1, Slice 2, PI-3C, PI-3D) documents the source-only implementation
+and review history exactly as it happened at the time — each of those entries'
+"source only, not deployed" framing was accurate **for that phase** and is
+preserved unedited as a historical record. Current status is recorded in the
+**PI-9 through PI-13 — Production activation** entry after PI-3D, below.
 
 **Slice 1 (shared modules, Worker route, transactional commit).** New
 runtime-neutral shared modules under `src/services/` — `productIdentity.ts`
@@ -3653,6 +3656,86 @@ materially affect them. No Production deployment, `canImportProducts`
 provisioning, or Repair Reports work occurred. No Product schema/write-mask
 expansion — variant is still not, and will never become, a Product
 Firestore field or a wire-contract field via this fix.
+
+### PI-9 through PI-13 — Production activation complete
+
+Following the independent PI-4R2 re-review (PASS, zero blockers, zero
+SHOULD-FIX items remaining) and the PI-5 source freeze, the reviewed Product
+Import source was checkpointed, tagged, and activated in Production across
+five gated phases (PI-6 through PI-11), each separately authorized and
+independently verified before proceeding to the next:
+
+- **Source of record:** commit `7a4be1dc60f9c423aec519ccbfe9d541a1fc5aea`,
+  immutable annotated tag `pi-3-product-import` (PI-6/PI-7). Both remain
+  exactly as committed/tagged — no further source change has been made to
+  this feature since.
+- **Worker (PI-8/PI-9):** `service-tech-files-worker` version
+  `7653385b-a090-4cb8-b4fe-c166c65c2e2b` deployed and confirmed at **100%**
+  Production traffic. Pre/post-deploy health, CORS (allowed-origin grant,
+  disallowed-origin denial), and unauthenticated-request fail-closed
+  behavior were all verified live before and after the traffic switch; the
+  prior version (`c7a29282-ac54-4e37-a9f0-e7d7bd1b25ce`) was retained as the
+  rollback target and was not needed.
+- **Permission (PI-10):** `staffProfiles/{uid}.canImportProducts` is `true`
+  (literal boolean) for exactly **one** approved Production staff profile —
+  provisioned as the single isolated field update the architecture requires
+  (#029/#043), never through any client write path. No staff UID is recorded
+  in this document.
+- **Hosting (PI-11):** the reviewed frontend build (from the same commit)
+  deployed to `luxace-service` Hosting, live version `9569af3237d38cd0`.
+  Deployed strictly after the Worker (per the required activation order —
+  the Import UI must never be exposed before its backend route exists) and
+  strictly `--only hosting`, never touching Rules/indexes/Functions. Root
+  page load, hashed-asset resolution, and console-error-free boot were
+  verified post-deploy; no credential was entered to do so.
+- **Production acceptance (PI-12) — PASS.** Synthetic-data-only scenarios
+  confirmed live: NEW-row import, SKIP-row (no write), UPDATE-row (write-mask
+  respected), a mixed valid+ERROR request aborting the entire request with
+  zero writes, an explicit Variant/Color value blocking with
+  `UNSUPPORTED_VARIANT`, a deliberately staled catalog fingerprint aborting
+  with `stale_catalog` and requiring an explicit re-preview, and direct
+  browser Firestore `create`/`update` against `products/{id}` both denied.
+- **Idempotency/audit evidence (PI-12R) — PASS.** A first request under a
+  given actor/key/body committed with `replayed: false`; the exact same
+  actor, key, and body resubmitted returned `replayed: true` with the same
+  `importId`, the same affected Product, no duplicate business write, and no
+  second `productCatalogState` revision movement. Exactly one completed
+  `productImports` audit record exists for that key, inspected read-only via
+  the Firebase Console, and contains no token, no raw CSV, and no Variant
+  value. A staff client's attempt to read `productImports` directly was
+  denied, as the architecture requires (Worker-only collection).
+
+**Security invariants preserved, unchanged by activation:** Worker-mediated
+privileged mutation only; direct browser Product `create`/`update`/`delete`
+remain denied at all three layers (Rules, repository, UI gate); authorization
+requires the literal boolean `canImportProducts === true` (fails closed on
+absence/any other value); the Product catalog remains global (no `brandId`
+scoping); any `error`-status row aborts the entire request with zero writes;
+a stale catalog fingerprint aborts with zero writes and requires an explicit
+server-refreshed re-preview before resubmission; idempotency is durable
+(caller-owned key, replay-safe); Variant/Color remains explicitly
+unsupported and blocks rather than silently drops; there is no Product
+delete path; `firestore.rules`, `firestore.indexes.json`, and the Worker's
+IAM role were not touched by any part of this activation.
+
+**One intentional synthetic Product remains in Production** — created during
+PI-12 acceptance testing and deliberately left in place, since Product
+deletion is out of scope by design (#043) and there is no delete path to
+remove it with. This is a known, accepted, non-blocking artifact, not a
+defect.
+
+**Known non-blocking items, unchanged by activation:** Mock-mode
+concurrent-first-use parity still differs from the Production transaction's
+own concurrency handling; no mounted-React test exists for the wizard; no
+separate live-Firestore integration harness exists outside this Production
+acceptance pass itself; `Content-Type` prefix matching stays loose;
+stale-refresh UI wording is unpolished; no expanded 200/201-row boundary
+behavioral test exists; the frontend's pre-existing chunk-size build warning
+is unchanged; `worker/wrangler.toml`'s stale F5a-era header comment (noted
+during PI-8, claiming the Worker "has never been deployed") remains
+uncorrected — a documentation-only staleness inside a config file's comment,
+out of scope for a docs-only closeout pass and deliberately left for a
+future source-touching change.
 
 ## Development Principles
 

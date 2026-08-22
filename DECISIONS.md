@@ -482,20 +482,20 @@ authorized.
 
 **Status:** Decided (explicit user directive, F5d-27.1 approval).
 
-**Addendum (PI-3, source-only):** the "separately approved privileged
+**Addendum (PI-3, implemented and, as of PI-9 through PI-13, live in production):** the "separately approved privileged
 workflow" this decision deferred creating client catalog writes to now
-exists in source — see #043. It does not loosen anything decided here:
+exists in source and in production — see #043. It does not loosen anything decided here:
 `Product.brand` is still not authorization scope, direct client catalog
 writes (Add/Edit) are still unconditionally denied at three independent
 layers (Firestore Rules, the Firestore repository's `rejectClientProductMutation`,
 and the client-side `canMutateProductCatalog` UI gate), and the only
 catalog-mutating path is the privileged, Worker-mediated bulk import #043
-describes — narrower than general CRUD, not a relaxation of it. This
-addendum records that the deferred workflow has been implemented in source;
-it does **not** mean any Worker route is deployed, any `canImportProducts`
-permission has been provisioned on a real staff profile, or Hosting has
-been updated. See `PROJECT_STATE.md`'s PI-3 entry for exactly what "source
-only" means here.
+describes — narrower than general CRUD, not a relaxation of it. The Worker
+route is deployed and live at 100% traffic, `canImportProducts` has been
+provisioned on exactly one approved staff profile, and Hosting has been
+updated to expose the reviewed Import UI — see `PROJECT_STATE.md`'s PI-3
+entry and its "PI-9 through PI-13 — Production activation complete"
+subsection for the full activation record.
 
 ---
 
@@ -811,8 +811,10 @@ The audit also found the order/verification cross-field invariant only checked o
 
 **Impact:** No `firestore.rules` change (the existing deny-all-client-writes rule for `products/{productId}` already covers this — the Worker bypasses Rules entirely via its own privileged credentials, per #018-family precedent). No new IAM grant was required: the Worker's existing custom Firestore role (`worker/gcp/firestore-retention-sweeper-role.yaml`) already grants `datastore.entities.get/list/update/create` with no `delete`, which already covers exactly what this feature needs and nothing more. New Firestore collections `productImports` (append-only audit/idempotency ledger) and `productCatalogState` (a single revision-counter document) are Worker-write-only, same deny-all-client pattern as `products`.
 
-**Status:** Decided and implemented in source only (PI-2 approval for the workflow; PI-3 implementation). Not deployed: the Worker route exists in source but has not been deployed to the production Worker, no staff profile has been provisioned with `canImportProducts: true`, and Hosting has not been updated. See `PROJECT_STATE.md`'s PI-3 entry.
+**Status:** Decided and live in production (PI-2 approval for the workflow; PI-3 implementation; activated PI-9 through PI-13 — Worker deployed at 100% traffic, `canImportProducts: true` provisioned for one approved staff profile, Hosting updated, Production acceptance passed). See `PROJECT_STATE.md`'s PI-3 entry and its "PI-9 through PI-13 — Production activation complete" subsection.
 
 **Addendum (PI-3C, independent-review corrective pass, source only):** an independent security/concurrency review (PI-4) of this implementation found zero architecture blockers and reopened none of the bullets above, but identified seven SHOULD-FIX-BEFORE-SOURCE-FREEZE findings, all corrected: authoritative display text is now NFC-normalized before validation (not merely trimmed); session-persisted retry state is now validated through the same authoritative request parser on write as well as read, with a strict UUIDv4 key, an exact outer-key allowlist, a hard size cap checked before parsing, and actual removal (not silent ignoring) of anything that fails any check; an explicitly user-supplied Variant/Color CSV value that the Production contract cannot represent now blocks the row as an error instead of being silently dropped (the contract itself is unchanged — still no variant field, per the bullets above); the browser now sends the actual sanitized source filename instead of always `null`; `Modal.tsx`'s Escape key can no longer observe a stale `preventClose` value across a render-to-effect timing gap; several documentation claims (audit timestamp type, `productIds` scope, an absolute "never diverge" phrasing) were corrected to match source exactly; and the root test harness (`node --test test/*.test.mjs`) is now deterministic regardless of whether a Firestore emulator is running, without weakening the dedicated Rules suite. Full detail in `PROJECT_STATE.md`'s PI-3C entry.
 
 **Addendum (PI-3D, narrow PI-4R corrective follow-up, source only):** a fresh independent re-review (PI-4R) of PI-3C found zero blockers and reopened none of the bullets above, but proved three of PI-3C's seven fixes were themselves incomplete, all corrected here: the Variant/Color unsupported-value check could be masked by an earlier blank alias column sitting next to a later meaningful one (`getField`'s first-existing-header semantics, never designed to look past a blank column) — now every alias is inspected independently, so no alias-column order or blank/nonblank combination can hide an explicitly supplied value the contract still cannot represent (still no variant field, unchanged); filename sanitization ran only in the browser, so a forged request sent directly to the Worker could still carry a full directory path into the audit record — `sanitizeImportFileName` is now called authoritatively inside `parseProductImportRequest` itself, the Worker's own re-validation boundary, so a path can never be accepted regardless of what sent the request; and the root test harness's emulator-skip logic treated any unreachable emulator as safe to skip, which meant an explicitly-configured-but-unreachable `FIRESTORE_EMULATOR_HOST` silently skipped all 26 Rules tests and exited 0 — a real false-green — now distinguished from the genuinely-unconfigured case, with a configured-but-unreachable emulator failing the process instead of skipping it. Full detail in `PROJECT_STATE.md`'s PI-3D entry.
+
+**Addendum (PI-9 through PI-13, Production activation):** a final independent re-review (PI-4R2) found zero blockers and zero remaining SHOULD-FIX items; the reviewed source was checkpointed (commit `7a4be1dc60f9c423aec519ccbfe9d541a1fc5aea`) and immutably tagged (`pi-3-product-import`), then activated in Production through separately authorized, independently verified gates: the privileged Worker route was deployed (`service-tech-files-worker` version `7653385b-a090-4cb8-b4fe-c166c65c2e2b`, 100% traffic); the dedicated `canImportProducts` permission was activated for exactly one approved staff profile, as the single isolated field write this architecture has always required — never a client write path; the reviewed frontend was deployed to Hosting strictly *after* the Worker, so the privileged import UI was never exposed before its backend route existed; and Production acceptance (synthetic data only) confirmed every invariant decided above holds live — direct browser Product writes remain denied, any-error-blocks-the-whole-request holds with zero writes, stale-catalog abort requires an explicit re-preview, idempotent replay under the same actor/key/body returns the same `importId` with no duplicate write, the `productImports` audit record is Worker-only and staff-client reads of it are denied, and the audit record itself carries no token, no raw CSV, and no Variant value. One synthetic Product created during acceptance intentionally remains in Production, since Product deletion is out of scope by design and no delete path exists to remove it with. No Rules, index, or IAM change was made or needed at any point in this activation. Full detail in `PROJECT_STATE.md`'s "PI-9 through PI-13 — Production activation complete" entry.

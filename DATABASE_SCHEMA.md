@@ -38,7 +38,7 @@ Backing implementation: `src/repositories/firestoreProductMasterRepository.ts`, 
 
 **Open question this creates:** the relational design below (Entities section) was written assuming Supabase/Postgres as the eventual backend for every entity, including a future `products`/`models` table pair. The entity actually built (Firestore `products`) doesn't match that design — it's a flatter, denormalized document per product, with no separate `models` collection, and no relational FKs. Whether Customers, Service Jobs, etc. also end up on Firestore (in which case the schema below needs a real redesign for a document database, not just a syntax translation) or whether Supabase is still intended for some/all of them is **not decided** — flagged here rather than resolved unilaterally. See the Sprint F2.2 completion report's Remaining Gaps.
 
-### `productImports` (Firestore collection) — **source only, not deployed**
+### `productImports` (Firestore collection) — **live in Production**
 
 PI-3 — the audit/idempotency ledger for the privileged Product Master bulk import ([DECISIONS.md](DECISIONS.md) #043). Written only by the Worker, inside the same transaction that writes `products`; browser clients cannot read or write this collection (default-deny, same pattern as `products`). Backing implementation: `worker/src/productImport.ts`'s `CompletedProductImport`/`runProductImportTransaction`.
 
@@ -59,7 +59,7 @@ PI-3 — the audit/idempotency ledger for the privileged Product Master bulk imp
 | `rows` | `CompletedProductImportRow[]` | per-row outcome — `{ rowNumber, status: 'new'\|'updated'\|'skipped', productId, warnings: string[] }`; a request containing any `error` row is rejected wholesale before any `productImports` document is ever written — there is no partial/failed record |
 | `status` | `'completed'` | fixed literal (only a fully-committed import is ever recorded) |
 
-### `productCatalogState` (Firestore collection) — **source only, not deployed**
+### `productCatalogState` (Firestore collection) — **live in Production**
 
 PI-3 — a single-document revision counter the Worker's transaction reads and increments to detect concurrent imports racing each other, separate from (and in addition to) the client-supplied catalog-fingerprint staleness check. Worker-write-only, same default-deny as `products`/`productImports`. Backing implementation: `worker/src/productImport.ts`'s `ProductCatalogState`.
 
@@ -67,9 +67,9 @@ PI-3 — a single-document revision counter the Worker's transaction reads and i
 
 **Document fields:** `revision: number` — incremented only when an import actually creates or updates at least one product; an import that resolves entirely to `skipped` rows leaves it untouched (`nextCatalogRevision: null` — an explicit sentinel meaning "do not touch this document," not merely "unspecified").
 
-### `staffProfiles.canImportProducts` — **source only, not deployed**
+### `staffProfiles.canImportProducts` — **live in Production**
 
-PI-3 — a new optional boolean field on the existing `staffProfiles/{firebaseUid}` document ([DECISIONS.md](DECISIONS.md) #029's `brandId`-only shape). Parsed fail-closed on both the Worker (`worker/src/staffAuthorization.ts`'s `parseCanImportProducts`) and the client (`src/auth/staffProfile.ts`'s `parseCanImportProducts`, mirrored separately since the two run in different runtimes): absent, `undefined`, or any non-`true` value is treated as `false`, never as an implicit grant. The Worker's check is authoritative (`authorizeProductImport` in `worker/src/index.ts` rejects with 403 unless `profile.canImportProducts === true`); the client-side copy exists only to decide whether the Import entry point is shown in the UI (`canImportProductCatalog()`, `src/services/productCatalogAccess.ts`), never as an authorization boundary. **No staff profile has this field set in production** — provisioning it is a separate, explicit administrative action, not part of this source change.
+PI-3 — a new optional boolean field on the existing `staffProfiles/{firebaseUid}` document ([DECISIONS.md](DECISIONS.md) #029's `brandId`-only shape). Parsed fail-closed on both the Worker (`worker/src/staffAuthorization.ts`'s `parseCanImportProducts`) and the client (`src/auth/staffProfile.ts`'s `parseCanImportProducts`, mirrored separately since the two run in different runtimes): absent, `undefined`, or any non-`true` value is treated as `false`, never as an implicit grant. The Worker's check is authoritative (`authorizeProductImport` in `worker/src/index.ts` rejects with 403 unless `profile.canImportProducts === true`); the client-side copy exists only to decide whether the Import entry point is shown in the UI (`canImportProductCatalog()`, `src/services/productCatalogAccess.ts`), never as an authorization boundary. **Exactly one approved staff profile has this field set to `true` in production** (PI-10) — provisioned as a separate, explicit administrative action (a single isolated Firestore Console field write), not through any client write path. No staff UID is recorded in this document.
 
 ---
 
