@@ -1,4 +1,11 @@
-import { collection, onSnapshot, type Unsubscribe } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDocFromServer,
+  getDocsFromServer,
+  onSnapshot,
+  type Unsubscribe,
+} from 'firebase/firestore';
 import { getFirestoreDb } from '../lib/firebase/firebase';
 import type { ProductMasterEntry } from '../types';
 import type { ProductMasterRepository } from './types';
@@ -136,6 +143,33 @@ export async function createFirestoreProductMasterRepository(): Promise<ProductM
     },
     updateProduct() {
       return rejectClientProductMutation();
+    },
+    // PI-3 Slice 2 reconciliation — see ProductMasterRepository's interface
+    // comment (types.ts) for why this exists. Targeted (ids given): one
+    // getDocFromServer per id, in parallel, matching the exact pattern
+    // firestoreServiceJobRepository.ts already uses after a Worker write.
+    // Untargeted (no ids): a full getDocsFromServer collection re-read, used
+    // when the caller has no specific list (stale_catalog recovery).
+    async refreshFromServer(productIds) {
+      if (productIds && productIds.length > 0) {
+        const snapshots = await Promise.all(
+          productIds.map((id) => getDocFromServer(doc(firestore, PRODUCTS_COLLECTION, id)))
+        );
+        for (const snapshot of snapshots) {
+          if (snapshot.exists()) {
+            productsById.set(snapshot.id, fromFirestoreData(snapshot.id, snapshot.data()));
+          } else {
+            productsById.delete(snapshot.id);
+          }
+        }
+        return;
+      }
+      const snapshot = await getDocsFromServer(collection(firestore, PRODUCTS_COLLECTION));
+      const next = new Map<string, ProductMasterEntry>();
+      snapshot.forEach((docSnap) => {
+        next.set(docSnap.id, fromFirestoreData(docSnap.id, docSnap.data()));
+      });
+      productsById = next;
     },
   };
 }

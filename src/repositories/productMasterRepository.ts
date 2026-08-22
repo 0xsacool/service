@@ -47,4 +47,8 @@ export const productMasterRepository: ProductMasterRepository = {
     productsById.set(id, updated);
     return updated;
   },
+  // The mock's Map is already synchronously authoritative — every write
+  // (including mockProductImportRepository's) goes through this same
+  // singleton, so there is nothing to fetch.
+  async refreshFromServer() {},
 };

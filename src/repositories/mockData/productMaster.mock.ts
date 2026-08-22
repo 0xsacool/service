@@ -1,5 +1,4 @@
 import type {
-  ProductCategory,
   AccessoryDefinition,
   CommonProblemDefinition,
   ProductMasterEntry,
@@ -17,20 +16,12 @@ import type {
 // the 7 existing seed customers' Product Selection cards render identically
 // to before this sprint — only the mechanism producing them changed.
 
-export const productCategories: ProductCategory[] = [
-  { id: 'hot-plate', name: 'Hot Plate' },
-  { id: 'blender', name: 'Blender' },
-  { id: 'toaster', name: 'Toaster' },
-  { id: 'kettle', name: 'Kettle' },
-  { id: 'fan', name: 'Fan' },
-  { id: 'rice-cooker', name: 'Rice Cooker' },
-  // Legacy categories — only referenced by the 8 Legacy Apple products below.
-  { id: 'smartphone', name: 'Smartphone' },
-  { id: 'laptop', name: 'Laptop' },
-  { id: 'tablet', name: 'Tablet' },
-  { id: 'smartwatch', name: 'Smartwatch' },
-  { id: 'headphones', name: 'Headphones' },
-];
+// PI-3 — the canonical list moved to src/services/productCategories.ts so
+// the privileged Worker can share it byte-for-byte with the browser preview.
+// Re-exported here unchanged: every existing importer of this fixture
+// (productMasterRepository.ts, firestoreProductMasterRepository.ts) keeps
+// working with no change, and there is still exactly one definition.
+export { productCategories } from '../../services/productCategories';
 
 export const accessoriesMaster: AccessoryDefinition[] = [
   // Common across most products

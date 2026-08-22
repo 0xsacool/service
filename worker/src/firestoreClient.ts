@@ -23,6 +23,13 @@ import {
 } from './serviceJobCreation.ts';
 import type { ActiveDraftLock, ServiceReportCreationDataAccess } from './serviceReportCreation.ts';
 import type { ServiceReportFinalizationDataAccess } from './serviceReportFinalization.ts';
+import type {
+  CompletedProductImport,
+  ProductCatalogState,
+  ProductImportCommitInput,
+  ProductImportDataAccess,
+} from './productImport.ts';
+import type { CatalogProduct } from '../../src/services/productIdentity.ts';
 import type { ServiceJob } from '../../src/types/serviceJob.ts';
 import { isValidServiceReport } from '../../src/services/serviceReport.ts';
 import type { ServiceReport } from '../../src/types/serviceReport.ts';
@@ -81,7 +88,8 @@ export interface FirestoreClient
     PublicTrackingCodeIssuanceDataAccess,
     ServiceJobCreationDataAccess,
     ServiceReportCreationDataAccess,
-    ServiceReportFinalizationDataAccess {
+    ServiceReportFinalizationDataAccess,
+    ProductImportDataAccess {
   listAttachments(): Promise<AttachmentRetentionRecord[]>;
   // F5d-15 — a single-document read, added for the deletion executor's
   // required "re-read current metadata immediately before deleting" step
@@ -137,6 +145,7 @@ interface FirestoreValue {
   stringValue?: string;
   booleanValue?: boolean;
   integerValue?: string;
+  timestampValue?: string;
   nullValue?: null;
   arrayValue?: { values?: FirestoreValue[] };
   mapValue?: { fields?: Record<string, FirestoreValue> };
@@ -214,8 +223,32 @@ function valueToJson(value: FirestoreValue | undefined): unknown {
   return null;
 }
 
+// PI-3 — an explicit opt-in wrapper for a real Firestore timestamp field.
+//
+// This client otherwise persists times as ISO strings (bangkokIsoDate,
+// toISOString), which is the right convention for the Service Job/Report
+// fields that are read back as domain strings. `products` is the exception:
+// its documents were seeded with genuine Firestore timestamps for
+// createdAt/updatedAt (seedProductMasterFromMock.ts uses serverTimestamp()),
+// so writing ISO strings into those same two fields would leave the
+// collection with two different types on one field.
+//
+// Deliberately a sentinel class rather than a change to jsonToValue's
+// handling of an existing type: no current caller passes one, so this can
+// add timestamp support without altering how any existing write is encoded.
+export class FirestoreTimestampValue {
+  // An explicit field rather than a TypeScript parameter property: Node runs
+  // this repository's .mts tests in strip-only mode, which rejects parameter
+  // properties outright (ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX).
+  public readonly iso: string;
+  constructor(iso: string) {
+    this.iso = iso;
+  }
+}
+
 function jsonToValue(value: unknown): FirestoreValue {
   if (value === null) return { nullValue: null };
+  if (value instanceof FirestoreTimestampValue) return { timestampValue: value.iso };
   if (typeof value === 'string') return { stringValue: value };
   if (typeof value === 'boolean') return { booleanValue: value };
   if (typeof value === 'number' && Number.isInteger(value))
@@ -758,7 +791,12 @@ export function createFirestoreClient(env: Env): FirestoreClient {
         return null;
       }
       const documentUid = doc.name.split('/').pop() ?? '';
-      return parseStaffProfile(uid, documentUid, doc.fields?.brandId?.stringValue);
+      return parseStaffProfile(
+        uid,
+        documentUid,
+        doc.fields?.brandId?.stringValue,
+        doc.fields?.canImportProducts?.booleanValue
+      );
     },
 
     async getServiceJobAuthorization(jobId) {
@@ -912,6 +950,172 @@ export function createFirestoreClient(env: Env): FirestoreClient {
           response.status,
           await response.text()
         );
+      }
+    },
+
+    // --- PI-3: privileged Product Master import -----------------------
+    //
+    // These are the only product WRITE capability that exists anywhere.
+    // Firestore Rules deny browser writes to `products` unconditionally, so
+    // this client is the sole writer. There is deliberately no delete.
+
+    async getProductImport(transaction, key) {
+      const doc = await getDocument(env, baseUrl, 'productImports', key, transaction);
+      if (!doc) return null;
+      const record = Object.fromEntries(
+        Object.entries(doc.fields ?? {}).map(([field, value]) => [field, valueToJson(value)])
+      ) as unknown as CompletedProductImport;
+      // A record that exists but isn't a completed import is treated as
+      // absent-and-unusable rather than replayed — completed records are
+      // only ever written atomically with a committed import, so anything
+      // else here is corruption, not a replay.
+      return record.status === 'completed' ? record : null;
+    },
+
+    async getProductCatalogState(transaction) {
+      const doc = await getDocument(
+        env,
+        baseUrl,
+        'productCatalogState',
+        'current',
+        transaction
+      );
+      if (!doc) return null;
+      const revision = valueToJson(doc.fields?.revision);
+      return typeof revision === 'number' && Number.isInteger(revision) && revision >= 0
+        ? ({ revision } satisfies ProductCatalogState)
+        : null;
+    },
+
+    // Reads the whole catalog inside the transaction, so the fingerprint
+    // recomputed from it is a genuine point-in-time view that the commit is
+    // serialized against. `limit` is passed one higher than the real cap by
+    // the caller, so "more than the cap exists" is detectable rather than
+    // silently truncated.
+    async listProducts(transaction, limit) {
+      const token = await getAccessToken(env);
+      const products: CatalogProduct[] = [];
+      let pageToken: string | undefined;
+
+      do {
+        const url = new URL(`${baseUrl}/products`);
+        url.searchParams.set('pageSize', String(Math.min(300, limit - products.length)));
+        url.searchParams.set('transaction', transaction.id);
+        if (pageToken) url.searchParams.set('pageToken', pageToken);
+
+        const response = await fetch(url.toString(), {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!response.ok) {
+          throw new FirestoreRequestError(
+            'listProducts',
+            response.status,
+            await response.text()
+          );
+        }
+        const body = (await response.json()) as {
+          documents?: FirestoreDocument[];
+          nextPageToken?: string;
+        };
+        for (const doc of body.documents ?? []) {
+          const id = doc.name.split('/').pop() ?? '';
+          const sku = valueToJson(doc.fields?.sku);
+          const categoryId = valueToJson(doc.fields?.categoryId);
+          products.push({
+            id,
+            sku: typeof sku === 'string' && sku.length > 0 ? sku : null,
+            brand: String(valueToJson(doc.fields?.brand) ?? ''),
+            model: String(valueToJson(doc.fields?.model) ?? ''),
+            productName: String(valueToJson(doc.fields?.productName) ?? ''),
+            categoryId:
+              typeof categoryId === 'string' && categoryId.length > 0 ? categoryId : null,
+          });
+        }
+        pageToken = body.nextPageToken;
+      } while (pageToken && products.length < limit);
+
+      return products;
+    },
+
+    async commitProductImport(transaction, input: ProductImportCommitInput) {
+      const token = await getAccessToken(env);
+      const timestamp = new FirestoreTimestampValue(input.now);
+
+      const writes: unknown[] = [];
+
+      for (const create of input.creates) {
+        writes.push(
+          createWrite('products', create.productId, {
+            brand: create.brand,
+            categoryId: create.categoryId,
+            model: create.model,
+            sku: create.sku,
+            productName: create.productName,
+            // Never supplied by the request; the only possible values for a
+            // brand-new imported product.
+            status: 'Active',
+            warrantyMonths: 12,
+            accessoryIds: [],
+            commonProblemIds: [],
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          })
+        );
+      }
+
+      for (const update of input.updates) {
+        const patch: Record<string, unknown> = { ...update.fields, updatedAt: timestamp };
+        writes.push({
+          update: {
+            name: resourceName('products', update.productId),
+            fields: fields(patch),
+          },
+          // The mask is exactly the changed import-owned fields plus
+          // updatedAt — status, warrantyMonths, accessoryIds,
+          // commonProblemIds, createdAt, and any field a future version adds
+          // are outside it and survive untouched. This is a patch, never a
+          // document replacement.
+          updateMask: { fieldPaths: Object.keys(patch) },
+          currentDocument: { exists: true },
+        });
+      }
+
+      if (input.nextCatalogRevision !== null) {
+        writes.push({
+          update: {
+            name: resourceName('productCatalogState', 'current'),
+            fields: fields({ revision: input.nextCatalogRevision, updatedAt: timestamp }),
+          },
+        });
+      }
+
+      // The completed audit/idempotency record is created with
+      // exists:false, so two concurrent requests carrying the same key
+      // cannot both commit — the loser gets ABORTED, retries, and finds the
+      // now-existing record as a replay.
+      writes.push(
+        createWrite(
+          'productImports',
+          input.key,
+          input.record as unknown as Record<string, unknown>
+        )
+      );
+
+      const response = await fetch(`${baseUrl}:commit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ transaction: transaction.id, writes }),
+      });
+
+      if (!response.ok) {
+        const body = await response.text();
+        if (response.status === 409 && sanitizedGoogleErrorStatus(body) === 'ABORTED') {
+          throw new TransactionConflictError();
+        }
+        throw new FirestoreRequestError('commitProductImport', response.status, body);
       }
     },
   };

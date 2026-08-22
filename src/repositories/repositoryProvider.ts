@@ -1,6 +1,7 @@
 import type {
   AttachmentsRepository,
   CustomersRepository,
+  ProductImportRepository,
   ProductKnowledgeRepository,
   ProductMasterRepository,
   ProductsRepository,
@@ -15,6 +16,7 @@ import { backendKind } from '../config/backend';
 import { filesBackendKind } from '../config/filesBackend';
 import { attachmentsRepository } from './attachmentsRepository';
 import { customersRepository } from './customersRepository';
+import { createMockProductImportRepository } from './mockProductImportRepository';
 import { productKnowledgeRepository } from './productKnowledgeRepository';
 import { productMasterRepository } from './productMasterRepository';
 import { productsRepository } from './productsRepository';
@@ -36,6 +38,7 @@ export interface RepositoryProvider {
   search: SearchRepository;
   registeredProducts: RegisteredProductsRepository;
   productMaster: ProductMasterRepository;
+  productImport: ProductImportRepository;
   productKnowledge: ProductKnowledgeRepository;
   attachments: AttachmentsRepository;
   serviceReports: ServiceReportsRepository;
@@ -49,6 +52,7 @@ export function createMockRepositoryProvider(): RepositoryProvider {
     search: searchRepository,
     registeredProducts: registeredProductsRepository,
     productMaster: productMasterRepository,
+    productImport: createMockProductImportRepository(),
     productKnowledge: productKnowledgeRepository,
     attachments: attachmentsRepository,
     serviceReports: serviceReportsRepository,
@@ -89,7 +93,9 @@ function createUnavailableRepositoryProvider(): RepositoryProvider {
       getCommonProblemsForProduct: () => [],
       createProduct: fail,
       updateProduct: fail,
+      refreshFromServer: reject,
     },
+    productImport: { commit: reject },
     productKnowledge: {
       getAllAccessories: () => [],
       getAccessoriesByIds: () => [],
@@ -155,6 +161,8 @@ async function createFirestoreBackedRepositoryProvider(
     await import('./firestoreCustomersRepository');
   const { createFirestoreProductMasterRepository } =
     await import('./firestoreProductMasterRepository');
+  const { createWorkerProductImportRepository } =
+    await import('./workerProductImportRepository');
   const { createFirestoreServiceReportsRepository } =
     await import('./firestoreServiceReportsRepository');
   const { createFirestoreRegisteredProductsRepository } =
@@ -173,6 +181,7 @@ async function createFirestoreBackedRepositoryProvider(
     productMaster: await activateWithDiagnostics('productMaster', () =>
       createFirestoreProductMasterRepository()
     ),
+    productImport: createWorkerProductImportRepository(tokenProvider),
     attachments: await activateWithDiagnostics('attachments', () =>
       resolveAttachmentsRepository(serviceJobs, tokenProvider)
     ),

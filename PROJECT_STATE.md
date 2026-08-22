@@ -3400,6 +3400,260 @@ Zero synthetic or durable production writes were made outside the explicit,
 synthetic-record-scoped browser acceptance pass above. Production is now
 F5d-70 (`f5d-70-ui-notes`).
 
+## PI-3 — Product Master Production Import (source only, not deployed)
+
+The privileged, Worker-mediated Product Master bulk import workflow #030
+deferred is now implemented in **source only** — see [DECISIONS.md](DECISIONS.md)
+#043 for the full decision record. This entry states plainly what "source
+only" means here: **no Worker route has been deployed, no staff profile has
+`canImportProducts: true` provisioned, Hosting has not been updated, and no
+production Product write of any kind has occurred as part of this work.**
+
+**Slice 1 (shared modules, Worker route, transactional commit).** New
+runtime-neutral shared modules under `src/services/` — `productIdentity.ts`
+(SKU/Model matching, SKU-less-fallback), `productImportRequest.ts` (the wire
+contract, 200-row cap, forbidden-field allowlist), `productImportClassification.ts`
+(new/updated/skipped/error classification), `productCatalogFingerprint.ts`
+(the staleness fingerprint) — imported identically by both the browser and
+the Worker (`worker/src/productImport.ts`), so the browser's preview and the
+Worker's authoritative commit share the same classification/normalization
+logic rather than two independently-maintained copies. This reduces
+divergence risk; it is not an absolute guarantee — the Worker never trusts
+the browser's classification and independently re-derives its own inside
+the transaction regardless, which is the real safety boundary, not the
+shared-module convenience. The Worker's
+`POST /products/import` (`worker/src/index.ts`) is transactional, all-or-
+nothing, idempotent (`productImports` audit collection, caller-owned
+`Idempotency-Key`), stale-catalog-detecting (`productCatalogState` revision
++ fingerprint), and gated on a dedicated `canImportProducts` staff
+permission (`worker/src/staffAuthorization.ts`) — not merely on being staff.
+
+**Slice 2 (browser integration) + reconciliation pass.** `ProductImportRepository`
+seam (`src/repositories/types.ts`) with mock (`mockProductImportRepository.ts`)
+and Worker-backed (`workerProductImportRepository.ts`) implementations;
+`canImportProductCatalog()` as a capability distinct from `canMutateProductCatalog()`
+(Add/Edit stays unavailable in Firestore mode regardless); a pure wizard
+state machine (`importWizardController.ts`) enforcing ANY-ERROR-blocks-submit
+at the state-machine level, not only the UI; a synchronous `useRef`
+admission latch for double-submit protection (a `useState` flag cannot fail
+closed across two clicks the way a ref mutation can); `Modal.tsx`'s
+`preventClose` prop so the dialog cannot be dismissed mid-commit.
+
+A subsequent reconciliation pass, before this feature was accepted as
+complete, found and corrected three gaps against the approved contract, all
+source-only:
+
+1. **Canonical refresh was cache-only.** `useProductMaster.commitImportRows`
+   originally re-read `getProducts()` immediately after the Worker's HTTP
+   response, but that read only reflects whatever the browser's own
+   `onSnapshot` listener had received by that instant — a separate
+   connection with no ordering guarantee relative to the Worker's response.
+   Fixed by adding `ProductMasterRepository.refreshFromServer(productIds?)`,
+   implemented with `getDocFromServer`/`getDocsFromServer` (a genuine
+   Firestore server round-trip, not a cache read) and called after every
+   successful commit **and** every safe replay.
+2. **stale_catalog re-preview reused the same stale in-memory list.**
+   `handleRefreshAfterStale` rebuilt the preview from the same React state
+   that had just proven stale. Fixed with `refreshAndRebuildImportContext()`,
+   which performs the server-confirmed refresh first and builds the
+   re-preview directly from the freshly-fetched list.
+3. **An ambiguous retry's key/request lived only in the wizard component's
+   own closure**, lost on remount or a page refresh. Fixed by persisting the
+   normalized, already-validated request plus its idempotency key to
+   `sessionStorage` (never the raw file, never a token/credential — the
+   request schema structurally cannot carry either), strictly re-parsed with
+   the same authoritative `parseProductImportRequest` the Worker itself
+   uses, discarded if malformed, and matched by canonical-request content
+   before a key is ever reused.
+
+The same pass also found and fixed a wire-contract-shape bug (`ProductImportCommitResult.rows`/
+`ProductImportError.rowErrors` claimed the full classification-row shape;
+the Worker's actual JSON is narrower — `{rowNumber, status, productId,
+warnings}` and `{rowNumber, errors}` respectively) and a report-quality
+error in an earlier checkpoint (`worker/gcp/firestore-retention-sweeper-role.yaml`
+does exist and was never modified — its existing permission set already
+covers this feature's create/update-only needs; no IAM change was made or
+is needed).
+
+**Validation.** Full revalidation after reconciliation: focused Product
+Import/wizard tests 74/74, product identity tests 52/52, repository/auth/
+backend tests 40/40, Worker Product Import route 101/101, Worker Product
+Import commit-wire 33/33, full Worker suite green (31 chained files), Worker
+typecheck clean, full root application suite 761/761, Firestore Rules
+emulator 26/26, root TypeScript clean, ESLint clean, production build
+succeeded. `firestore.rules` and `firestore.indexes.json` byte-identical
+throughout; no IAM file touched.
+
+**Not done, deliberately out of scope for this phase:** no Production
+deployment of any kind (Worker, Hosting, or Rules — Rules did not need to
+change), no `canImportProducts` permission provisioned on any real staff
+profile, no production acceptance testing, no Repair Reports work (unrelated
+and untouched, remains as scoped in `SPRINT_ROADMAP.md`).
+
+### PI-3C — independent-review corrective pass (source only, not deployed)
+
+An independent security/concurrency review (PI-4) of the above found zero
+architecture blockers and zero owner decisions needing reopening, but seven
+SHOULD-FIX-BEFORE-SOURCE-FREEZE findings. All seven are corrected here,
+source-only:
+
+1. **Authoritative display normalization was trim-only, not NFC.** A forged
+   NFD (decomposed) request could persist a noncanonical display string.
+   `productImportRequest.ts`'s `boundedText` now normalizes every field to
+   NFC *before* the control-character/formula-injection/length checks run,
+   so a check never validates a different string than the one actually
+   persisted. Identity normalization (NFKC + fold + lowercase,
+   `productIdentity.ts`) is unchanged and stays a separate, downstream
+   concern — this fix never lowercases a display value.
+2. **Session persistence trusted its input instead of validating it.**
+   `productImportPendingAttempt.ts`'s `persistAttempt` previously wrote
+   whatever `ProductImportRequest`-shaped object it was given, trusted
+   purely on the TypeScript type — never re-validated at the actual
+   sessionStorage boundary, which is plain browser-writable storage, not a
+   trusted channel. It now: validates the request through the same
+   authoritative `parseProductImportRequest` the Worker uses and persists
+   only the parser's own canonical output; requires a strict UUIDv4
+   idempotency key; enforces an exact outer key set
+   (`schemaVersion`/`idempotencyKey`/`request`, nothing else); enforces a
+   hard maximum serialized length *before* `JSON.parse` is ever attempted;
+   and on read, ANY failure at any of these checks **actively removes** the
+   stored value (`sessionStorage.removeItem`) rather than merely ignoring
+   it — a rejected entry can never be re-encountered.
+3. **Variant/Color CSV columns were silently discarded.** The Production
+   wire contract has no variant field (and never will — this is not
+   reopened); `productNormalizer.ts` and `productValidator.ts` now
+   distinguish an EXPLICIT Variant/Variant Name/Color column value (which
+   would otherwise be silently lost on commit) from the harmless internal
+   Model-from-SKU derivation (`deriveModelAndVariantFromSku`, unchanged,
+   still never blocks an ordinary hyphenated SKU). An explicit value now
+   blocks the row with a new `UNSUPPORTED_VARIANT` error, never a warning —
+   the alternative is committing anyway and losing data the user explicitly
+   supplied.
+4. **The browser always sent `fileName: null`**, contradicting this same
+   document's own audit-trail description. `productImportRequest.ts`'s new
+   `sanitizeImportFileName()` carries the selected CSV's actual basename
+   through — stripping any path component, control character, or
+   formula-injection prefix, degrading to `null` only on something unsafe
+   or oversized rather than failing the whole import over a cosmetic field.
+   The same sanitized name is threaded through every retry path (automatic
+   ambiguous retry, manual retry) unchanged, never re-derived.
+5. **`Modal.tsx`'s Escape key could observe a stale `preventClose`.** The X
+   button and backdrop read `preventClose` directly from the render
+   closure (never stale), but Escape's handler is registered once in a
+   stable-callback effect and read a ref that was only synced via a
+   *passive* `useEffect` — which flushes after paint, leaving a real window
+   where a physical Escape keypress could fire before the sync ran.
+   `onCloseRef`/`preventCloseRef` now sync via `useLayoutEffect`, which
+   flushes synchronously in the same browser turn as the commit, before any
+   new input event can be dispatched — the same fix pattern already
+   established for an analogous paint-timing race (`DECISIONS.md` #042).
+6. **Several documentation claims outran the source** — corrected in this
+   entry, `DATABASE_SCHEMA.md`, and `DECISIONS.md`: `productImports.startedAt`/
+   `completedAt` are plain ISO strings (`now().toISOString()`), never a
+   Firestore `serverTimestamp()`; `productImports.productIds` includes
+   EVERY row's resolved id regardless of status — `new`, `updated`, AND
+   `skipped` alike, not "affected"/"mutated" only; the "can never
+   structurally diverge" claim about the browser/Worker shared modules is
+   softened to what's actually true (shared logic reduces divergence risk;
+   the Worker independently re-derives its own classification and never
+   trusts the browser's, which is the real safety boundary).
+7. **The plain root test harness was nondeterministic.** `node --test
+   test/*.test.mjs` previously attempted a live connection to the Firestore
+   emulator unconditionally and failed/hung when none was running.
+   `test/firestoreRules.test.mjs` now performs a short, bounded TCP
+   reachability probe against the emulator's own host/port before doing
+   anything else; unreachable, every test in the file is registered via
+   node:test's own `skip` option (visible in output as explicitly skipped,
+   never silently "passed," never a real Rules assertion converted into a
+   skip) and `initializeTestEnvironment` is never called. Reachable (the
+   canonical `npm run test:firestore-rules` path, which starts the emulator
+   first), every assertion runs and must pass exactly as before — verified
+   still 26/26 there, and separately verified `node --test
+   test/*.test.mjs` now exits 0 deterministically without the emulator.
+
+**Validation after PI-3C:** focused Product Import/wizard tests, product
+identity tests, repository/auth/backend tests, Worker Product Import route,
+Worker Product Import commit-wire, full Worker suite, Worker typecheck,
+full root application suite (both the per-file and the plain wildcard
+forms), Firestore Rules emulator, root TypeScript, ESLint, and production
+build all re-run green after these seven fixes — exact counts in the PI-3C
+corrective implementation report. `firestore.rules`, `firestore.indexes.json`,
+and `worker/gcp/firestore-retention-sweeper-role.yaml` remained
+byte-identical throughout; still nothing staged, still no commit.
+
+**Not done, still deliberately out of scope:** the additional non-blocking
+items PI-4 noted (mock concurrent-first-use parity, a live Firestore
+round-trip test, mounted React testing, exact `Content-Type` prefix
+matching, stale-refresh UI wording, pagination/cap edge coverage) were left
+untouched — none were required for this corrective pass and none of the
+seven fixes above materially affect them. No Production deployment,
+`canImportProducts` provisioning, or Repair Reports work occurred.
+
+### PI-3D — narrow PI-4R corrective follow-up (source only, not deployed)
+
+A fresh independent re-review (PI-4R) of PI-3C found zero blockers and
+reopened no owner decisions, but proved three of PI-3C's seven fixes were
+themselves incomplete. All three closed here, source-only, narrowly scoped
+to exactly these three:
+
+1. **Variant/Color alias masking.** PI-3C's `UNSUPPORTED_VARIANT` check used
+   `getField(row.fields, 'Variant', 'Variant Name', 'Color')`, which returns
+   the first alias header that EXISTS in the row regardless of whether its
+   value is blank — so a CSV with an empty `Variant` column next to a
+   meaningful `Color` column silently imported instead of blocking.
+   `productNormalizer.ts`'s new `collectExplicitVariantValues` inspects
+   every alias header independently and collects every one that is BOTH
+   present AND genuinely nonblank, so an earlier blank alias can no longer
+   mask a later meaningful one — proven with all four blank/nonblank
+   combinations across `Variant`/`Variant Name`/`Color`, alias-column-order
+   independence, and confirmation the harmless SKU-derived-variant path
+   (no explicit alias column at all) still never blocks.
+2. **Filename sanitization was browser-only.** PI-3C's `sanitizeImportFileName`
+   ran only in the browser before a request was built; `parseProductImportRequest`
+   itself — the actual security boundary, re-run by the Worker on every
+   request it receives — still accepted a `fileName` containing a full
+   directory path unchanged, since neither `/` nor `\` is a control
+   character or a formula-injection prefix. `sanitizeImportFileName` is now
+   called authoritatively INSIDE `parseProductImportRequest`, so a forged
+   request sent directly to the Worker (bypassing the browser entirely) can
+   never persist a path-bearing filename either — one shared
+   canonicalization contract enforced at both layers, not two. A
+   genuinely-wrong-typed `fileName` (not a string at all) is still a hard
+   parse failure, distinct from the cosmetic-field degrade-to-`null`
+   behavior that now applies uniformly to a path, formula-prefix, control
+   character, oversized, or blank value.
+3. **Rules-emulator false-green.** PI-3C's emulator-reachability skip logic
+   treated ANY unreachable emulator as safe to skip, which meant setting
+   `FIRESTORE_EMULATOR_HOST` to a deliberately unused port made all 26
+   Rules tests skip cleanly and the process exit 0 — indistinguishable from
+   "no emulator configured at all," and a real false-green: Rules coverage
+   silently never ran. `test/firestoreRules.test.mjs` now distinguishes
+   whether `FIRESTORE_EMULATOR_HOST` was explicitly SET at all (not merely
+   whether it's reachable): unset and unreachable still skips safely (the
+   plain root harness case); explicitly set and unreachable is now a
+   validation FAILURE — every test is registered as an unconditional
+   failure explaining why, so the process exits nonzero and nothing is
+   misreported as passing or as an ordinary optional skip. Explicitly set
+   and reachable (the canonical `npm run test:firestore-rules` path, which
+   sets this variable automatically) is unchanged: all 26 run for real.
+
+**Validation after PI-3D:** focused Product Import/wizard tests, product
+identity tests, Worker Product Import route/commit-wire/full suite/typecheck,
+the plain root wildcard (`node --test test/*.test.mjs`, no emulator — 26
+explicit skips, exit 0), a configured-but-unreachable negative control
+(nonzero exit, 26 failures, 0 skips), the canonical Rules emulator run
+(26/26, 0 skipped), root TypeScript, ESLint, and production build all re-run
+green — exact counts in the PI-3D report. `firestore.rules`,
+`firestore.indexes.json`, and `worker/gcp/firestore-retention-sweeper-role.yaml`
+remained byte-identical throughout; still nothing staged, still no commit.
+
+**Not done, still deliberately out of scope:** the same non-blocking items
+PI-4/PI-4R noted were left untouched; none of the three fixes above
+materially affect them. No Production deployment, `canImportProducts`
+provisioning, or Repair Reports work occurred. No Product schema/write-mask
+expansion — variant is still not, and will never become, a Product
+Firestore field or a wire-contract field via this fix.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Any future repository or production-data expansion gets the same documentation, review, and approval treatment as the delivered Firestore repositories, not a silent bulk migration.

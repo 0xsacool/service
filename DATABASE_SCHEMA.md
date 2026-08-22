@@ -38,6 +38,39 @@ Backing implementation: `src/repositories/firestoreProductMasterRepository.ts`, 
 
 **Open question this creates:** the relational design below (Entities section) was written assuming Supabase/Postgres as the eventual backend for every entity, including a future `products`/`models` table pair. The entity actually built (Firestore `products`) doesn't match that design — it's a flatter, denormalized document per product, with no separate `models` collection, and no relational FKs. Whether Customers, Service Jobs, etc. also end up on Firestore (in which case the schema below needs a real redesign for a document database, not just a syntax translation) or whether Supabase is still intended for some/all of them is **not decided** — flagged here rather than resolved unilaterally. See the Sprint F2.2 completion report's Remaining Gaps.
 
+### `productImports` (Firestore collection) — **source only, not deployed**
+
+PI-3 — the audit/idempotency ledger for the privileged Product Master bulk import ([DECISIONS.md](DECISIONS.md) #043). Written only by the Worker, inside the same transaction that writes `products`; browser clients cannot read or write this collection (default-deny, same pattern as `products`). Backing implementation: `worker/src/productImport.ts`'s `CompletedProductImport`/`runProductImportTransaction`.
+
+**Document ID:** the caller-supplied `Idempotency-Key` — this is what makes a replayed commit with the same key a lookup instead of a second write.
+
+**Document fields (`CompletedProductImport`):**
+
+| Field | Type | Notes |
+|---|---|---|
+| `operation` | `'product_import_v1'` | fixed literal — replay matching also checks this |
+| `actorUid` | string | the authenticated staff UID that performed the import |
+| `requestFingerprint` | string | hash of the canonicalized request body — a reused key with a *different* fingerprint is rejected (`idempotency_mismatch`), never silently accepted |
+| `fileName` | string \| null | the selected CSV's sanitized basename, guaranteed by `sanitizeImportFileName()` (`src/services/productImportRequest.ts`) — one shared canonicalization contract applied at BOTH layers: the browser calls it before ever building a request (convenience, early feedback), and `parseProductImportRequest` — the actual security boundary, re-run by the Worker on every request regardless of what the browser already did — calls it again authoritatively, so a forged direct request can never persist a path-bearing filename. Any path component, formula-injection prefix, control character, or oversized value degrades the field to `null` rather than failing the whole import (a non-string value is still a hard parse failure — a genuine type violation, not a cosmetic-field case). Audit trail only, never used for identity |
+| `startedAt` / `completedAt` | string (ISO 8601, via `now().toISOString()`) | **not** a Firestore `serverTimestamp()` — a plain ISO string set from the Worker's own clock at each point. Corrected here after an earlier draft of this document claimed `serverTimestamp()`, which the source has never used for these two fields |
+| `catalogFingerprintBefore` / `catalogFingerprintAfter` | string | SHA-256 of the canonicalized catalog, before and after this import |
+| `total` / `created` / `updated` / `skipped` / `warnings` | number | summary counts |
+| `productIds` | string[] | **every row's resolved product id, for EVERY status** — `new`, `updated`, AND `skipped` alike (`resultRows.map((row) => row.productId)` in `worker/src/productImport.ts`). Not "affected" or "mutated" only: a `skipped` row's already-existing, unchanged product id is included exactly the same as a genuinely created or updated one |
+| `rows` | `CompletedProductImportRow[]` | per-row outcome — `{ rowNumber, status: 'new'\|'updated'\|'skipped', productId, warnings: string[] }`; a request containing any `error` row is rejected wholesale before any `productImports` document is ever written — there is no partial/failed record |
+| `status` | `'completed'` | fixed literal (only a fully-committed import is ever recorded) |
+
+### `productCatalogState` (Firestore collection) — **source only, not deployed**
+
+PI-3 — a single-document revision counter the Worker's transaction reads and increments to detect concurrent imports racing each other, separate from (and in addition to) the client-supplied catalog-fingerprint staleness check. Worker-write-only, same default-deny as `products`/`productImports`. Backing implementation: `worker/src/productImport.ts`'s `ProductCatalogState`.
+
+**Document ID:** a single fixed document (one per deployment — there is exactly one catalog).
+
+**Document fields:** `revision: number` — incremented only when an import actually creates or updates at least one product; an import that resolves entirely to `skipped` rows leaves it untouched (`nextCatalogRevision: null` — an explicit sentinel meaning "do not touch this document," not merely "unspecified").
+
+### `staffProfiles.canImportProducts` — **source only, not deployed**
+
+PI-3 — a new optional boolean field on the existing `staffProfiles/{firebaseUid}` document ([DECISIONS.md](DECISIONS.md) #029's `brandId`-only shape). Parsed fail-closed on both the Worker (`worker/src/staffAuthorization.ts`'s `parseCanImportProducts`) and the client (`src/auth/staffProfile.ts`'s `parseCanImportProducts`, mirrored separately since the two run in different runtimes): absent, `undefined`, or any non-`true` value is treated as `false`, never as an implicit grant. The Worker's check is authoritative (`authorizeProductImport` in `worker/src/index.ts` rejects with 403 unless `profile.canImportProducts === true`); the client-side copy exists only to decide whether the Import entry point is shown in the UI (`canImportProductCatalog()`, `src/services/productCatalogAccess.ts`), never as an authorization boundary. **No staff profile has this field set in production** — provisioning it is a separate, explicit administrative action, not part of this source change.
+
 ---
 
 ## Design Target (Not Yet Implemented)

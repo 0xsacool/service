@@ -28,6 +28,16 @@ import {
   type FirebaseTokenVerifier,
 } from './firebaseAuth.ts';
 import { getAuthorizedStaffProfile, isServiceJobInBrand, isStaffAuthorizedForServiceJob, type StaffProfile } from './staffAuthorization.ts';
+import {
+  CatalogTooLargeError,
+  IdempotencyMismatchError,
+  parseProductImportBody,
+  PRODUCT_IMPORT_LIMITS,
+  ProductImportRetryExhaustedError,
+  ProductImportValidationError,
+  runProductImportTransaction,
+  StaleCatalogError,
+} from './productImport.ts';
 import { allocateServiceJob, isValidIdempotencyKey, MAX_INTAKE_BYTES, parseServiceJobCreateRequest } from './serviceJobCreation.ts';
 import {
   ActiveDraftExistsError,
@@ -61,6 +71,9 @@ const SERVICE_JOBS_PATH = '/service-jobs';
 // '/service-jobs' (Service Job creation) — the two routes cannot collide.
 const SERVICE_JOBS_PREFIX = '/service-jobs/';
 const MAX_SERVICE_REPORT_INPUT_BYTES = 200 * 1024;
+// PI-3 — privileged Product Master import. Exact path, no prefix, so it can
+// never collide with anything else.
+const PRODUCTS_IMPORT_PATH = '/products/import';
 
 function isPublicTrackingEnabled(env: Env): boolean {
   return env.PUBLIC_TRACKING_ENABLED === 'true';
@@ -244,6 +257,202 @@ async function authorizeStaffCreation(request: Request, env: Env, dependencies: 
     return profile ? { profile, client } : json({ error: 'Forbidden' }, { status: 403 });
   } catch {
     return json({ error: 'Forbidden' }, { status: 403 });
+  }
+}
+
+// PI-3 — a separate authorizer from authorizeStaffCreation() on purpose.
+//
+// Two differences, both required by the Product Import contract:
+//   1. It distinguishes 401 (no/invalid credential) from 403 (valid
+//      credential, insufficient permission). authorizeStaffCreation()
+//      deliberately collapses a token-verification failure into 403, and an
+//      existing test asserts that, so it is not changed here.
+//   2. It requires the dedicated canImportProducts capability, read from the
+//      authoritative staffProfiles document — never from anything the
+//      browser sent. A client that fabricates the flag locally changes only
+//      what its own UI renders; this check is what actually decides.
+//
+// Product Master is a global catalog (DECISIONS.md #030), so there is
+// deliberately no brand predicate here — the staff profile must be valid,
+// but its brand does not scope which products may be imported.
+async function authorizeProductImport(
+  request: Request,
+  env: Env,
+  dependencies: WorkerDependencies
+): Promise<{ profile: StaffProfile; client: FirestoreClient } | Response> {
+  const token = readBearerToken(request.headers.get('Authorization'));
+  if (!token) {
+    return json(
+      { code: 'authentication_required', error: 'Authentication is required' },
+      { status: 401 }
+    );
+  }
+
+  let uid: string;
+  try {
+    const verified = await dependencies.tokenVerifier.verify(token, env.FIRESTORE_PROJECT_ID);
+    uid = verified.uid;
+  } catch {
+    return json(
+      { code: 'authentication_required', error: 'Authentication is required' },
+      { status: 401 }
+    );
+  }
+
+  try {
+    const client = dependencies.createFirestoreClient(env);
+    const profile = await getAuthorizedStaffProfile(uid, client);
+    if (!profile || !profile.canImportProducts) {
+      return json(
+        { code: 'forbidden', error: 'This account may not import products' },
+        { status: 403 }
+      );
+    }
+    return { profile, client };
+  } catch {
+    return json(
+      { code: 'forbidden', error: 'This account may not import products' },
+      { status: 403 }
+    );
+  }
+}
+
+async function handleProductImport(
+  request: Request,
+  env: Env,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  const authorization = await authorizeProductImport(request, env, dependencies);
+  if (authorization instanceof Response) return authorization;
+
+  const key = request.headers.get('Idempotency-Key');
+  if (!isValidIdempotencyKey(key)) {
+    return json(
+      { code: 'validation_failed', error: 'A valid Idempotency-Key header is required' },
+      { status: 400 }
+    );
+  }
+
+  const contentLength = request.headers.get('Content-Length');
+  if (contentLength && Number(contentLength) > PRODUCT_IMPORT_LIMITS.maxBodyBytes) {
+    return json(
+      { code: 'payload_too_large', error: 'The import request is too large' },
+      { status: 413 }
+    );
+  }
+  if (!request.headers.get('Content-Type')?.startsWith('application/json')) {
+    return json(
+      { code: 'validation_failed', error: 'Content-Type must be application/json' },
+      { status: 400 }
+    );
+  }
+  if (!request.body) {
+    return json({ code: 'validation_failed', error: 'A request body is required' }, { status: 400 });
+  }
+
+  try {
+    // Content-Length above is a fast reject only; this is the real byte
+    // enforcement against what actually arrives.
+    const raw = await readBodyWithLimit(request.body, PRODUCT_IMPORT_LIMITS.maxBodyBytes);
+    const parsed = parseProductImportBody(JSON.parse(new TextDecoder().decode(raw)));
+    if (!parsed.ok || !parsed.value) {
+      return json(
+        { code: 'validation_failed', error: parsed.detail ?? 'The import request is not valid' },
+        { status: 400 }
+      );
+    }
+
+    const result = await runProductImportTransaction({
+      key,
+      actorUid: authorization.profile.uid,
+      request: parsed.value,
+      dataAccess: authorization.client,
+    });
+
+    const record = result.record;
+    return json(
+      {
+        importId: key,
+        replayed: result.replayed,
+        catalogFingerprintBefore: record.catalogFingerprintBefore,
+        catalogFingerprintAfter: record.catalogFingerprintAfter,
+        summary: {
+          total: record.total,
+          created: record.created,
+          updated: record.updated,
+          skipped: record.skipped,
+          warnings: record.warnings,
+        },
+        rows: record.rows,
+      },
+      // A first commit created something; a replay changed nothing.
+      { status: result.replayed ? 200 : 201 }
+    );
+  } catch (error) {
+    if (error instanceof ProductImportValidationError) {
+      return json(
+        {
+          code: 'validation_failed',
+          error: 'This import contains rows that cannot be applied',
+          rows: error.rows
+            .filter((row) => row.errors.length > 0)
+            .map((row) => ({ rowNumber: row.rowNumber, errors: row.errors })),
+        },
+        { status: 400 }
+      );
+    }
+    if (error instanceof StaleCatalogError) {
+      return json(
+        {
+          code: 'stale_catalog',
+          error: 'The product catalog changed after this import was previewed',
+        },
+        { status: 409 }
+      );
+    }
+    if (error instanceof IdempotencyMismatchError) {
+      return json(
+        {
+          code: 'idempotency_mismatch',
+          error: 'This idempotency key was already used for a different import',
+        },
+        { status: 409 }
+      );
+    }
+    if (error instanceof CatalogTooLargeError) {
+      return json(
+        { code: 'payload_too_large', error: 'The product catalog is too large to import into' },
+        { status: 413 }
+      );
+    }
+    if (error instanceof ProductImportRetryExhaustedError) {
+      return json(
+        {
+          code: 'transaction_retry_exhausted',
+          error: 'The import could not be committed because the catalog kept changing',
+        },
+        { status: 503 }
+      );
+    }
+    if (error instanceof FileTooLargeError) {
+      return json(
+        { code: 'payload_too_large', error: 'The import request is too large' },
+        { status: 413 }
+      );
+    }
+    if (error instanceof SyntaxError) {
+      return json(
+        { code: 'validation_failed', error: 'The request body is not valid JSON' },
+        { status: 400 }
+      );
+    }
+    // Deliberately logs no error object: FirestoreRequestError's message can
+    // embed raw Google response bodies including document paths.
+    console.error('[files-worker] Product import failed');
+    return json(
+      { code: 'dependency_unavailable', error: 'Unable to complete the product import' },
+      { status: 503 }
+    );
   }
 }
 
@@ -657,6 +866,10 @@ export function createWorkerHandler(
         request,
         env
       );
+    }
+
+    if (request.method === 'POST' && url.pathname === PRODUCTS_IMPORT_PATH) {
+      return withCors(await handleProductImport(request, env, dependencies), request, env);
     }
 
     if (request.method === 'POST' && url.pathname === SERVICE_JOBS_PATH) {

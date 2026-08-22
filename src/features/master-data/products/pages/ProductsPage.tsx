@@ -59,8 +59,10 @@ export function ProductsPage() {
     brands,
     addProduct,
     buildImportContext,
+    refreshAndRebuildImportContext,
     commitImportRows,
     canEdit,
+    canImportProductCatalog,
   } = useProductMaster();
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
@@ -138,7 +140,7 @@ export function ProductsPage() {
               onSelectExcel={() => handleExport('excel')}
               onSelectCsv={() => handleExport('csv')}
             />
-            {canEdit && (
+            {canImportProductCatalog && (
               <button
                 onClick={() => setShowImportWizard(true)}
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-white/80 px-4 py-2.5 text-sm font-medium text-brand-600 ring-1 ring-black/5 shadow-sm backdrop-blur transition-all hover:bg-white active:scale-[0.98]"
@@ -316,10 +318,11 @@ export function ProductsPage() {
         />
       )}
 
-      {canEdit && showImportWizard && (
+      {canImportProductCatalog && showImportWizard && (
         <ImportProductsWizard
           onClose={() => setShowImportWizard(false)}
           buildImportContext={buildImportContext}
+          refreshAndRebuildImportContext={refreshAndRebuildImportContext}
           commitImportRows={commitImportRows}
         />
       )}

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
+import { connect } from 'node:net';
 import assert from 'node:assert/strict';
-import { after, beforeEach, test } from 'node:test';
+import { after, beforeEach, test as nodeTest } from 'node:test';
 import {
   assertFails,
   assertSucceeds,
@@ -21,11 +22,87 @@ import {
 
 const projectId = 'f5d26-rules';
 const rules = readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8');
+
+// PI-4R correction — this suite requires a live Firestore emulator
+// (`npm run test:firestore-rules`, which starts one via `firebase
+// emulators:exec` before running this file, which also sets
+// FIRESTORE_EMULATOR_HOST for the child process automatically). Run under
+// the plain root harness (`node --test test/*.test.mjs`, no emulator), the
+// original unconditional `initializeTestEnvironment` call attempted a dead
+// connection and made root validation nondeterministic.
+//
+// PI-4 fixed that by skipping unreachable-emulator runs — but PI-4R proved
+// that fix created a FALSE-GREEN hole: setting FIRESTORE_EMULATOR_HOST to a
+// deliberately unused port made all 26 Rules tests skip cleanly and the
+// process exit 0, indistinguishable from "no emulator configured at all."
+// A caller who explicitly configured an emulator host asked for real Rules
+// coverage; silently skipping when that specific host is unreachable is
+// exactly the false-green PI-4R flagged, not a safe degradation.
+//
+// Two genuinely different situations, told apart by whether
+// FIRESTORE_EMULATOR_HOST was SET at all, not merely by reachability:
+//   - MODE A: not set. The caller made no claim about an emulator (this is
+//     the plain `node --test test/*.test.mjs` root harness). Unreachable
+//     here is expected and safe — every test is registered via node:test's
+//     own `skip` option (visible in TAP output, never silently "passed").
+//   - MODE B: explicitly set. The caller asked for a specific emulator.
+//     Reachable — every test runs for real, exactly as before, and a
+//     genuine Rules failure still fails the process normally. Unreachable
+//     — this is a validation FAILURE, never a skip: every test is
+//     registered as an unconditional failure explaining why, so the
+//     process exits nonzero and nothing is misreported as passing or as an
+//     ordinary optional skip.
+const emulatorHostConfigured = process.env.FIRESTORE_EMULATOR_HOST !== undefined;
 const [host, port] = (process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8085').split(':');
-const testEnvironment = await initializeTestEnvironment({
-  projectId,
-  firestore: { host, port: Number(port), rules },
-});
+
+// One short, bounded TCP reachability probe against the emulator's own
+// host/port before attempting to use it at all — no dead-connection hang
+// in either mode.
+function isEmulatorReachable(hostName, portNumber, timeoutMs = 500) {
+  return new Promise((resolve) => {
+    const socket = connect({ host: hostName, port: portNumber, timeout: timeoutMs });
+    const settle = (reachable) => {
+      socket.destroy();
+      resolve(reachable);
+    };
+    socket.once('connect', () => settle(true));
+    socket.once('timeout', () => settle(false));
+    socket.once('error', () => settle(false));
+  });
+}
+
+const reachable = await isEmulatorReachable(host, Number(port));
+const emulatorAvailable = reachable;
+const configuredButUnreachable = emulatorHostConfigured && !reachable;
+
+const skipReason = `Firestore emulator not reachable at ${host}:${port} and FIRESTORE_EMULATOR_HOST was not set — this suite requires a live emulator; run \`npm run test:firestore-rules\`, not a bare \`node --test\``;
+const failureReason =
+  `FIRESTORE_EMULATOR_HOST=${host}:${port} was explicitly configured but is not reachable. ` +
+  'A configured-but-unreachable emulator is a validation FAILURE, never a skip — start the ' +
+  'emulator this host:port points at, or unset FIRESTORE_EMULATOR_HOST to use the deterministic ' +
+  'no-emulator skip path instead.';
+
+// Shadows the node:test import so every existing `test(name, fn)` call site
+// below is unchanged syntactically.
+const test = emulatorAvailable
+  ? nodeTest
+  : configuredButUnreachable
+    ? // MODE B, unreachable: every test is registered as an unconditional
+      // failure (never the original body — it would only try to reach the
+      // same dead socket) so each is reported FAILED, not skipped, and the
+      // process exits nonzero.
+      (name) =>
+        nodeTest(name, () => {
+          throw new Error(failureReason);
+        })
+    : (name, fn) => nodeTest(name, { skip: skipReason }, fn);
+
+const testEnvironment = emulatorAvailable
+  ? await initializeTestEnvironment({
+      projectId,
+      firestore: { host, port: Number(port), rules },
+    })
+  : null;
 
 const brunoUid = 'staff-bruno';
 const joinLuxUid = 'staff-join-lux';
@@ -160,11 +237,13 @@ async function seed() {
 }
 
 beforeEach(async () => {
+  if (!emulatorAvailable) return;
   await testEnvironment.clearFirestore();
   await seed();
 });
 
 after(async () => {
+  if (!emulatorAvailable) return;
   await testEnvironment.cleanup();
 });
 
@@ -607,6 +686,37 @@ test('the Worker-only ServiceReport allocator collections are fully denied to th
       reportId: 'report-bruno-draft',
     })
   );
+});
+
+// PI-3 — the privileged Product Master import writes two Worker-only
+// collections. Neither has (or needs) a match block in firestore.rules:
+// Firestore's implicit default-deny already denies every operation on a
+// collection no rule matches, and PI-3 adds no Rules change at all. This
+// test pins that behavior so a future Rules edit cannot silently open them —
+// it proves the denial, rather than proving the presence of a block.
+test('the Worker-only Product Import collections are denied to the browser by default-deny', async () => {
+  const brunoDb = staffDb(brunoUid);
+
+  await assertFails(getDoc(doc(brunoDb, 'productImports', 'some-import-key')));
+  await assertFails(
+    setDoc(doc(brunoDb, 'productImports', 'some-import-key'), { status: 'completed' })
+  );
+  await assertFails(deleteDoc(doc(brunoDb, 'productImports', 'some-import-key')));
+
+  await assertFails(getDoc(doc(brunoDb, 'productCatalogState', 'current')));
+  await assertFails(setDoc(doc(brunoDb, 'productCatalogState', 'current'), { revision: 99 }));
+  await assertFails(deleteDoc(doc(brunoDb, 'productCatalogState', 'current')));
+});
+
+// PI-3 — the import feature must not have loosened the catalog itself. The
+// privileged Worker bypasses Rules via its service-account credential, so
+// enabling import required no client-write grant whatsoever.
+test('Product Import did not loosen the products collection — client writes stay denied', async () => {
+  const brunoDb = staffDb(brunoUid);
+  await assertSucceeds(getDoc(doc(brunoDb, 'products', 'product-1')));
+  await assertFails(updateDoc(doc(brunoDb, 'products', 'product-1'), { brand: 'JLC' }));
+  await assertFails(setDoc(doc(brunoDb, 'products', 'product-new'), { brand: 'BRN' }));
+  await assertFails(deleteDoc(doc(brunoDb, 'products', 'product-1')));
 });
 
 test('browser access to numberSequences remains fully denied, including repair_report', async () => {

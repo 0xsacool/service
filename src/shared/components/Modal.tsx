@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
@@ -12,20 +12,47 @@ export function Modal({
   onClose,
   children,
   maxWidthClassName = 'max-w-lg',
+  preventClose = false,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   maxWidthClassName?: string;
+  // PI-3 Slice 2 — disables overlay-click/X-button/Escape dismissal, for a
+  // caller with an operation in flight whose outcome could otherwise be
+  // abandoned mid-commit (e.g. the Product Import wizard while submitting).
+  // Defaults to false so every existing caller is unaffected.
+  preventClose?: boolean;
 }) {
   const titleId = useId();
   const overlayRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
+  const preventCloseRef = useRef(preventClose);
 
-  useEffect(() => {
+  // PI-4 correction — synced with useLayoutEffect, not useEffect. A passive
+  // effect flushes AFTER paint, on its own turn of the event loop; there is
+  // a real window between a render committing preventClose: true and that
+  // passive effect actually running where a physical Escape keypress could
+  // still observe the stale ref value, closing the modal during a window
+  // the render already protected against the X button and backdrop click
+  // (both read `preventClose` directly from the render closure, never
+  // stale). useLayoutEffect runs synchronously immediately after DOM
+  // mutations, in the same browser turn as the commit, before the browser
+  // can dispatch a new input event — closing that gap exactly the way
+  // ServiceJobDetails' own reconciliation effect closes an analogous
+  // paint-timing race (see DECISIONS.md #042).
+  useLayoutEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
+
+  useLayoutEffect(() => {
+    preventCloseRef.current = preventClose;
+  }, [preventClose]);
+
+  const handleClose = () => {
+    if (!preventClose) onClose();
+  };
 
   useEffect(() => {
     const overlay = overlayRef.current;
@@ -67,7 +94,7 @@ export function Modal({
 
       if (event.key === 'Escape') {
         event.preventDefault();
-        onCloseRef.current();
+        if (!preventCloseRef.current) onCloseRef.current();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -110,7 +137,7 @@ export function Modal({
     >
       <div
         className="absolute inset-0 bg-black/30 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={handleClose}
         aria-hidden="true"
       />
       <div
@@ -128,7 +155,7 @@ export function Modal({
             </h2>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="rounded-full p-2 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600"
               aria-label="ปิดกล่องโต้ตอบ"
             >

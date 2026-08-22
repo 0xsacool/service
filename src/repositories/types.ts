@@ -19,6 +19,8 @@ import type {
   CustomerIntakeSelector,
   ServiceJobIntakePayload,
 } from '../services/serviceJobCreation';
+import type { ProductImportRequest } from '../services/productImportRequest';
+import type { ProductImportRowIssue } from '../services/productImportClassification';
 
 export type ServiceJobUpdate = Omit<
   Partial<ServiceJob>,
@@ -127,6 +129,119 @@ export interface ProductMasterRepository {
   getCommonProblemsForProduct(productId: string): CommonProblemDefinition[];
   createProduct(entry: ProductMasterEntry): ProductMasterEntry;
   updateProduct(id: string, patch: Partial<ProductMasterEntry>): ProductMasterEntry;
+  // PI-3 Slice 2 reconciliation — getProducts() above is a synchronous
+  // facade over a cache (an onSnapshot listener in the Firestore
+  // implementation, a plain Map in Mock). After a Worker-mediated write
+  // (Product Import), the browser's own onSnapshot connection has no
+  // ordering guarantee relative to the Worker's HTTP response reaching the
+  // browser first — reading getProducts() immediately after commit() can
+  // return pre-write data. This forces a genuine server round-trip before
+  // the caller treats getProducts() as canonical, same rationale as
+  // firestoreServiceJobRepository.ts's issuePublicTrackingCode() using
+  // getDocFromServer() rather than trusting the live listener's timing.
+  // Pass specific ids for a targeted refresh (exactly the rows an import
+  // touched); omit for a full collection refresh (used when the caller has
+  // no list of what changed, e.g. recovering from stale_catalog). The Mock
+  // repository's cache is already synchronously authoritative, so this is a
+  // no-op there.
+  refreshFromServer(productIds?: readonly string[]): Promise<void>;
+}
+
+// PI-3 Slice 2 — the codes worker/src/index.ts's POST /products/import can
+// return, mirrored here so a caller can react without importing anything
+// Worker-side. `stale_catalog` and everything else conclusive need different
+// recovery (re-preview vs hard stop), which is why this carries a `code` in
+// addition to `status`/`isConclusive` — WorkerServiceReportError/
+// PublicTrackingIssuanceError only ever needed the conclusive/ambiguous
+// split because they only have one conclusive recovery path each.
+export type ProductImportErrorCode =
+  | 'authentication_required'
+  | 'forbidden'
+  | 'validation_failed'
+  | 'stale_catalog'
+  | 'idempotency_mismatch'
+  | 'payload_too_large'
+  | 'transaction_retry_exhausted'
+  | 'dependency_unavailable';
+
+// Slice 2 reconciliation — this is the ACTUAL wire shape of
+// worker/src/index.ts's 400 validation_failed body (`rows: error.rows
+// .filter((row) => row.errors.length > 0).map((row) => ({ rowNumber,
+// errors }))`), not the full ClassifiedProductImportRow. The earlier draft
+// of this type claimed the full row shape (status/productId/changedFields/
+// categoryId included) — never true at runtime, just never observed
+// because nothing read those fields yet.
+export interface ProductImportRowError {
+  rowNumber: number;
+  errors: ProductImportRowIssue[];
+}
+
+export class ProductImportError extends Error {
+  public readonly status: number | null;
+  public readonly code: ProductImportErrorCode | null;
+  // Populated only for validation_failed, mirroring the Worker's response
+  // body so the wizard can show row-specific detail without a second round
+  // trip.
+  public readonly rowErrors: ProductImportRowError[] | null;
+  constructor(
+    message: string,
+    status: number | null,
+    code: ProductImportErrorCode | null,
+    rowErrors: ProductImportRowError[] | null = null
+  ) {
+    super(message);
+    this.name = 'ProductImportError';
+    this.status = status;
+    this.code = code;
+    this.rowErrors = rowErrors;
+  }
+  // Same rule as PublicTrackingIssuanceError: a 4xx status is a definite
+  // server verdict already reached before any write. No status at all
+  // (network failure) or a 5xx leaves the outcome genuinely unknown — only
+  // then is it safe to retry with the SAME idempotency key.
+  get isConclusive(): boolean {
+    return this.status !== null && this.status >= 400 && this.status < 500;
+  }
+}
+
+// Slice 2 reconciliation — mirrors worker/src/productImport.ts's
+// CompletedProductImportRow exactly (rowNumber/status/productId/warnings as
+// message strings). 'error' never appears here: a request with any error
+// row is rejected wholesale by ProductImportValidationError before any
+// CompletedProductImportRow is ever built, and productId is always a real
+// id (server-allocated for 'new', looked up for 'updated'/'skipped') —
+// never null, unlike the classification-time row shape.
+export interface ProductImportCommittedRow {
+  rowNumber: number;
+  status: 'new' | 'updated' | 'skipped';
+  productId: string;
+  warnings: string[];
+}
+
+export interface ProductImportCommitResult {
+  importId: string;
+  replayed: boolean;
+  catalogFingerprintBefore: string;
+  catalogFingerprintAfter: string;
+  summary: {
+    total: number;
+    created: number;
+    updated: number;
+    skipped: number;
+    warnings: number;
+  };
+  rows: ProductImportCommittedRow[];
+}
+
+// PI-3 Slice 2 — same caller-owns-idempotency-key pattern as
+// ServiceReportsRepository.createDraft: only the caller (the wizard
+// controller) knows whether a given commit() call is a fresh attempt or a
+// same-key retry of an ambiguous prior outcome.
+export interface ProductImportRepository {
+  commit(
+    request: ProductImportRequest,
+    idempotencyKey: string
+  ): Promise<ProductImportCommitResult>;
 }
 
 // The Product Knowledge Base (Sprint P4) — owns the reusable master
