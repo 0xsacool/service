@@ -6,6 +6,7 @@ import {
   ListChecks,
   PlusCircle,
   Package,
+  ShieldCheck,
   FileText,
   Search,
   LogOut,
@@ -17,6 +18,7 @@ import { RuntimeModeIndicator } from '../components/RuntimeModeIndicator';
 import { APP_NAME, ROUTES } from '../../constants';
 import { useAuthSession } from '../../auth/authSessionContext';
 import { getBrandDisplayLabel } from '../../types';
+import { canAccessApprovalConsole } from '../../services/approvalConsoleAccess';
 import {
   drawerAccessibilityReducer,
   INITIAL_DRAWER_ACCESSIBILITY_STATE,
@@ -41,6 +43,14 @@ const nav: NavItem[] = [
 // a layout change.
 const masterDataNav: NavItem[] = [
   { to: ROUTES.masterDataProducts, label: 'สินค้า', icon: Package },
+];
+
+// Phase 6R-B — the first role-conditional nav group in this codebase: only
+// rendered when the signed-in staff's role passes canAccessApprovalConsole.
+// This is UX/defense-in-depth only; the Worker remains the authorization
+// boundary regardless of nav visibility.
+const approvalNav: NavItem[] = [
+  { to: ROUTES.approvalConsole, label: 'ศูนย์อนุมัติ', icon: ShieldCheck },
 ];
 
 export function StaffShell({
@@ -92,6 +102,9 @@ export function StaffShell({
           ? 'ภาพรวม'
           : 'ระบบเจ้าหน้าที่';
   const brandLabel = staffProfile ? getBrandDisplayLabel(staffProfile.brandId) : null;
+  const canSeeApprovalConsole = canAccessApprovalConsole(
+    staffProfile?.repairReportActor?.role ?? null
+  );
 
   const dismissMobileDrawer = useCallback(() => {
     dispatchDrawer({ type: 'dismiss' });
@@ -252,6 +265,34 @@ export function StaffShell({
             {item.label}
           </NavLink>
         ))}
+
+        {canSeeApprovalConsole ? (
+          <>
+            <p className="px-3.5 pb-1 pt-5 text-xs font-medium uppercase tracking-wider text-neutral-400">
+              อนุมัติ
+            </p>
+            {approvalNav.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end
+                onClick={() => {
+                  if (mobileOpen) handleDrawerNavigation(item.to);
+                }}
+                className={({ isActive }) =>
+                  `flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-base font-medium transition-all ${
+                    isActive
+                      ? 'bg-brand-50 text-brand-700 ring-1 ring-brand-100'
+                      : 'text-neutral-600 hover:bg-neutral-100/70'
+                  }`
+                }
+              >
+                <item.icon className="h-5 w-5" strokeWidth={2} />
+                {item.label}
+              </NavLink>
+            ))}
+          </>
+        ) : null}
       </nav>
 
       <div className="px-3 pb-4">

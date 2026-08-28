@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { repositories } from '../repositories/repositoryProvider';
 import type { ServiceJobAttachmentOption } from './useServiceJobAttachments';
 
@@ -11,6 +11,17 @@ export interface ServiceReportEvidencePreview {
   status: 'ready' | 'unavailable';
 }
 
+// Phase 6R-B.4 (Phase 4R.6R2 SHOULD FIX) — getDownloadUrl() hands back a
+// caller-owned disposable object URL (AttachmentsRepository in
+// repositories/types.ts, DECISIONS.md #047), so every URL this hook receives
+// needs exactly one owner that will revoke it.
+//
+// Cleanup alone cannot be that owner. A download in flight when the component
+// unmounts, or when the selected evidence changes, settles AFTER cleanup has
+// already run: the URL would be registered into a dead request and never
+// revoked. `generation` is therefore invalidated first and rechecked after
+// every await, so a resolution that no longer owns the hook disposes of its
+// own URL instead of becoming ownerless.
 export function useServiceReportEvidence(
   attachmentIds: string[],
   attachments: ServiceJobAttachmentOption[]
@@ -21,10 +32,13 @@ export function useServiceReportEvidence(
   const requestKey = `${attachmentIds.join('|')}::${attachmentKey}`;
   const [resolvedKey, setResolvedKey] = useState('');
   const [evidence, setEvidence] = useState<ServiceReportEvidencePreview[]>([]);
+  const generation = useRef(0);
 
   useEffect(() => {
-    let isCurrent = true;
-    const objectUrls: string[] = [];
+    generation.current += 1;
+    const run = generation.current;
+    const owns = (): boolean => generation.current === run;
+    const owned = new Set<string>();
     const resolveEvidence = async (): Promise<void> => {
       const resolved = await Promise.all(
         attachmentIds.map(async (id): Promise<ServiceReportEvidencePreview> => {
@@ -42,7 +56,18 @@ export function useServiceReportEvidence(
 
           try {
             const url = await repositories.attachments.getDownloadUrl(id);
-            objectUrls.push(url);
+            if (!owns()) {
+              URL.revokeObjectURL(url);
+              return {
+                id,
+                name: metadata.name,
+                category: metadata.category,
+                contentType: metadata.contentType,
+                url: null,
+                status: 'unavailable',
+              };
+            }
+            owned.add(url);
             return {
               id,
               name: metadata.name,
@@ -64,15 +89,16 @@ export function useServiceReportEvidence(
         })
       );
 
-      if (!isCurrent) return;
+      if (!owns()) return;
       setEvidence(resolved);
       setResolvedKey(requestKey);
     };
 
     void resolveEvidence();
     return () => {
-      isCurrent = false;
-      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+      generation.current += 1;
+      owned.forEach((url) => URL.revokeObjectURL(url));
+      owned.clear();
     };
     // requestKey serializes both arrays so the effect can avoid rerunning for
     // new array identities when the selected evidence has not changed.

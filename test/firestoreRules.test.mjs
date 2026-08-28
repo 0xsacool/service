@@ -14,7 +14,10 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  or,
   query,
+  serverTimestamp,
   setDoc,
   updateDoc,
   where,
@@ -163,6 +166,51 @@ function serviceReport(serviceJobId, status = 'draft', overrides = {}) {
   };
 }
 
+// A schemaVersion 2 draft, the only shape the accepted V2 draft-CAS contract
+// lets a client edit directly. V1 reports are edited through the Worker's
+// saveLegacyServiceReportDraft route instead, never by a client write.
+function serviceReportV2(serviceJobId, brandId, overrides = {}) {
+  return {
+    schemaVersion: 2,
+    reportId: 'report-bruno-v2-draft',
+    serviceJobId,
+    reportNo: 'FR-2026-000002',
+    brandId,
+    status: 'draft',
+    activeDraftGeneration: 1,
+    createdAt: '2026-08-17T00:00:00.000Z',
+    createdByUid: 'rules-test',
+    createdByRoleSnapshot: 'technician',
+    createdByDisplayNameSnapshot: 'QA Tech',
+    contentRevision: 3,
+    updatedAt: '2026-08-17T00:00:00.000Z',
+    predecessorReportId: null,
+    technician: 'QA Tech',
+    customerReportedProblem: 'Fault reported',
+    inspectionFindings: 'Fault reproduced',
+    serviceActions: ['repair'],
+    parts: [],
+    technicianRemark: '',
+    resultStatus: 'repaired',
+    resultDetail: '',
+    evidenceAttachmentIds: [],
+    claimNo: null,
+    factoryReference: null,
+    warrantyOutcome: 'covered',
+    snapshot: null,
+    finalizedAt: null,
+    finalizedByUid: null,
+    finalizedByRoleSnapshot: null,
+    finalizedByDisplayNameSnapshot: null,
+    finalizedFromRevision: null,
+    finalContentDigest: null,
+    approvalState: 'not-submitted',
+    currentApprovalEventId: null,
+    approvalDecidedAt: null,
+    ...overrides,
+  };
+}
+
 function attachment(jobId, deletedAt = null) {
   return {
     jobId,
@@ -184,9 +232,24 @@ async function seed() {
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     await Promise.all([
-      setDoc(doc(db, 'staffProfiles', brunoUid), { brandId: 'bruno-thailand' }),
-      setDoc(doc(db, 'staffProfiles', joinLuxUid), { brandId: 'join-lux-club' }),
+      setDoc(doc(db, 'staffProfiles', brunoUid), {
+        brandId: 'bruno-thailand',
+        role: 'technician',
+      }),
+      setDoc(doc(db, 'staffProfiles', joinLuxUid), {
+        brandId: 'join-lux-club',
+        role: 'technician',
+      }),
       setDoc(doc(db, 'staffProfiles', 'staff-malformed'), { brandId: 'BRN' }),
+      setDoc(doc(db, 'staffProfiles', 'staff-no-role'), { brandId: 'bruno-thailand' }),
+      setDoc(doc(db, 'staffProfiles', 'staff-approver'), {
+        brandId: 'bruno-thailand',
+        role: 'approver',
+      }),
+      setDoc(doc(db, 'staffProfiles', 'staff-admin'), {
+        brandId: 'bruno-thailand',
+        role: 'admin',
+      }),
       setDoc(doc(db, 'serviceJobs', 'job-bruno'), serviceJob('bruno-thailand')),
       setDoc(doc(db, 'serviceJobs', 'job-join-lux'), serviceJob('join-lux-club')),
       setDoc(doc(db, 'serviceJobs', 'job-legacy'), serviceJob(null)),
@@ -231,6 +294,10 @@ async function seed() {
       setDoc(
         doc(db, 'serviceReports', 'report-bruno-final'),
         serviceReport('job-bruno', 'final')
+      ),
+      setDoc(
+        doc(db, 'serviceReports', 'report-bruno-v2-draft'),
+        serviceReportV2('job-bruno', 'bruno-thailand')
       ),
     ]);
   });
@@ -576,18 +643,123 @@ test('public Firestore reads remain denied', async () => {
 
 // F5d-66 / DECISIONS.md #040 — Service Report live persistence.
 
-test('authorized same-brand ServiceReport get, list query, and draft edit succeed', async () => {
-  const brunoDb = staffDb(brunoUid);
-  await assertSucceeds(getDoc(doc(brunoDb, 'serviceReports', 'report-bruno-draft')));
-  await assertSucceeds(
+// D24/D25 close the former list ambiguity: ordinary history and Approval
+// Console reads are Worker-mediated, so every browser list now fails closed.
+test('every browser serviceReports list is denied after D24/D25 activation', async () => {
+  const callers = [
+    unauthenticatedDb(),
+    staffDb('staff-no-role'),
+    staffDb(brunoUid),
+    staffDb('staff-approver'),
+    staffDb('staff-admin'),
+  ];
+
+  for (const db of callers) {
+    await assertFails(getDocs(collection(db, 'serviceReports')));
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, 'serviceReports'),
+          where('brandId', '==', 'bruno-thailand'),
+          where('schemaVersion', '==', 2),
+          where('approvalState', '==', 'pending'),
+          limit(50)
+        )
+      )
+    );
+  }
+
+  const approverDb = staffDb('staff-approver');
+  const reports = collection(approverDb, 'serviceReports');
+  await assertFails(
     getDocs(
-      query(collection(brunoDb, 'serviceReports'), where('serviceJobId', '==', 'job-bruno'))
+      query(
+        reports,
+        where('brandId', '==', 'bruno-thailand'),
+        where('schemaVersion', '==', 2),
+        where('approvalState', '==', 'pending'),
+        where('reportNo', '==', 'FR-2026-000001'),
+        limit(50)
+      )
     )
   );
-  await assertSucceeds(
+  await assertFails(
+    getDocs(
+      query(
+        reports,
+        where('brandId', '==', 'bruno-thailand'),
+        where('schemaVersion', '==', 2),
+        where('approvalState', '==', 'pending'),
+        where('snapshot.trackingReference', '==', 'job-bruno'),
+        limit(50)
+      )
+    )
+  );
+  await assertFails(getDocs(query(reports, where('serviceJobId', '==', 'job-bruno'))));
+  await assertFails(
+    getDocs(query(reports, where('brandId', 'in', ['bruno-thailand', 'join-lux-club'])))
+  );
+  await assertFails(
+    getDocs(
+      query(
+        reports,
+        or(
+          where('serviceJobId', '==', 'job-bruno'),
+          where('reportNo', '==', 'FR-2026-000001')
+        )
+      )
+    )
+  );
+  await assertFails(getDocs(query(reports, limit(51))));
+});
+
+test('authorized same-brand ServiceReport get and V2 draft edit succeed', async () => {
+  const brunoDb = staffDb(brunoUid);
+  await assertSucceeds(getDoc(doc(brunoDb, 'serviceReports', 'report-bruno-draft')));
+  // Phase 3R/4R.3: a client draft edit is a V2 compare-and-set. A V1 report is
+  // no longer directly client-editable — that path is now the Worker's
+  // saveLegacyServiceReportDraft route — so the V1 shape must be denied here.
+  await assertFails(
     updateDoc(doc(brunoDb, 'serviceReports', 'report-bruno-draft'), {
       technicianRemark: 'Updated remark',
       updatedAt: Timestamp.fromDate(new Date('2026-08-17T01:00:00.000Z')),
+    })
+  );
+  await assertSucceeds(
+    updateDoc(doc(brunoDb, 'serviceReports', 'report-bruno-v2-draft'), {
+      technicianRemark: 'Updated remark',
+      contentRevision: 4,
+      updatedAt: serverTimestamp(),
+    })
+  );
+});
+
+test('a V2 draft edit must advance contentRevision by exactly one', async () => {
+  const brunoDb = staffDb(brunoUid);
+  for (const contentRevision of [3, 5, 2]) {
+    await assertFails(
+      updateDoc(doc(brunoDb, 'serviceReports', 'report-bruno-v2-draft'), {
+        technicianRemark: 'Updated remark',
+        contentRevision,
+        updatedAt: serverTimestamp(),
+      })
+    );
+  }
+  await assertFails(
+    updateDoc(doc(brunoDb, 'serviceReports', 'report-bruno-v2-draft'), {
+      technicianRemark: 'Updated remark',
+      updatedAt: serverTimestamp(),
+    })
+  );
+});
+
+test('a staff member without a Repair Report role cannot edit a V2 draft', async () => {
+  const roCleDb = staffDb('staff-no-role');
+  await assertFails(
+    updateDoc(doc(roCleDb, 'serviceReports', 'report-bruno-v2-draft'), {
+      technicianRemark: 'Updated remark',
+      contentRevision: 4,
+      updatedAt: serverTimestamp(),
     })
   );
 });
@@ -737,4 +909,127 @@ test('browser access to numberSequences remains fully denied, including repair_r
   await assertFails(
     getDoc(doc(brunoDb, 'numberSequences', 'bruno-thailand__service_request__2026'))
   );
+});
+
+// ---------------------------------------------------------------------------
+// Phase 6R-A.1 — Rules coverage completion (Phase 4R.5 Finding 5)
+// ---------------------------------------------------------------------------
+
+// The complete frozen Worker-only matrix. Every one of these must be totally
+// closed to any browser client, authenticated or not.
+const TRUSTED_WORKER_COLLECTIONS = [
+  'numberSequences',
+  'serviceJobIntakeKeys',
+  'serviceReportDraftKeys',
+  'serviceReportActiveDrafts',
+  'serviceReportApprovals',
+  'brandApprovalPolicies',
+  'serviceReportIdempotency',
+  'serviceReportSuccessorClaims',
+  'attachmentRetentionHolds',
+  'attachmentDeletionClaims',
+  'attachmentDeletionOperations',
+];
+
+test('every authoritative trusted collection denies browser reads and writes', async () => {
+  const brunoDb = staffDb(brunoUid);
+  const anonDb = unauthenticatedDb();
+  for (const collection of TRUSTED_WORKER_COLLECTIONS) {
+    await assertFails(getDoc(doc(brunoDb, collection, 'any-id')));
+    await assertFails(setDoc(doc(brunoDb, collection, 'any-id'), { forged: true }));
+    await assertFails(updateDoc(doc(brunoDb, collection, 'any-id'), { forged: true }));
+    await assertFails(deleteDoc(doc(brunoDb, collection, 'any-id')));
+    await assertFails(getDoc(doc(anonDb, collection, 'any-id')));
+    await assertFails(setDoc(doc(anonDb, collection, 'any-id'), { forged: true }));
+  }
+});
+
+test('same-brand direct GET is allowed for V1 and for every V2 lifecycle state', async () => {
+  const brunoDb = staffDb(brunoUid);
+  // V1 and the V2 draft are already seeded; add the three terminal V2 states.
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await Promise.all([
+      setDoc(
+        doc(db, 'serviceReports', 'report-v2-pending'),
+        serviceReportV2('job-bruno', 'bruno-thailand', {
+          reportId: 'report-v2-pending',
+          status: 'final',
+          approvalState: 'pending',
+        })
+      ),
+      setDoc(
+        doc(db, 'serviceReports', 'report-v2-approved'),
+        serviceReportV2('job-bruno', 'bruno-thailand', {
+          reportId: 'report-v2-approved',
+          status: 'final',
+          approvalState: 'approved',
+        })
+      ),
+      setDoc(
+        doc(db, 'serviceReports', 'report-v2-rejected'),
+        serviceReportV2('job-bruno', 'bruno-thailand', {
+          reportId: 'report-v2-rejected',
+          status: 'final',
+          approvalState: 'rejected',
+        })
+      ),
+    ]);
+  });
+  for (const reportId of [
+    'report-bruno-draft',
+    'report-bruno-final',
+    'report-bruno-v2-draft',
+    'report-v2-pending',
+    'report-v2-approved',
+    'report-v2-rejected',
+  ]) {
+    await assertSucceeds(getDoc(doc(brunoDb, 'serviceReports', reportId)));
+  }
+});
+
+test('a report whose authoritative Service Job is missing or malformed is denied', async () => {
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await Promise.all([
+      setDoc(
+        doc(db, 'serviceReports', 'report-orphan'),
+        serviceReportV2('job-does-not-exist', 'bruno-thailand', {
+          reportId: 'report-orphan',
+        })
+      ),
+      setDoc(doc(db, 'serviceJobs', 'job-no-brand'), { customerName: 'Legacy' }),
+      setDoc(
+        doc(db, 'serviceReports', 'report-malformed-owner'),
+        serviceReportV2('job-no-brand', 'bruno-thailand', {
+          reportId: 'report-malformed-owner',
+        })
+      ),
+    ]);
+  });
+  const brunoDb = staffDb(brunoUid);
+  // Ownership is resolved through the authoritative Service Job, never through
+  // the report's own projected brandId, so neither of these can be read.
+  await assertFails(getDoc(doc(brunoDb, 'serviceReports', 'report-orphan')));
+  await assertFails(getDoc(doc(brunoDb, 'serviceReports', 'report-malformed-owner')));
+});
+
+test('anonymous direct ServiceReport GET is denied', async () => {
+  const anonDb = unauthenticatedDb();
+  for (const reportId of ['report-bruno-draft', 'report-bruno-v2-draft', 'report-bruno-final']) {
+    await assertFails(getDoc(doc(anonDb, 'serviceReports', reportId)));
+  }
+});
+
+test('Public Tracking clients get no credentialed Service Report or console access', async () => {
+  // A public tracking visitor is unauthenticated: it holds a tracking code, not
+  // a Firestore credential, so D24/D25 data is unreachable by construction.
+  const anonDb = unauthenticatedDb();
+  await assertFails(getDoc(doc(anonDb, 'serviceJobs', 'job-bruno')));
+  await assertFails(getDoc(doc(anonDb, 'staffProfiles', brunoUid)));
+  await assertFails(getDoc(doc(anonDb, 'serviceReports', 'report-bruno-v2-draft')));
+  await assertFails(
+    getDocs(query(collection(anonDb, 'serviceReports'), where('serviceJobId', '==', 'job-bruno')))
+  );
+  await assertFails(getDoc(doc(anonDb, 'products', 'product-1')));
 });

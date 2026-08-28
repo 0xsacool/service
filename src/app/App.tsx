@@ -8,11 +8,13 @@ import { NewServiceJob } from '../features/service-jobs/pages/NewServiceJob';
 import { ServiceJobDetails } from '../features/service-jobs/pages/ServiceJobDetails';
 import { ProductsPage } from '../features/master-data/products/pages/ProductsPage';
 import { ProductDetail } from '../features/master-data/products/pages/ProductDetail';
+import { ApprovalConsolePage } from '../features/approval-console/pages/ApprovalConsolePage';
 import { StaffLayout } from '../shared/layouts/StaffLayout';
 import { NotFoundPage } from '../shared/components';
 import { ROUTE_PATTERNS } from '../constants';
 import { AuthSessionProvider } from '../auth/AuthSessionProvider';
 import { StaffRouteGuard } from '../auth/StaffRouteGuard';
+import { ApprovalConsoleRouteGuard } from '../auth/ApprovalConsoleRouteGuard';
 import { backendConfiguration, combineBackendConfigurations } from '../config/backend';
 import { filesBackendConfiguration } from '../config/filesBackend';
 import { filesWorkerUrlConfiguration } from '../config/workerUrl';
@@ -56,6 +58,12 @@ export default function App() {
                   path={ROUTE_PATTERNS.masterDataProductDetail}
                   element={<ProductDetail />}
                 />
+                <Route element={<ApprovalConsoleRouteGuard />}>
+                  <Route
+                    path={ROUTE_PATTERNS.approvalConsole}
+                    element={<ApprovalConsolePage />}
+                  />
+                </Route>
               </Route>
             </Route>
 

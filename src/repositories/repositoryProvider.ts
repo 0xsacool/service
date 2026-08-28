@@ -10,9 +10,11 @@ import type {
   ServiceJobsRepository,
   ServiceReportsRepository,
 } from './types';
+import type { ApprovalConsoleRepository } from './workerServiceReportReadRepository';
 import type { BrandId } from '../types';
 import type { WorkerTokenProvider } from '../auth/workerTokenProvider';
 import { backendKind } from '../config/backend';
+import { createMockApprovalConsoleRepository } from './mockApprovalConsoleRepository';
 import { filesBackendKind } from '../config/filesBackend';
 import { attachmentsRepository } from './attachmentsRepository';
 import { customersRepository } from './customersRepository';
@@ -42,6 +44,7 @@ export interface RepositoryProvider {
   productKnowledge: ProductKnowledgeRepository;
   attachments: AttachmentsRepository;
   serviceReports: ServiceReportsRepository;
+  approvalConsole: ApprovalConsoleRepository;
 }
 
 export function createMockRepositoryProvider(): RepositoryProvider {
@@ -56,6 +59,7 @@ export function createMockRepositoryProvider(): RepositoryProvider {
     productKnowledge: productKnowledgeRepository,
     attachments: attachmentsRepository,
     serviceReports: serviceReportsRepository,
+    approvalConsole: createMockApprovalConsoleRepository(),
   };
 }
 
@@ -112,11 +116,22 @@ function createUnavailableRepositoryProvider(): RepositoryProvider {
       deleteAttachment: reject,
     },
     serviceReports: {
+      fetchHistoryForServiceJob: reject,
       listForServiceJob: () => [],
       getById: () => undefined,
       createDraft: reject,
       updateDraft: reject,
       finalize: reject,
+      createDraftV2: reject,
+      updateDraftV2: reject,
+      finalizeV2: reject,
+      decideV2: reject,
+      createSuccessorV2: reject,
+      trustedPrint: reject,
+    },
+    approvalConsole: {
+      fetchPendingApprovalQueue: reject,
+      fetchApprovalReview: reject,
     },
   };
 }
@@ -165,6 +180,8 @@ async function createFirestoreBackedRepositoryProvider(
     await import('./workerProductImportRepository');
   const { createFirestoreServiceReportsRepository } =
     await import('./firestoreServiceReportsRepository');
+  const { createWorkerApprovalConsoleRepository } =
+    await import('./workerServiceReportReadRepository');
   const { createFirestoreRegisteredProductsRepository } =
     await import('./firestoreRegisteredProductsRepository');
   const { createFirestoreSearchRepository } = await import('./firestoreSearchRepository');
@@ -188,6 +205,7 @@ async function createFirestoreBackedRepositoryProvider(
     serviceReports: await activateWithDiagnostics('serviceReports', () =>
       createFirestoreServiceReportsRepository(serviceJobs, tokenProvider)
     ),
+    approvalConsole: createWorkerApprovalConsoleRepository(tokenProvider),
     registeredProducts: createFirestoreRegisteredProductsRepository(
       customers,
       serviceJobs

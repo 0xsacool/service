@@ -9,6 +9,9 @@ export interface Env {
   // a separately approved deployment explicitly sets this exact value to
   // "true". It is intentionally absent from the default wrangler.toml.
   PUBLIC_TRACKING_ENABLED?: string;
+  // Opt-in cutover gate. Omitted/unknown values are always disabled so an
+  // ordinary Worker deploy cannot activate V2 routes accidentally.
+  SERVICE_REPORT_V2_MODE?: 'disabled' | 'compatibility' | 'v2-active';
 
   // F5d-5 — Firestore access config. See googleAuth.ts/firestoreClient.ts.
   // FIRESTORE_PROJECT_ID is public (wrangler.toml [vars], mirrors

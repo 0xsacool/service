@@ -97,6 +97,8 @@ export async function createWorkerAttachmentsRepository(
         // F5d-17 (DECISIONS.md #025) — always null at creation. A successful
         // manual or executor deletion records the later lifecycle outcome.
         deletedAt: null,
+        metadataKeyVersion: 2,
+        approvalRetainUntil: null,
       };
       // Only reached once the bytes are already durably in R2 — see
       // firestoreAttachmentsRepository.ts's create() comment for why this
@@ -105,11 +107,14 @@ export async function createWorkerAttachmentsRepository(
       return attachment;
     },
 
-    // id is always the R2 key (see upload() above), so this is direct
-    // string construction — no round-trip needed. The Worker serves it
-    // unsigned (see worker/README.md's pre-auth note); the existence check
-    // here is purely to match the Mock implementation's behavior for an
-    // unknown id, not something the Worker itself requires.
+    // id is always the R2 key (see upload() above), but the key itself never
+    // leaves this module as a URL: the bytes are fetched over the same
+    // Worker-token-authenticated transport as every other call here, and only
+    // the resulting Blob becomes a URL. Per the AttachmentsRepository contract
+    // (types.ts) that URL is a FRESH caller-owned object URL — nothing here
+    // retains or revokes it. The existence check is purely to match the Mock
+    // implementation's behavior for an unknown id, not something the Worker
+    // itself requires.
     async getDownloadUrl(id) {
       if (!metadata.getById(id)) {
         throw new Error(

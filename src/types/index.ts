@@ -37,9 +37,33 @@ export type {
 export type {
   Attachment,
   AttachmentCategory,
+  CanonicalAttachmentKey,
   RetentionStatus,
   RetentionExtension,
 } from './attachment';
+export {
+  STAFF_ROLES,
+  type StaffRole,
+  type ApprovalRole,
+  type WarrantyOutcome,
+  type ApprovalState,
+  type FinalContentDigest,
+  type RequestFingerprint,
+  type ServiceReportV2Content,
+  type EditableServiceReportField,
+  type ServiceReportV2DraftPatch,
+  type ServiceReportV2Draft,
+  type ServiceReportV2Final,
+  type ServiceReportV2,
+  type ServiceReportDocument,
+  type ServiceReportApprovalEvent,
+  type BrandApprovalPolicy,
+  type ServiceReportActiveDraftSlot,
+  type ServiceReportSuccessorClaim,
+  type AttachmentRetentionHold,
+  type AttachmentDeletionClaimState,
+  type AttachmentDeletionClaim,
+} from './serviceReportV2';
 export {
   RESULT_STATUSES,
   SERVICE_ACTIONS,
@@ -51,3 +75,14 @@ export {
   type ServiceReportPart,
   type ServiceReportSnapshot,
 } from './serviceReport';
+export type {
+  ApprovalQueueItemV1,
+  ApprovalQueueMode,
+  ApprovalQueuePageV1,
+  ApprovalQueueRequest,
+  ApprovalReviewV1,
+  ServiceReportHistoryItem,
+  ServiceReportHistoryItemLegacyV1,
+  ServiceReportHistoryItemV2,
+  ServiceReportHistoryV1,
+} from './serviceReportWorkerReads';

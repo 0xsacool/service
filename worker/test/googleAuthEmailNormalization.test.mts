@@ -1,5 +1,5 @@
 // F5d-10.3 regression test — no test framework, matching this repo's
-// existing convention (see test/smoke.mjs). Confirms
+// existing convention (see scripts/smoke.mjs). Confirms
 // normalizeServiceAccountEmail() strips exactly the kind of stray
 // whitespace that F5d-10.2 found in the real GOOGLE_SERVICE_ACCOUNT_EMAIL
 // Cloudflare secret, so this class of bug can't silently reoccur if a

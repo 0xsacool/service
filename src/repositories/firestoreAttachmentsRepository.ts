@@ -4,8 +4,8 @@ import {
   doc,
   onSnapshot,
   query,
+  runTransaction,
   serverTimestamp,
-  setDoc,
   updateDoc,
   where,
 } from 'firebase/firestore';
@@ -13,11 +13,17 @@ import { getFirestoreDb } from '../lib/firebase/firebase';
 import type { Attachment, RetentionExtension, RetentionStatus } from '../types';
 import type { AttachmentRetention } from '../services/attachmentRetention';
 import {
-  attachmentDocId,
   ATTACHMENTS_COLLECTION,
   fromFirestoreData,
   toFirestoreFields,
 } from './firestore/attachmentMapping';
+import {
+  assertCanonicalAttachmentKey,
+  attachmentMetadataDocId,
+  isCanonicalAttachmentKey,
+  legacyAttachmentMetadataDocId,
+  verifyAttachmentMetadataAddress,
+} from '../services/attachmentIdentity';
 import {
   describeFirestoreInitError,
   recordFirestoreInitFailure,
@@ -44,6 +50,7 @@ function logWriteFailure(operation: string, id: string, error: unknown): void {
 export async function createFirestoreAttachmentMetadataStore(): Promise<AttachmentMetadataStore> {
   const firestore = getFirestoreDb();
   const attachmentsById = new Map<string, Attachment>();
+  const documentIdsByKey = new Map<string, string>();
   const subscribedJobIds = new Set<string>();
 
   const subscribeToJob = (jobId: string): void => {
@@ -52,12 +59,45 @@ export async function createFirestoreAttachmentMetadataStore(): Promise<Attachme
     void onSnapshot(
       query(collection(firestore, ATTACHMENTS_COLLECTION), where('jobId', '==', jobId)),
       (snapshot) => {
-        for (const [id, attachment] of attachmentsById) {
-          if (attachment.jobId === jobId) attachmentsById.delete(id);
-        }
-        snapshot.forEach((docSnap) => {
-          const attachment = fromFirestoreData(docSnap.data());
-          attachmentsById.set(attachment.id, attachment);
+        void (async () => {
+          const next = new Map<string, { attachment: Attachment; documentId: string }>();
+          for (const docSnap of snapshot.docs) {
+            const attachment = fromFirestoreData(docSnap.data());
+            if (!isCanonicalAttachmentKey(attachment.path)) {
+              throw new Error('evidence_identity_mismatch');
+            }
+            const validAddress = docSnap.id.startsWith('ak2_')
+              ? await verifyAttachmentMetadataAddress(docSnap.id, attachment.path)
+              : docSnap.id === legacyAttachmentMetadataDocId(attachment.path);
+            if (!validAddress) {
+              throw new Error(
+                docSnap.id.startsWith('ak2_')
+                  ? 'evidence_identity_mismatch'
+                  : 'evidence_identity_collision'
+              );
+            }
+            if (next.has(attachment.path)) {
+              throw new Error('duplicate_attachment_metadata');
+            }
+            next.set(attachment.path, { attachment, documentId: docSnap.id });
+          }
+          for (const [id, attachment] of attachmentsById) {
+            if (attachment.jobId === jobId) {
+              attachmentsById.delete(id);
+              documentIdsByKey.delete(id);
+            }
+          }
+          for (const [key, resolved] of next) {
+            attachmentsById.set(key, resolved.attachment);
+            documentIdsByKey.set(key, resolved.documentId);
+          }
+        })().catch((error: unknown) => {
+          console.error('[firestoreAttachmentsRepository] identity resolution failed:', error);
+          recordFirestoreInitFailure({
+            repository: 'attachments',
+            stage: 'listener',
+            code: 'unknown',
+          });
         });
       },
       (error) => {
@@ -91,10 +131,30 @@ export async function createFirestoreAttachmentMetadataStore(): Promise<Attachme
     },
     async create(attachment) {
       try {
-        await setDoc(
-          doc(firestore, ATTACHMENTS_COLLECTION, attachmentDocId(attachment.path)),
-          toFirestoreFields(attachment)
-        );
+        const key = assertCanonicalAttachmentKey(attachment.path);
+        const documentId = await attachmentMetadataDocId(key);
+        const canonicalAttachment: Attachment = {
+          ...attachment,
+          id: key,
+          path: key,
+          metadataKeyVersion: 2,
+          approvalRetainUntil: attachment.approvalRetainUntil ?? null,
+        };
+        await runTransaction(firestore, async (transaction) => {
+          const reference = doc(firestore, ATTACHMENTS_COLLECTION, documentId);
+          const existing = await transaction.get(reference);
+          if (existing.exists()) {
+            const existingPath = existing.data().path;
+            throw new Error(
+              existingPath === key
+                ? 'duplicate_attachment_metadata'
+                : 'evidence_identity_mismatch'
+            );
+          }
+          transaction.set(reference, toFirestoreFields(canonicalAttachment));
+        });
+        attachmentsById.set(key, canonicalAttachment);
+        documentIdsByKey.set(key, documentId);
       } catch (error) {
         logWriteFailure('create', attachment.id, error);
         throw error;
@@ -102,7 +162,8 @@ export async function createFirestoreAttachmentMetadataStore(): Promise<Attachme
     },
     async updateRetention(id, retention) {
       try {
-        await updateDoc(doc(firestore, ATTACHMENTS_COLLECTION, attachmentDocId(id)), {
+        const documentId = documentIdsByKey.get(id) ?? await attachmentMetadataDocId(assertCanonicalAttachmentKey(id));
+        await updateDoc(doc(firestore, ATTACHMENTS_COLLECTION, documentId), {
           deleteAfter: retention.deleteAfter,
           retentionStatus: retention.retentionStatus,
         });
@@ -113,7 +174,8 @@ export async function createFirestoreAttachmentMetadataStore(): Promise<Attachme
     },
     async extendRetention(id, extension, retentionStatus) {
       try {
-        await updateDoc(doc(firestore, ATTACHMENTS_COLLECTION, attachmentDocId(id)), {
+        const documentId = documentIdsByKey.get(id) ?? await attachmentMetadataDocId(assertCanonicalAttachmentKey(id));
+        await updateDoc(doc(firestore, ATTACHMENTS_COLLECTION, documentId), {
           deleteAfter: extension.newDeleteAfter,
           retentionStatus,
           retentionExtensions: arrayUnion(extension),
@@ -126,7 +188,8 @@ export async function createFirestoreAttachmentMetadataStore(): Promise<Attachme
     async markDeleted(id, deletedAt) {
       void deletedAt;
       try {
-        await updateDoc(doc(firestore, ATTACHMENTS_COLLECTION, attachmentDocId(id)), {
+        const documentId = documentIdsByKey.get(id) ?? await attachmentMetadataDocId(assertCanonicalAttachmentKey(id));
+        await updateDoc(doc(firestore, ATTACHMENTS_COLLECTION, documentId), {
           deletedAt: serverTimestamp(),
         });
       } catch (error) {

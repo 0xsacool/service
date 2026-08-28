@@ -74,7 +74,7 @@ With `npm run dev` running in one terminal:
 npm run smoke
 ```
 
-`test/smoke.mjs` is a plain Node script (no test framework — this repo
+`scripts/smoke.mjs` is a plain Node script (no test framework — this repo
 doesn't have one yet) that exercises the real endpoints end-to-end: uploads
 a small file, downloads it back and byte-compares it, deletes it, confirms
 a subsequent download 404s, and checks the content-type/category/size

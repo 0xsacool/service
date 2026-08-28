@@ -379,6 +379,15 @@ repository. Image attachments use temporary object URLs; non-image, missing, or
 failed evidence renders an unavailable placeholder. No R2 path, public token,
 brandId, or security field is exposed in the print document.
 
+Those object URLs are caller-owned and disposable (see `AttachmentsRepository`
+and DECISIONS.md #047). The evidence hook owns every URL it publishes and
+releases it when the preview closes or the selected evidence changes; a download
+that lands after either event revokes its own URL rather than publishing it, so
+no URL outlives its owner. (Phase 6R-B released a late resolution's URL nowhere
+at all — cleanup had already run by the time it arrived; Phase 6R-B.4 corrected
+it and added `test/serviceReportEvidenceRuntime.test.mjs`, which drives the real
+hook through those orderings.)
+
 Dedicated print CSS defines A4 portrait margins, application-chrome hiding,
 plain print styling, section/table/signature break protection, and natural
 multi-page behavior. SR-3 remains source-only; no Rules, Worker, deployment,
@@ -3736,6 +3745,227 @@ during PI-8, claiming the Worker "has never been deployed") remains
 uncorrected — a documentation-only staleness inside a config file's comment,
 out of scope for a docs-only closeout pass and deliberately left for a
 future source-touching change.
+
+
+## Phase 3R.4B — Worker-mediated Repair Report reads (source only)
+
+D24 and D25 are implemented locally. The Worker now exposes mode-independent,
+read-only routes for one-Service-Job history, the pending Approval Console
+queue, exact report-number search, exact tracking-reference search, and
+immutable approval-review detail. Each route authenticates before protected
+input validation and runs through a dedicated read store that has no
+transaction, commit, idempotency, event, policy, R2, retention, deletion, or
+Product Import operation.
+
+Ordinary history authorizes UID -> core staff profile -> canonical brand ->
+authoritative Service Job, executes one `serviceJobId == route ID` query with
+a 51-row sentinel, strictly validates the complete V1/V2 response, and returns
+an ordinally ordered least-privilege DTO. The browser's ordinary history path
+no longer uses a Firestore collection `onSnapshot`; it uses a per-job
+asynchronous Worker repository with abort/generation fencing, entry/manual/
+focus/visibility refresh, provisional stale state, and authoritative
+post-mutation refetch.
+
+Approval Console queue reads require current `approver` or `admin` role,
+use the three frozen indexed query shapes with keyset cursors and a
+`pageSize + 1` lookahead, batch-resolve deduplicated Service Jobs, verify
+every candidate including lookahead, recompute final digests, and fail the
+whole page on an integrity incident. Review detail is separately fetched
+before a decision can be enabled, and the decision remains bound to the exact
+displayed digest on the pre-existing privileged mutation route.
+
+Final source Rules now deny every browser `serviceReports` list while
+retaining same-brand direct GET and the V2 draft compare-and-set update.
+The existing three indexes are unchanged and already match the Worker query
+shapes. No dependency, IAM, R2, Product Import, Public Tracking, deployment,
+production access, token revocation, or infrastructure change occurred.
+Production activation remains blocked on the approved local/emulator suites,
+index-serving proof, Worker/Hosting compatibility rollout, immutable client
+marker and roster proof, refresh-token revocation, tab closure, 65-minute
+wait, fresh-navigation proof, final-list-denial proof, and synthetic D25
+acceptance.
+
+## Phase 6R-A.2 — D24/D25 final corrective hardening (source only)
+
+The three Phase 4R.5R `SHOULD FIX BEFORE 6R-B` findings are addressed in
+source. The closure claim below is scoped to those three findings only: a later
+independent re-review (Phase 4R.5R2) reproduced one residual defect in the same
+Approval Review lifecycle, corrected in Phase 6R-A.3 below.
+
+The Approval Review decision boundary now claims decision ownership in a
+synchronous ref before any mutation is dispatched, so two decide() calls in one
+tick can no longer both pass a React-state-derived in-flight check and both
+reach the Worker. The React state remains, for rendering only. Ownership is
+scoped to the exact Service Job/report identity and released on success and on
+known mutation failure, so no transition inherits a stale claim. The digest is
+still taken from the loaded Approval Review; decide() still accepts no digest.
+
+D24/D25 browser lifecycle behavior is now covered behaviorally rather than by
+state projection and source regex. The real hooks are mounted and driven
+through cross-job late responses, aborts, focus/visibility/manual refresh,
+authoritative post-mutation refetch, refetch failure with preserved stale data,
+review generation invalidation, and the same-tick duplicate decision. The seam
+is a test-local hooks runtime aliased over `react`; no dependency was added.
+
+D24/D25 Worker security-contract coverage is completed with instrumented
+doubles rather than source assertions: GET body rejection, GET/POST dispatch on
+one Service Job path, malformed and partial V1/V2 below the 51-row sentinel,
+unsupported schema versions, identity and brand divergence, authoritative
+Service Job batch integrity, isolated digest mismatch, lifecycle and identity
+matrices, strict no-store on success and failure, DTO privacy, and an
+allow-list proof that a read reaches only read methods on only read
+collections while touching no R2, no write-side client, and no network of its
+own.
+
+No production source outside the decision latch changed. Rules, indexes,
+dependencies, IAM, R2, Product Import, and Public Tracking are untouched, and
+Production activation remains gated exactly as recorded above.
+
+## Phase 6R-A.3 — D25 cross-selection decision completion (source only)
+
+Phase 4R.5R2 reproduced one residual lifecycle defect: an Approval Review
+decision dispatched for one report, still in flight when the reviewer selected
+a different report, republished state on completion without checking which
+review was on screen. The newly selected report's loaded review was cleared and
+reset to a loading state by the older decision's success or failure.
+
+Decision completion is now identity-scoped. A completion updates the displayed
+review only while that review is still the one the decision was dispatched for;
+once the selection has moved, the completion leaves the displayed state exactly
+as it found it. It still settles its own promise, releases its own ownership
+claim, and reports its own failure to its own caller. The queue invalidation
+that follows a committed mutation is brand-scoped and unrelated to selection,
+so it still fires when the reviewer has moved on.
+
+The synchronous decision claim from Phase 6R-A.2 is unchanged, along with
+same-tick duplicate suppression, failure release and retry, generation fencing,
+and stale-review refusal. Three mounted-hook tests cover late success and late
+failure against a newly selected review, plus a same-identity control proving
+ordinary completion still publishes. No architecture, route contract, digest
+contract, or owner decision was reopened.
+
+Source only. Rules, indexes, dependencies, IAM, R2, Product Import, and Public
+Tracking are untouched; nothing is deployed, activated, or accepted in
+Production by this change.
+
+## Phase 6R-B — Approval Console UI completion (source only)
+
+The staff-facing Approval Console UI is implemented in source on top of the
+frozen D25 hook/repository foundation from the phases above. A new route
+(`/approval-console`), a role-conditional sidebar entry, a dedicated
+`ApprovalConsoleRouteGuard`, and a full page (queue list with search/
+pagination, a review detail panel, and approve/reject decision controls) now
+exist under `src/features/approval-console/`. Everything reads and mutates
+exclusively through the existing `useApprovalQueue`/`useApprovalReview` hooks
+and the `ApprovalConsoleRepository` — no new Worker route, DTO field, Rules
+change, or dependency was added.
+
+UI-layer role gating (`canAccessApprovalConsole`) is explicitly
+UX/defense-in-depth only. The Worker's `approval_console_access_denied` check
+(`worker/src/serviceReportReadRoutes.ts`) remains the sole authorization
+boundary; a technician or roleless staff member reaching the route by direct
+URL still receives a fail-closed Thai denial panel client-side, backed by the
+Worker's own 403 regardless of what the UI shows. `canImportProducts` plays
+no role in this gate.
+
+The gate is role-only in **every** backend mode — the sidebar entry and the
+route guard read the same exported predicate, and mock mode grants no
+exemption. (Phase 6R-B shipped it with an always-capable-in-mock branch copied
+from the Product Import capability gate, which showed the console to
+technician and roleless staff in mock; Phase 6R-B.2 removed that branch. Mock
+sessions carry no `staffProfile`, so they are now denied like any other
+roleless session — the mock Approval Console repository has no pending review
+to show in any case.)
+
+Evidence attached to a pending report (`ApprovalReviewV1.content.evidenceAttachmentIds`,
+canonical R2 keys) is viewable through a new, lazy, per-click resolution
+(`useEvidencePreview`) that calls the already-accepted
+`AttachmentsRepository.getDownloadUrl` — no raw R2 key, path, or public URL
+is ever rendered.
+
+Each resolved object URL is owned by the review it belongs to. It is released
+when that review is replaced as well as on unmount, and a resolution that
+settles after either event revokes its URL rather than publishing it, so a
+pending request from the previously selected report can neither leak a blob URL
+nor surface its evidence under the report now on screen. A failed resolution
+renders a fixed safe message selected by error type; the caught error's own
+text (which can contain the canonical R2 key or a Worker/provider response
+body) never reaches the screen. (Phase 6R-B released URLs only on unmount and
+rendered `error.message` directly; Phase 6R-B.2 corrected both.)
+
+What `getDownloadUrl` hands back is now part of the repository contract rather
+than an undocumented habit of its two implementations. `AttachmentsRepository`
+states that the method is asynchronous, that it returns a caller-owned
+disposable object URL built by `URL.createObjectURL` from bytes obtained
+locally (Mock) or over the Worker-token-authenticated GET (Worker-backed), that
+no raw R2 key, Worker origin, signed URL or public URL is ever returned, and
+that the caller must revoke it and must not persist it.
+`test/attachmentDownloadUrlContract.test.mjs` runs both real implementations
+against that contract. (Phase 6R-B's interface comment claimed the call was
+synchronous and directly constructed a provider string; Phase 6R-B.3 corrected
+the wording and added the behavioral proof.)
+
+Approve and reject modals are bound to the exact `{serviceJobId, reportId}`
+they were opened under: ownership is checked while rendering, so a modal whose
+review is no longer current is not rendered and no confirmation control
+survives to dispatch, and the rejection reason and pending error live inside
+that same owned state so neither can cross into another review.
+`ApprovalReviewPanel` also keys the decision controls by that identity.
+(Phase 6R-B kept modal state outside any identity while the confirm handler
+rebound to the newest review prop, so a modal opened for A could dispatch
+against B; Phase 6R-B.3 corrected it.)
+
+Test coverage for this phase spans `test/approvalConsoleAccess.test.mjs`
+(the role matrix in both backend modes, plus the route guard as real component
+behavior via SSR static markup), `test/approvalConsolePage.test.mjs` (the
+prop-driven queue/review rendering contract across loading, authoritative
+empty, populated, error-without-data, error-with-retained-items and stale
+states, and privacy — no raw uid/digest/R2 path ever rendered), and an
+extension of `test/serviceReportReadsArchitecture.test.mjs` for claims about
+what appears nowhere in a file (selection-to-hook wiring, ordinary-history
+isolation, no raw-error path).
+
+Phase 6R-B.2 added genuine runtime interaction coverage on top of that:
+`test/approvalConsoleEvidenceRuntime.test.mjs` and
+`test/approvalConsoleInteractionRuntime.test.mjs` mount the real components
+and drive them — clicking, typing, changing selection, unmounting — against
+controlled promises, using `test/support/componentRuntime.mjs`, a
+dependency-free React element renderer for tests (the component-level
+counterpart to the existing `test/support/hookRuntime.mjs`). Between them they
+cover the evidence lifecycle orderings (resolve-before-unmount,
+resolve-after-unmount, late-A-under-B, failure, retry, same-tick duplicate),
+evidence error privacy against hostile synthetic errors, the search
+mode/reset/transition behavior, and the approve/reject modals including
+whitespace-only refusal, trimmed reasons, in-flight disabling, and
+cancel/close. The D25 hooks' own cross-selection/in-flight
+fencing continues to be covered by `test/approvalConsoleHookLifecycle.test.mjs`,
+which also now covers the queue's authoritative-data flag.
+
+Phase 6R-B.3 replaced the one cross-review modal test that could not fail: it
+built its "previous" and "current" reviews from a single hard-coded identity
+and ended in a tautology, so it passed against a component that would confirm
+one review's modal into another. The suite now drives two reviews that differ
+in **both** `serviceJobId` and `reportId` through approve, reject-with-reason,
+same-identity refresh, in-flight identity change, unmount, and the
+`ApprovalReviewPanel` remount seam, asserting dispatch counts rather than
+source text. Run against the pre-correction component the approve case
+dispatches `['approved', null]` against the wrong review and the reject case
+carries the previous review's reason with it; against the corrected source
+neither is reachable.
+
+Phase 6R-B.4 extended the same evidence for the ordinary Service Report
+evidence caller, which had the late-resolution leak the Approval Console
+controller no longer has. `test/serviceReportEvidenceRuntime.test.mjs` mounts
+the real `useServiceReportEvidence` on `test/support/hookRuntime.mjs` and holds
+each `getDownloadUrl` open with a deferred, so what is revoked — and in what
+order relative to unmount and to the evidence selection changing — is asserted
+rather than inferred from source text. Against the pre-correction hook its
+after-unmount and late-A cases fail with nothing revoked.
+
+Source and UI only. Still not deployed, not activated, and not accepted in
+Production — every activation gate listed under Phase 3R.4B above still
+applies unchanged. Rules, indexes, IAM, R2, Product Import, and Public
+Tracking are untouched.
 
 ## Development Principles
 

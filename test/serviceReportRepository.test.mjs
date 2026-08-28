@@ -12,6 +12,7 @@ const { SERVICE_ACTIONS, RESULT_STATUSES } = await vite.ssrLoadModule(
 const { fromFirestoreData: loadReportFromFirestore, toFirestoreFields } =
   await vite.ssrLoadModule('/src/repositories/firestore/serviceReportMapping.ts');
 const {
+  compareOrdinal,
   formatServiceReportNumber,
   getServiceReportFinalizationErrors,
   isValidServiceReport,
@@ -338,13 +339,16 @@ test('missing Service Jobs fail safely before report creation', async () => {
 // browser must never perform itself. updateDraft is unchanged — it remains
 // a direct-client Firestore transaction, now Rules-protected instead of
 // blocked by ServiceReportsSection's removed unavailable gate.
-test('Firestore repository delegates create/finalize to the Worker and keeps ordinary draft edits direct-client', async () => {
+test('Firestore repository delegates create/finalize/history to the Worker and keeps ordinary draft edits direct-client', async () => {
   const source = await readFile(
     new URL('../src/repositories/firestoreServiceReportsRepository.ts', import.meta.url),
     'utf8'
   );
   assert.match(source, /SERVICE_REPORTS_COLLECTION, reportId/);
-  assert.match(source, /where\('serviceJobId', '==', serviceJobId\)/);
+  assert.match(source, /createWorkerServiceReportHistoryRepository/);
+  assert.match(source, /fetchHistoryForServiceJob\(serviceJobId, signal\)/);
+  assert.equal(source.includes("where('serviceJobId', '==', serviceJobId)"), false);
+  assert.equal(source.includes('collection(getFirestoreDb(), SERVICE_REPORTS_COLLECTION)'), false);
   assert.equal(source.includes('fetchWithWorkerToken'), true);
   assert.equal(source.includes('/service-reports'), true);
   assert.equal(source.includes('/finalize'), true);
@@ -360,4 +364,42 @@ test('Firestore repository delegates create/finalize to the Worker and keeps ord
   assert.match(source, /updatedAt: serverTimestamp\(\)/);
   assert.equal(source.includes('createdAt: serverTimestamp()'), false);
   assert.equal(source.includes('finalizedAt: serverTimestamp()'), false);
+});
+
+test('D24 ordinal comparator is code-unit based, not locale-collated', () => {
+  // The pairs where a locale collator and code-unit order genuinely disagree.
+  assert.ok(compareOrdinal('Z', 'a') < 0, 'uppercase sorts before lowercase');
+  assert.ok('Z'.localeCompare('a') > 0, 'a collator would disagree — that is the point');
+  assert.ok(compareOrdinal('_', 'a') < 0);
+  assert.ok(compareOrdinal('ab', 'abc') < 0, 'a prefix sorts before its extension');
+  assert.equal(compareOrdinal('same', 'same'), 0);
+  assert.ok(compareOrdinal('FR-2026-000002', 'FR-2026-000010') < 0);
+  // Zero-padded report numbers must order numerically as a side effect of
+  // fixed-width ordinal comparison.
+  assert.ok(compareOrdinal('FR-2026-000009', 'FR-2026-000010') < 0);
+});
+
+test('D24 documentary order is createdAt, then reportNo, then reportId', () => {
+  const report = (id, createdAt, reportNo) => ({ id, createdAt, reportNo });
+  const ordered = orderServiceReports([
+    report('r-3', '2026-01-02T00:00:00.000Z', 'FR-2026-000001'),
+    report('r-2', '2026-01-01T00:00:00.000Z', 'FR-2026-000010'),
+    report('r-1', '2026-01-01T00:00:00.000Z', 'FR-2026-000002'),
+    report('r-0', '2026-01-01T00:00:00.000Z', 'FR-2026-000002'),
+  ]);
+  assert.deepEqual(ordered.map((entry) => entry.id), ['r-0', 'r-1', 'r-2', 'r-3']);
+});
+
+test('D24 ordering is stable, total, and never mutates its input', () => {
+  const input = [
+    { id: 'b', createdAt: '2026-01-01T00:00:00.000Z', reportNo: 'FR-2026-000001' },
+    { id: 'a', createdAt: '2026-01-01T00:00:00.000Z', reportNo: 'FR-2026-000001' },
+  ];
+  const snapshot = input.map((entry) => entry.id);
+  const first = orderServiceReports(input).map((entry) => entry.id);
+  const second = orderServiceReports(input).map((entry) => entry.id);
+  assert.deepEqual(first, ['a', 'b'], 'a full tie falls through to reportId');
+  assert.deepEqual(first, second, 'ordering is reproducible across calls');
+  assert.deepEqual(input.map((entry) => entry.id), snapshot, 'input is not mutated');
+  assert.deepEqual(orderServiceReports([]), []);
 });

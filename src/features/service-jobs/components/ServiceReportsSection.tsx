@@ -12,6 +12,7 @@ import {
   Paperclip,
   Printer,
   Plus,
+  RefreshCw,
   Save,
   ShieldCheck,
   Trash2,
@@ -40,6 +41,7 @@ import {
   SecondaryButton,
   EmptyState,
   ErrorState,
+  LoadingState,
   inputClass,
 } from '../../../shared/components';
 import { formatDate, formatDateShort } from '../../../utils/formatDate';
@@ -123,9 +125,16 @@ function reportStatusClass(status: ServiceReport['status']): string {
 // here is removed now that the durable backend actually supports this
 // section end to end, in every backend mode.
 export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }) {
-  const { reports, createDraft, updateDraft, finalize } = useServiceReports(
-    serviceJob.id
-  );
+  const {
+    reports,
+    createDraft,
+    updateDraft,
+    finalize,
+    isHistoryLoading,
+    isHistoryStale,
+    historyError,
+    refresh,
+  } = useServiceReports(serviceJob.id);
   const { attachments } = useServiceJobAttachments(serviceJob.id);
   const latestReport = getLatestServiceReport(reports);
   const activeDraft = getActiveDraft(reports);
@@ -231,18 +240,28 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
             ไม่ใช่การแก้ไขฉบับเดิม
           </p>
         </div>
-        <PrimaryButton
-          onClick={() => void handleCreate()}
-          disabled={isCreating}
-          className="px-4 py-2.5 text-sm"
-        >
-          <FilePlus2 className="h-4 w-4" />
-          {isCreating
-            ? 'กำลังสร้าง…'
-            : activeDraft
-              ? 'ดำเนินการร่างต่อ'
-              : 'สร้างใบรายงาน'}
-        </PrimaryButton>
+        <div className="flex flex-wrap items-center gap-2">
+          <SecondaryButton
+            onClick={refresh}
+            disabled={isHistoryLoading}
+            className="px-4 py-2.5 text-sm"
+          >
+            <RefreshCw className={isHistoryLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+            {isHistoryLoading ? 'กำลังรีเฟรช…' : 'รีเฟรช'}
+          </SecondaryButton>
+          <PrimaryButton
+            onClick={() => void handleCreate()}
+            disabled={isCreating}
+            className="px-4 py-2.5 text-sm"
+          >
+            <FilePlus2 className="h-4 w-4" />
+            {isCreating
+              ? 'กำลังสร้าง…'
+              : activeDraft
+                ? 'ดำเนินการร่างต่อ'
+                : 'สร้างใบรายงาน'}
+          </PrimaryButton>
+        </div>
       </div>
 
       {actionError ? (
@@ -259,7 +278,53 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
         />
       ) : null}
 
-      {reports.length === 0 ? (
+      {historyError ? (
+        <ErrorState
+          title="โหลดประวัติใบรายงานไม่สำเร็จ"
+          description={historyError.message}
+          action={
+            <SecondaryButton onClick={refresh} disabled={isHistoryLoading}>
+              <RefreshCw className={isHistoryLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+              ลองอีกครั้ง
+            </SecondaryButton>
+          }
+        />
+      ) : null}
+
+      {/* D24: a failed authoritative refetch must never read as current. The
+          list below is last-known data, and says so until a refresh succeeds. */}
+      {isHistoryStale && !historyError ? (
+        <GlassCard
+          className="border border-warning-200 bg-warning-50/60 p-4 ring-warning-200"
+          aria-live="polite"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning-600" />
+              <div>
+                <p className="font-semibold text-ink">ข้อมูลอาจไม่เป็นปัจจุบัน</p>
+                <p className="mt-1 text-sm text-neutral-600">
+                  แสดงประวัติใบรายงานล่าสุดที่โหลดสำเร็จ ยังไม่ได้ยืนยันกับเซิร์ฟเวอร์
+                </p>
+              </div>
+            </div>
+            <SecondaryButton
+              onClick={refresh}
+              disabled={isHistoryLoading}
+              className="px-4 py-2.5 text-sm"
+            >
+              <RefreshCw className={isHistoryLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+              รีเฟรช
+            </SecondaryButton>
+          </div>
+        </GlassCard>
+      ) : null}
+
+      {isHistoryLoading && reports.length === 0 && !historyError ? (
+        <GlassCard className="p-8">
+          <LoadingState label="กำลังโหลดประวัติใบรายงาน…" />
+        </GlassCard>
+      ) : reports.length === 0 ? (
         <GlassCard className="p-8">
           <EmptyState
             icon={ClipboardList}

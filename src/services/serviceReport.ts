@@ -424,12 +424,32 @@ export function editableServiceReportFields(
   return fields;
 }
 
-export function orderServiceReports(reports: ServiceReport[]): ServiceReport[] {
-  return [...reports].sort((left, right) => {
-    const created = left.createdAt.localeCompare(right.createdAt);
-    if (created !== 0) return created;
-    const reportNo = left.reportNo.localeCompare(right.reportNo);
-    if (reportNo !== 0) return reportNo;
-    return left.id.localeCompare(right.id);
-  });
+// D24 documentary ordering must be byte-for-byte reproducible between the
+// browser and the Worker. Deliberately NOT localeCompare/Intl.Collator: those
+// are locale- and ICU-version-sensitive, so the same history could order
+// differently on two machines and a client could disagree with the
+// authoritative Worker response about what "first" means.
+export function compareOrdinal(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+// The single reusable D24 comparator: createdAt ASC, then reportNo ASC, then
+// reportId ASC. Every ordering of Service Report history goes through here.
+export function compareServiceReportDocumentaryOrder(
+  left: Pick<ServiceReport, 'id' | 'createdAt' | 'reportNo'>,
+  right: Pick<ServiceReport, 'id' | 'createdAt' | 'reportNo'>
+): number {
+  const created = compareOrdinal(left.createdAt, right.createdAt);
+  if (created !== 0) return created;
+  const reportNo = compareOrdinal(left.reportNo, right.reportNo);
+  if (reportNo !== 0) return reportNo;
+  return compareOrdinal(left.id, right.id);
+}
+
+export function orderServiceReports<
+  T extends Pick<ServiceReport, 'id' | 'createdAt' | 'reportNo'>
+>(reports: readonly T[]): T[] {
+  return [...reports].sort(compareServiceReportDocumentaryOrder);
 }

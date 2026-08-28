@@ -373,6 +373,85 @@ const invalidTokenResponse = await handler.fetch(
 );
 check('route errors never echo bearer tokens', !(await invalidTokenResponse.text()).includes('token-that-must-not-appear'));
 
+// Phase 6R-A: Product Import capability and Repair Report role are two
+// independent authorizations parsed by two independent functions. Neither may
+// ever imply the other, so the full cross-product is asserted here rather than
+// left to the shape of the code.
+const {
+  parseCanImportProducts,
+  parseCoreStaffProfile,
+  parseRepairReportActorProfile,
+} = await import('../../src/services/staffProfile.ts');
+
+const PROFILE_UID = 'staff-uid-0001';
+const PROFILE_BRAND = 'bruno-thailand';
+
+function core(canImportProducts: unknown) {
+  return parseCoreStaffProfile(PROFILE_UID, PROFILE_UID, PROFILE_BRAND, canImportProducts);
+}
+
+for (const role of ['technician', 'approver', 'admin'] as const) {
+  const profile = core(undefined);
+  const actor = profile ? parseRepairReportActorProfile(profile, role, 'QA Staff') : null;
+  check(`role ${role} without the capability is denied Product Import`, profile?.canImportProducts === false);
+  check(`role ${role} without the capability still holds its Repair role`, actor?.role === role);
+}
+
+const capabilityOnly = core(true);
+check(
+  'the capability alone grants Product Import with no Repair role present',
+  capabilityOnly?.canImportProducts === true
+);
+check(
+  'the capability alone does not synthesize a Repair role',
+  capabilityOnly !== null && parseRepairReportActorProfile(capabilityOnly, undefined, null) === null
+);
+
+const capabilityAndRole = core(true);
+const approver = capabilityAndRole
+  ? parseRepairReportActorProfile(capabilityAndRole, 'approver', 'QA Approver')
+  : null;
+check(
+  'capability plus role grants both independently',
+  approver?.canImportProducts === true && approver.role === 'approver'
+);
+
+for (const value of [false, undefined, null, 'true', 1, {}, []] as const) {
+  check(
+    `a non-literal-true capability (${JSON.stringify(value) ?? 'undefined'}) is denied`,
+    parseCanImportProducts(value) === false && core(value)?.canImportProducts === false
+  );
+}
+
+const malformedRole = core(true);
+check(
+  'a malformed Repair role fails Repair privileged operations',
+  malformedRole !== null && parseRepairReportActorProfile(malformedRole, 'superuser', 'QA Staff') === null
+);
+check(
+  'a malformed Repair role leaves Product Import authorization intact',
+  malformedRole?.canImportProducts === true
+);
+
+const unknownFieldProfile = parseCoreStaffProfile(PROFILE_UID, PROFILE_UID, PROFILE_BRAND, true);
+check(
+  'the core profile parser exposes exactly uid, brandId and canImportProducts',
+  unknownFieldProfile !== null &&
+    Object.keys(unknownFieldProfile).sort().join(',') === 'brandId,canImportProducts,uid'
+);
+check(
+  'an unknown staff document field is ignored rather than failing provisioning',
+  parseCoreStaffProfile(PROFILE_UID, PROFILE_UID, PROFILE_BRAND, true)?.brandId === PROFILE_BRAND
+);
+check(
+  'a mismatched document uid fails closed regardless of capability',
+  parseCoreStaffProfile(PROFILE_UID, 'other-uid', PROFILE_BRAND, true) === null
+);
+check(
+  'a non-canonical brand fails closed regardless of capability',
+  parseCoreStaffProfile(PROFILE_UID, PROFILE_UID, 'not-a-brand', true) === null
+);
+
 if (failures > 0) {
   process.exitCode = 1;
   console.error(`staff authorization regression test failed: ${failures} failure(s)`);

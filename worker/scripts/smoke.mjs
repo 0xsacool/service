@@ -5,6 +5,11 @@
 // path, plus the basic validation guards, against the real Worker code.
 //
 // Usage: npm run dev (in one terminal), then npm run smoke (in another).
+//
+// Lives in worker/scripts/ rather than worker/test/ deliberately: it needs a
+// separately running Worker, so it must stay OUT of Node's automatic test
+// discovery (which matches **/test/**/*.mjs) or a bare repository-root
+// `node --test` would try to run it and fail against a dead localhost port.
 
 const BASE_URL = process.env.WORKER_URL ?? 'http://127.0.0.1:8787';
 const TEST_JOB_ID = `SMOKETEST-${Date.now()}`;

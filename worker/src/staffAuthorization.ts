@@ -1,4 +1,10 @@
 import { isCanonicalBrandId, type BrandId } from './brands.ts';
+import {
+  parseCanImportProducts as parseCapability,
+  parseCoreStaffProfile,
+  parseRepairReportActorProfile as parseActorProfile,
+  type RepairReportActorProfile,
+} from '../../src/services/staffProfile.ts';
 
 export interface StaffProfile {
   uid: string;
@@ -33,7 +39,7 @@ export interface StaffAuthorizationDataAccess {
 // "does not have this permission", which is the fail-closed answer for the
 // permission itself without taking any unrelated capability away.
 export function parseCanImportProducts(value: unknown): boolean {
-  return value === true;
+  return parseCapability(value);
 }
 
 export function parseStaffProfile(
@@ -42,14 +48,24 @@ export function parseStaffProfile(
   brandId: unknown,
   canImportProducts?: unknown
 ): StaffProfile | null {
-  if (requestedUid !== documentUid || requestedUid.length === 0 || !isCanonicalBrandId(brandId)) {
-    return null;
-  }
-  return {
-    uid: requestedUid,
+  return parseCoreStaffProfile(requestedUid, documentUid, brandId, canImportProducts);
+}
+
+export function parseRepairReportStaffProfile(
+  requestedUid: string,
+  documentUid: string,
+  brandId: unknown,
+  role: unknown,
+  displayName: unknown,
+  canImportProducts?: unknown
+): RepairReportActorProfile | null {
+  const core = parseCoreStaffProfile(
+    requestedUid,
+    documentUid,
     brandId,
-    canImportProducts: parseCanImportProducts(canImportProducts),
-  };
+    canImportProducts
+  );
+  return core ? parseActorProfile(core, role, displayName) : null;
 }
 
 export function parseServiceJobAuthorizationRecord(

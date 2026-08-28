@@ -818,3 +818,221 @@ The audit also found the order/verification cross-field invariant only checked o
 **Addendum (PI-3D, narrow PI-4R corrective follow-up, source only):** a fresh independent re-review (PI-4R) of PI-3C found zero blockers and reopened none of the bullets above, but proved three of PI-3C's seven fixes were themselves incomplete, all corrected here: the Variant/Color unsupported-value check could be masked by an earlier blank alias column sitting next to a later meaningful one (`getField`'s first-existing-header semantics, never designed to look past a blank column) — now every alias is inspected independently, so no alias-column order or blank/nonblank combination can hide an explicitly supplied value the contract still cannot represent (still no variant field, unchanged); filename sanitization ran only in the browser, so a forged request sent directly to the Worker could still carry a full directory path into the audit record — `sanitizeImportFileName` is now called authoritatively inside `parseProductImportRequest` itself, the Worker's own re-validation boundary, so a path can never be accepted regardless of what sent the request; and the root test harness's emulator-skip logic treated any unreachable emulator as safe to skip, which meant an explicitly-configured-but-unreachable `FIRESTORE_EMULATOR_HOST` silently skipped all 26 Rules tests and exited 0 — a real false-green — now distinguished from the genuinely-unconfigured case, with a configured-but-unreachable emulator failing the process instead of skipping it. Full detail in `PROJECT_STATE.md`'s PI-3D entry.
 
 **Addendum (PI-9 through PI-13, Production activation):** a final independent re-review (PI-4R2) found zero blockers and zero remaining SHOULD-FIX items; the reviewed source was checkpointed (commit `7a4be1dc60f9c423aec519ccbfe9d541a1fc5aea`) and immutably tagged (`pi-3-product-import`), then activated in Production through separately authorized, independently verified gates: the privileged Worker route was deployed (`service-tech-files-worker` version `7653385b-a090-4cb8-b4fe-c166c65c2e2b`, 100% traffic); the dedicated `canImportProducts` permission was activated for exactly one approved staff profile, as the single isolated field write this architecture has always required — never a client write path; the reviewed frontend was deployed to Hosting strictly *after* the Worker, so the privileged import UI was never exposed before its backend route existed; and Production acceptance (synthetic data only) confirmed every invariant decided above holds live — direct browser Product writes remain denied, any-error-blocks-the-whole-request holds with zero writes, stale-catalog abort requires an explicit re-preview, idempotent replay under the same actor/key/body returns the same `importId` with no duplicate write, the `productImports` audit record is Worker-only and staff-client reads of it are denied, and the audit record itself carries no token, no raw CSV, and no Variant value. One synthetic Product created during acceptance intentionally remains in Production, since Product deletion is out of scope by design and no delete path exists to remove it with. No Rules, index, or IAM change was made or needed at any point in this activation. Full detail in `PROJECT_STATE.md`'s "PI-9 through PI-13 — Production activation complete" entry.
+
+---
+
+## 044 - D24: Worker-mediated per-Service-Job Service Report history
+
+**Reason:** Firestore Rules cannot use a list query as a post-query filter,
+and a report-local predicate cannot prove ownership through the authoritative
+Service Job relationship for every possible browser query shape. Ordinary
+history therefore needs one server-controlled authorization and query
+boundary rather than a growing browser Rules allowlist.
+
+**Decision:** Ordinary per-Service-Job Service Report history is read through
+`GET /service-jobs/{serviceJobId}/service-reports`, an authenticated,
+read-only Worker operation scoped by the route to one authoritative Service
+Job. The Worker validates the caller's core staff profile and same-brand
+Service Job ownership, performs one server-controlled bounded equality query,
+strictly validates V1/V2 history, and returns a least-privilege DTO. Direct
+browser Firestore listing is not an authorization boundary for ordinary
+history after activation. No collection or path migration is introduced.
+Per-request `requestId` values remain unique; missing and foreign-resource
+responses are compared for equivalence only after masking that observability
+field.
+
+**Impact:** The browser repository uses an asynchronous per-job history
+contract with abort/generation fencing and authoritative refreshes. Final
+Rules deny every `serviceReports` list. Activation remains gated on the
+approved old-client retirement and deployment sequence.
+
+**Status:** Decided and implemented in source (Phase 3R.4B); not deployed or
+activated by this change.
+
+---
+
+## 045 - D25: Worker-mediated Approval Console reads
+
+**Reason:** Approval Console listing has the same Rules join-proof limitation
+as ordinary history and can also exceed the Rules document-access-call budget.
+A report-local brand projection may narrow a query, but cannot authorize a
+returned report independently of its authoritative Service Job.
+
+**Decision:** Approval Console pending-queue, exact report-number search,
+exact tracking-reference search, and immutable approval-review detail are
+served through separate authenticated, read-only Worker operations. The
+Worker requires the caller's current valid core staff profile, current
+approver or admin role, and canonical profile brand. A report-local brand
+projection may narrow the server query but never completes authorization:
+every returned or opened report is strictly parsed and verified against its
+authoritative Service Job before disclosure. Browser Firestore list access is
+not an authorization boundary for Approval Console after activation; all
+browser `serviceReports` lists are denied. Approval decisions remain on the
+existing digest-bound privileged Worker mutation path. No collection or path
+migration is introduced.
+
+**Impact:** D24 and D25 use separate endpoints, DTOs, repositories, runners,
+and tests. The existing three composite indexes serve the frozen Worker query
+shapes; no new IAM, R2, Product Import, Public Tracking, or mutation capability
+is introduced.
+
+**Status:** Decided and implemented in source (Phase 3R.4B); Approval Console
+activation and production acceptance remain gated.
+
+---
+
+## 046 - A terminal approval decision is claimed synchronously, not by React state
+
+**Reason:** `decide()` runs synchronously up to its first `await`, so two calls
+in the same tick share one render closure. A React-state in-flight flag is
+still `false` for both of them, so both pass the decision guard and both
+dispatch a terminal Worker mutation. A disabled control does not help: it is
+re-rendered on the same schedule as the state it reads from.
+
+**Decision:** The Approval Review decision boundary claims decision ownership
+in a synchronous ref, after every other guard rule passes and before any
+mutation is dispatched. A second same-tick call sees the claim and is refused
+locally with the existing `decision-in-flight` reason, dispatching nothing. The
+claim is scoped to the exact Service Job/report identity and released, ownership
+checked, on both success and known mutation failure, so a report or Service Job
+transition never inherits a stale claim and never releases a claim a later
+identity has taken. React state is retained for rendering only, and the digest
+still comes from the loaded Approval Review — `decide()` takes no digest.
+
+**Decision (extended, Phase 6R-A.3):** The same identity scoping governs what
+a completed decision may publish. A decision completion updates the displayed
+Approval Review only while that review still carries the decision's identity.
+Once the reviewer has selected a different report, the completion leaves the
+displayed state untouched — it does not clear it, reset it to loading, or write
+its own result or error into it. It still settles its promise, releases its
+ownership claim, and reports failure to its own caller. Queue invalidation
+after a committed mutation is brand-scoped rather than selection-scoped, so it
+is not suppressed by a selection change.
+
+**Reason (extended):** `decide()` closes over the identity it was dispatched
+for, so publishing unconditionally on completion let an older decision overwrite
+a newer selection's loaded review.
+
+**Impact:** Any Approval Console UI built in 6R-B may rely on this boundary
+rather than on control disabling for double-submit safety, and must not
+reintroduce a state-derived concurrency guard. Neither may it assume a decision
+completion refreshes whatever review happens to be on screen. The rules are
+covered by mounted hook tests: exactly one mutation for two same-tick
+decisions, a failure/retry test proving the claim is released, late success and
+late failure against a newly selected review, and a same-identity control.
+
+**Status:** Decided and implemented in source (Phase 6R-A.2; publication
+ownership extended in Phase 6R-A.3); not deployed or activated by this change.
+This is an implementation and test-harness decision only — it reopens no D1-D25
+owner decision, route contract, or architecture.
+
+## 047 - Approval Console UI (Phase 6R-B): non-authoritative role gate, single-route drill-in, lazy evidence resolution
+
+**Reason:** The D25 backend/hook foundation (#044/#045/#046) existed with no
+consuming UI. Building it required three UI-only design calls that are worth
+recording so a future reviewer does not mistake any of them for a security
+boundary, a route contract, or a new backend surface.
+
+**Decision (role gate):** `canAccessApprovalConsole` is a client-side
+convenience only. It hides the nav entry and fails a direct route visit closed
+with a Thai denial panel for any role other than `approver`/`admin`, but it
+consults nothing the Worker doesn't already enforce. The Worker's
+`approval_console_access_denied` check (#045) remains the sole authorization
+boundary and is unchanged by this phase. `canImportProducts` is a structurally
+separate capability (Product Import) and is never consulted by this gate.
+
+The gate is **role-only in every backend mode**. It deliberately does NOT
+follow `canImportProductCatalogForBackend`'s always-capable-in-mock shape:
+that is right for a per-staff convenience capability and wrong for a role
+boundary. The predicate still takes the backend kind as a parameter so a test
+can assert the outcome is identical across modes, but it never branches on it —
+a roleless or no-profile session (which is every mock session, since
+`createMockSession` carries no `staffProfile`) is denied exactly as
+`technician` is.
+
+**Decision (routing):** The Approval Console is one route
+(`/approval-console`); the queue-to-review drill-in is local component state,
+not a second route with a `serviceJobId`/`reportId` path. Unlike a Service
+Job, a pending review is not durably linkable — the instant it is decided it
+leaves the pending set, so a bookmarked/shared review URL would routinely
+404/409 for a different approver.
+
+**Decision (evidence):** `ApprovalReviewV1.content.evidenceAttachmentIds`
+exposes canonical R2 keys, not URLs. The UI resolves a key to a viewable URL
+only lazily, on the approver explicitly requesting to view one item, through
+the already-accepted `AttachmentsRepository.getDownloadUrl` (Worker-token
+gated) — no new endpoint, no raw R2 URL, no broadened attachment permission.
+
+`getDownloadUrl()` is the seam that makes this ownership possible, and its
+contract is now stated where it belongs — on `AttachmentsRepository` itself
+(`src/repositories/types.ts`), not only in the consumer. Every implementation
+resolves the id to a **caller-owned disposable object URL**: bytes are obtained
+first (locally in Mock, over the Worker-token-authenticated GET in Worker mode)
+and only then turned into a `URL.createObjectURL` value. The raw R2 key, the
+Worker origin, and any signed or public URL never leave the repository. A fresh
+URL is minted per call, the repository retains and revokes nothing, and the
+caller must revoke it and must not persist it.
+
+Every object URL created this way is owned by the review it was resolved for,
+identified as `${serviceJobId}\0${reportId}`. Unmount is not the only release
+point, because `ApprovalReviewPanel` is re-rendered rather than remounted when
+the approver moves between reports: a URL is also released when the owning
+review changes, and a resolution that settles after either event revokes its
+URL immediately instead of publishing it. What the UI renders on failure is a
+fixed safe message chosen by error type — never the caught error's own text,
+which can carry the canonical R2 key or a Worker/provider response body.
+
+**Impact:** A future reviewer must not treat `canAccessApprovalConsole` as
+changing what data a technician can reach — it changes only what the UI shows
+them. A future change to make reviews independently linkable would need its
+own decision, not a silent two-route change. Adding any other evidence-view
+mechanism must go through the same `getDownloadUrl` path, not a new Worker
+route.
+
+**Correction (Phase 6R-B.2):** As first implemented, the role gate returned
+true unconditionally in mock mode and the evidence controller released object
+URLs only on unmount, so the two paragraphs above described intent rather than
+behavior. Both are now true of the source. The decision itself did not change
+and was not reopened; only the implementation was brought up to it.
+
+**Correction (Phase 6R-B.3):** Two further gaps between this decision and the
+source are closed. First, the disposal expectation above was real in both
+implementations but absent from the repository interface, which instead carried
+wording claiming `getDownloadUrl()` was synchronous and returned a
+directly-constructed provider string — the opposite of the truth. The interface
+now states the caller-ownership contract, and
+`test/attachmentDownloadUrlContract.test.mjs` runs both real implementations to
+prove it rather than asserting it in a comment.
+
+Second, a decision modal is now bound to the exact review identity it was
+opened under. `ApprovalDecisionControls` held modal state, the rejection reason
+and the pending error outside any identity, while its confirm handler rebound
+to the newest `review` prop on every render — so a modal opened for A could
+confirm against B, carrying A's rejection reason with it. Modal state now
+carries its owning `{serviceJobId, reportId}`, is gated during render rather
+than in an effect, is re-checked before dispatch, and
+`ApprovalReviewPanel` additionally keys the controls by that same identity.
+Neither correction changes this decision, the route contract, or any D1-D25
+owner decision.
+
+**Correction (Phase 6R-B.4):** The caller-ownership obligation stated on
+`AttachmentsRepository` is repository-wide, not Approval-Console-specific, and
+the ordinary Service Report evidence caller (`useServiceReportEvidence`, the
+print preview's evidence path) did not yet meet it. It registered each resolved
+URL for revocation only after `getDownloadUrl()` settled, so a download still in
+flight when the preview unmounted or when the selected evidence changed landed
+after cleanup had already run: that URL was never revoked by anyone. It now uses
+the same shape as the Approval Console controller — a generation token that
+cleanup invalidates *before* revoking, and an ownership recheck immediately
+after every await, so a resolution that no longer owns the request revokes its
+own URL instead of becoming ownerless.
+`test/serviceReportEvidenceRuntime.test.mjs` drives the real hook through those
+orderings (resolve-before-unmount, resolve-after-unmount, late-A-under-B,
+already-displayed A replaced by B, failure then a later request, unchanged-
+request rerender, partially-resolved batch interrupted by unmount) and asserts
+what was revoked and when. Against the pre-correction hook its late-resolution
+cases fail with nothing revoked at all. The decision itself is unchanged.
+
+**Status:** Decided and implemented in source (Phase 6R-B, corrected in Phase
+6R-B.2, Phase 6R-B.3 and Phase 6R-B.4); not deployed or activated. Reopens no
+D1-D25 owner decision, route contract, or architecture.

@@ -2,6 +2,7 @@ import type { Env } from './env.ts';
 import { handleOptions, withCors } from './cors.ts';
 import { runRetentionSweep } from './retentionSweep.ts';
 import {
+  AttachmentKeyTooLongError,
   generateAttachmentPath,
   getServiceJobIdFromAttachmentKey,
   isAttachmentCategory,
@@ -61,6 +62,26 @@ import {
   MAX_FILE_SIZE_BYTES,
   readBodyWithLimit,
 } from './validation.ts';
+import {
+  handleApprovalDecisionV2,
+  handleCreateReportV2,
+  handleFinalizeReportV2,
+  handleLegacyDraftSaveV1,
+  handleManualDeletionV2,
+  handleSuccessorV2,
+  handleTrustedPrintV2,
+  serviceReportV2Mode,
+} from './serviceReportV2Routes.ts';
+import type {
+  ServiceReportV2Store,
+} from './serviceReportV2Operations.ts';
+import type { DeletionObjectStore } from './attachmentDeletionCoordinatorV2.ts';
+import {
+  handleApprovalQueueRead,
+  handleApprovalReviewRead,
+  handleServiceReportHistoryRead,
+  type ServiceReportReadStore,
+} from './serviceReportReadRoutes.ts';
 
 const FILES_PREFIX = '/files/';
 const PUBLIC_TRACKING_PREFIX = '/public/tracking/';
@@ -94,6 +115,9 @@ export interface WorkerDependencies {
   createFirestoreClient: (env: Env) => FirestoreClient;
   publicTrackingRateLimiter?: PublicTrackingRateLimiter;
   runRetentionSweep?: typeof runRetentionSweep;
+  createServiceReportV2Store?: (env: Env) => ServiceReportV2Store;
+  createEvidenceObjectStore?: (env: Env) => DeletionObjectStore;
+  createServiceReportReadStore?: (env: Env) => ServiceReportReadStore;
 }
 
 const defaultDependencies: WorkerDependencies = {
@@ -707,7 +731,15 @@ async function handleUpload(
     return json({ error: 'Missing request body' }, { status: 400 });
   }
 
-  const path = generateAttachmentPath(jobId, category, fileName);
+  let path: string;
+  try {
+    path = generateAttachmentPath(jobId, category, fileName);
+  } catch (error) {
+    if (error instanceof AttachmentKeyTooLongError) {
+      return json({ error: 'validation_failed' }, { status: 400 });
+    }
+    throw error;
+  }
 
   try {
     const body = await readBodyWithLimit(request.body, MAX_FILE_SIZE_BYTES);
@@ -876,22 +908,160 @@ export function createWorkerHandler(
       return withCors(await handleServiceJobCreate(request, env, dependencies), request, env);
     }
 
+    const readDependencies = {
+      tokenVerifier: dependencies.tokenVerifier,
+      createReadStore: dependencies.createServiceReportReadStore,
+    };
+
+    if (request.method === 'GET') {
+      if (url.pathname === '/service-reports/approval-queue') {
+        return withCors(
+          await handleApprovalQueueRead(
+            request, env, 'queue', null, readDependencies
+          ),
+          request,
+          env
+        );
+      }
+      const reportNumberPrefix = '/service-reports/approval-queue/report-number/';
+      if (url.pathname.startsWith(reportNumberPrefix)) {
+        const rawSearch = url.pathname.slice(reportNumberPrefix.length);
+        return withCors(
+          await handleApprovalQueueRead(
+            request, env, 'report-number', rawSearch, readDependencies
+          ),
+          request,
+          env
+        );
+      }
+      const trackingReferencePrefix =
+        '/service-reports/approval-queue/tracking-reference/';
+      if (url.pathname.startsWith(trackingReferencePrefix)) {
+        const rawSearch = url.pathname.slice(trackingReferencePrefix.length);
+        return withCors(
+          await handleApprovalQueueRead(
+            request, env, 'tracking-reference', rawSearch, readDependencies
+          ),
+          request,
+          env
+        );
+      }
+      if (url.pathname.startsWith(SERVICE_JOBS_PREFIX)) {
+        const rawRest = url.pathname.slice(SERVICE_JOBS_PREFIX.length);
+        const segments = rawRest.split('/').filter(Boolean);
+        if (segments.length === 2 && segments[1] === 'service-reports') {
+          return withCors(
+            await handleServiceReportHistoryRead(
+              request, env, segments[0]!, readDependencies
+            ),
+            request,
+            env
+          );
+        }
+        if (
+          segments.length === 4 &&
+          segments[1] === 'service-reports' &&
+          segments[3] === 'approval-review'
+        ) {
+          return withCors(
+            await handleApprovalReviewRead(
+              request, env, segments[0]!, segments[2]!, readDependencies
+            ),
+            request,
+            env
+          );
+        }
+      }
+    }
+
     // F5d-66 — the exact '/service-jobs' check above never matches this
     // prefix (it requires a trailing '/'), so there is no route-ordering
     // ambiguity between Service Job creation and these two new routes.
     if (request.method === 'POST' && url.pathname.startsWith(SERVICE_JOBS_PREFIX)) {
       const rest = decodeURIComponent(url.pathname.slice(SERVICE_JOBS_PREFIX.length));
       const segments = rest.split('/').filter(Boolean);
+      const v2Dependencies = {
+        tokenVerifier: dependencies.tokenVerifier,
+        createStore: dependencies.createServiceReportV2Store,
+        createObjects: dependencies.createEvidenceObjectStore,
+      };
+      const v2Mode = serviceReportV2Mode(env);
       if (segments.length === 2 && segments[1] === 'service-reports') {
+        if (v2Mode !== 'disabled') {
+          return withCors(
+            await handleCreateReportV2(request, env, segments[0]!, v2Dependencies),
+            request,
+            env
+          );
+        }
         return withCors(
           await handleServiceReportCreateDraft(request, env, segments[0]!, dependencies),
           request,
           env
         );
       }
+      if (
+        v2Mode !== 'disabled' && segments.length === 4 &&
+        segments[1] === 'service-reports' && segments[3] === 'legacy-draft-save'
+      ) {
+        return withCors(
+          await handleLegacyDraftSaveV1(
+            request, env, segments[0]!, segments[2]!, v2Dependencies
+          ),
+          request,
+          env
+        );
+      }
       if (segments.length === 4 && segments[1] === 'service-reports' && segments[3] === 'finalize') {
+        if (v2Mode !== 'disabled') {
+          return withCors(
+            await handleFinalizeReportV2(request, env, segments[0]!, segments[2]!, v2Dependencies),
+            request,
+            env
+          );
+        }
         return withCors(
           await handleServiceReportFinalize(request, env, segments[0]!, segments[2]!, dependencies),
+          request,
+          env
+        );
+      }
+      if (
+        v2Mode !== 'disabled' && segments.length === 4 &&
+        segments[1] === 'service-reports' && segments[3] === 'approval-decision'
+      ) {
+        return withCors(
+          await handleApprovalDecisionV2(request, env, segments[0]!, segments[2]!, v2Dependencies),
+          request,
+          env
+        );
+      }
+      if (
+        v2Mode !== 'disabled' && segments.length === 4 &&
+        segments[1] === 'service-reports' && segments[3] === 'successor'
+      ) {
+        return withCors(
+          await handleSuccessorV2(request, env, segments[0]!, segments[2]!, v2Dependencies),
+          request,
+          env
+        );
+      }
+      if (
+        v2Mode !== 'disabled' && segments.length === 4 &&
+        segments[1] === 'service-reports' && segments[3] === 'trusted-print'
+      ) {
+        return withCors(
+          await handleTrustedPrintV2(request, env, segments[0]!, segments[2]!, v2Dependencies),
+          request,
+          env
+        );
+      }
+      if (
+        v2Mode !== 'disabled' && segments.length === 4 &&
+        segments[1] === 'attachments' && segments[3] === 'deletion-requests'
+      ) {
+        return withCors(
+          await handleManualDeletionV2(request, env, segments[0]!, segments[2]!, v2Dependencies),
           request,
           env
         );
@@ -913,6 +1083,8 @@ export function createWorkerHandler(
         response = await handleUpload(request, env, rest, authorizeServiceJob);
       } else if (request.method === 'GET') {
         response = await handleDownload(request, env, rest, authorizeServiceJob);
+      } else if (request.method === 'DELETE' && serviceReportV2Mode(env) !== 'disabled') {
+        response = json({ error: 'Method not allowed' }, { status: 405 });
       } else if (request.method === 'DELETE') {
         response = await handleDelete(request, env, rest, authorizeServiceJob);
       } else {

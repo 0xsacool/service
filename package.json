@@ -20,6 +20,7 @@
     "test:public-tracking-browser": "node --test test/publicTrackingBrowser.test.mjs",
     "test:auth-readiness": "node --test --test-concurrency=1 test/authSession.test.mjs test/workerTokenProvider.test.mjs test/firestoreReadiness.test.mjs",
     "test:backend-configuration": "node --test test/backendConfiguration.test.mjs",
+    "test:approval-console": "node --test test/approvalConsoleAccess.test.mjs test/approvalConsolePage.test.mjs test/approvalConsoleHookLifecycle.test.mjs test/approvalConsoleLifecycle.test.mjs test/approvalConsoleEvidenceRuntime.test.mjs test/approvalConsoleInteractionRuntime.test.mjs test/serviceReportReadsArchitecture.test.mjs",
     "test:firestore-rules": "firebase emulators:exec --config firebase.rules-test.json --only firestore \"node --test test/firestoreRules.test.mjs\""
   },
   "dependencies": {

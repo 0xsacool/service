@@ -1,4 +1,10 @@
-import type { ServiceJobStatus, Priority, ChannelId, OrderVerification } from '../types';
+import type {
+  ServiceJobStatus,
+  Priority,
+  ChannelId,
+  OrderVerification,
+  WarrantyOutcome,
+} from '../types';
 
 export function statusColor(status: ServiceJobStatus): {
   text: string;
@@ -190,5 +196,29 @@ export function orderVerificationLabel(verification: OrderVerification): string 
       return 'ยืนยันแล้ว';
     case 'not_found':
       return 'ไม่พบคำสั่งซื้อ';
+  }
+}
+
+// Phase 6R-B — Approval Console warranty-outcome presentation, following the
+// same statusColor/statusLabel convention as the rest of this file.
+export function warrantyOutcomeLabel(outcome: WarrantyOutcome): string {
+  switch (outcome) {
+    case 'covered':
+      return 'อยู่ในประกัน';
+    case 'chargeable':
+      return 'มีค่าใช้จ่าย';
+    case 'undetermined':
+      return 'ยังไม่ระบุ';
+  }
+}
+
+export function warrantyOutcomeColor(outcome: WarrantyOutcome): string {
+  switch (outcome) {
+    case 'covered':
+      return 'text-success-700 bg-success-50 ring-success-200';
+    case 'chargeable':
+      return 'text-amber-700 bg-amber-50 ring-amber-200';
+    case 'undetermined':
+      return 'text-neutral-600 bg-neutral-100 ring-neutral-200';
   }
 }

@@ -22,6 +22,12 @@ service cloud.firestore {
       return signedIn() && exists(staffProfilePath()) && canonicalBrand(staffBrand());
     }
 
+    function hasRepairReportRole() {
+      return validStaff() &&
+        get(staffProfilePath()).data.keys().hasAll(['role']) &&
+        get(staffProfilePath()).data.role in ['technician', 'approver', 'admin'];
+    }
+
     function staffOwnsBrand(brandId) {
       return validStaff() && canonicalBrand(brandId) && staffBrand() == brandId;
     }
@@ -182,26 +188,42 @@ service cloud.firestore {
 
     match /serviceJobAttachments/{attachmentId} {
       allow get, list: if staffOwnsAttachment(resource.data);
-      allow create: if staffOwnsAttachment(request.resource.data) &&
-        request.resource.data.deletedAt == null;
+      allow create: if attachmentId.matches('ak2_[0-9a-f]{64}') &&
+        request.resource.data.keys().hasAll([
+          'jobId', 'category', 'name', 'path', 'contentType', 'size',
+          'uploadedAt', 'uploadedBy', 'deleteAfter', 'retentionStatus',
+          'retentionExtensions', 'deletedAt', 'metadataKeyVersion',
+          'approvalRetainUntil'
+        ]) &&
+        request.resource.data.keys().hasOnly([
+          'jobId', 'category', 'name', 'path', 'contentType', 'size',
+          'uploadedAt', 'uploadedBy', 'deleteAfter', 'retentionStatus',
+          'retentionExtensions', 'deletedAt', 'metadataKeyVersion',
+          'approvalRetainUntil'
+        ]) &&
+        request.resource.data.metadataKeyVersion == 2 &&
+        request.resource.data.path is string &&
+        request.resource.data.path.size() >= 1 && request.resource.data.path.size() <= 1024 &&
+        request.resource.data.path.matches('service-jobs/[A-Za-z0-9_-]+/(before|after|documents|report)/[A-Za-z0-9._-]+') &&
+        request.resource.data.path.matches('.*%.*') == false &&
+        request.resource.data.category in ['before', 'after', 'documents', 'report'] &&
+        request.resource.data.size is int && request.resource.data.size >= 0 &&
+        request.resource.data.deletedAt == null &&
+        request.resource.data.approvalRetainUntil == null &&
+        staffOwnsAttachment(request.resource.data);
       allow update: if staffOwnsAttachment(resource.data) &&
-        immutableAttachmentFieldsPreserved() && validDeletedAtTransition();
+        immutableAttachmentFieldsPreserved() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'deleteAfter', 'retentionStatus', 'retentionExtensions'
+        ]);
       allow delete: if false;
 
       function immutableAttachmentFieldsPreserved() {
-        return request.resource.data.jobId == resource.data.jobId &&
-          request.resource.data.category == resource.data.category &&
-          request.resource.data.name == resource.data.name &&
-          request.resource.data.path == resource.data.path &&
-          request.resource.data.contentType == resource.data.contentType &&
-          request.resource.data.size == resource.data.size &&
-          request.resource.data.uploadedAt == resource.data.uploadedAt &&
-          request.resource.data.uploadedBy == resource.data.uploadedBy;
-      }
-
-      function validDeletedAtTransition() {
-        return request.resource.data.deletedAt == resource.data.deletedAt ||
-          (resource.data.deletedAt == null && request.resource.data.deletedAt is timestamp);
+        return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'jobId', 'category', 'name', 'path', 'contentType', 'size',
+          'uploadedAt', 'uploadedBy', 'metadataKeyVersion',
+          'approvalRetainUntil', 'deletedAt'
+        ]);
       }
     }
 
@@ -215,23 +237,68 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
-    // F5d-66 / DECISIONS.md #040 — Service Report draft creation and
-    // finalize are both Worker-mediated privileged transactions (matching
-    // #036's model), never client-writable here. This is an explicit
-    // allowlist (hasOnly), not a blacklist of immutable fields — an
-    // unlisted/new field can never become client-writable by omission.
     match /serviceReports/{reportId} {
-      allow get, list: if staffOwnsServiceReport(resource.data);
+      allow get: if staffOwnsServiceReport(resource.data);
+      allow list: if false;
       allow create: if false;
-      allow update: if staffOwnsServiceReport(resource.data) &&
-        resource.data.status == 'draft' &&
+      allow update: if validV2DraftUpdate();
+      allow delete: if false;
+
+      function validV2DraftUpdate() {
+        return hasRepairReportRole() &&
+          staffOwnsServiceReport(resource.data) &&
+          resource.data.schemaVersion == 2 &&
+          resource.data.status == 'draft' &&
+          resource.data.approvalState == 'not-submitted' &&
+          request.resource.data.schemaVersion == 2 &&
+          request.resource.data.status == 'draft' &&
+          request.resource.data.approvalState == 'not-submitted' &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'technician', 'customerReportedProblem', 'inspectionFindings',
           'serviceActions', 'parts', 'technicianRemark', 'resultStatus',
           'resultDetail', 'evidenceAttachmentIds', 'claimNo',
-          'factoryReference', 'updatedAt'
-        ]);
-      allow delete: if false;
+          'factoryReference', 'warrantyOutcome', 'contentRevision', 'updatedAt'
+        ]) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'technician', 'customerReportedProblem', 'inspectionFindings',
+            'serviceActions', 'parts', 'technicianRemark', 'resultStatus',
+            'resultDetail', 'evidenceAttachmentIds', 'claimNo',
+            'factoryReference', 'warrantyOutcome'
+          ]) &&
+          request.resource.data.contentRevision == resource.data.contentRevision + 1 &&
+          request.resource.data.updatedAt == request.time &&
+          validV2EditableProjection();
+      }
+
+      function validV2EditableProjection() {
+        return request.resource.data.technician is string &&
+          request.resource.data.technician.size() <= 200 &&
+          request.resource.data.customerReportedProblem is string &&
+          request.resource.data.customerReportedProblem.size() <= 4000 &&
+          request.resource.data.inspectionFindings is string &&
+          request.resource.data.inspectionFindings.size() <= 4000 &&
+          request.resource.data.serviceActions is list &&
+          request.resource.data.serviceActions.size() <= 20 &&
+          request.resource.data.parts is list && request.resource.data.parts.size() <= 50 &&
+          request.resource.data.technicianRemark is string &&
+          request.resource.data.technicianRemark.size() <= 4000 &&
+          (request.resource.data.resultStatus == null ||
+            request.resource.data.resultStatus in [
+              'repaired', 'awaiting-part', 'sent-for-claim', 'replaced',
+              'returned', 'unable-to-repair'
+            ]) &&
+          request.resource.data.resultDetail is string &&
+          request.resource.data.resultDetail.size() <= 4000 &&
+          request.resource.data.evidenceAttachmentIds is list &&
+          request.resource.data.evidenceAttachmentIds.size() <= 50 &&
+          request.resource.data.evidenceAttachmentIds.toSet().size() ==
+            request.resource.data.evidenceAttachmentIds.size() &&
+          (request.resource.data.claimNo == null ||
+            (request.resource.data.claimNo is string && request.resource.data.claimNo.size() <= 200)) &&
+          (request.resource.data.factoryReference == null ||
+            (request.resource.data.factoryReference is string && request.resource.data.factoryReference.size() <= 200)) &&
+          request.resource.data.warrantyOutcome in ['covered', 'chargeable', 'undetermined'];
+      }
     }
 
     function staffOwnsServiceReport(report) {
@@ -246,6 +313,34 @@ service cloud.firestore {
     // existsAfter() rule at all, unlike DECISIONS.md #040's rejected
     // Option B.
     match /serviceReportActiveDrafts/{serviceJobId} {
+      allow read, write: if false;
+    }
+
+    match /serviceReportApprovals/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /brandApprovalPolicies/{brandId} {
+      allow read, write: if false;
+    }
+
+    match /serviceReportIdempotency/{keyHash} {
+      allow read, write: if false;
+    }
+
+    match /serviceReportSuccessorClaims/{predecessorReportId} {
+      allow read, write: if false;
+    }
+
+    match /attachmentRetentionHolds/{holdId} {
+      allow read, write: if false;
+    }
+
+    match /attachmentDeletionClaims/{claimId} {
+      allow read, write: if false;
+    }
+
+    match /attachmentDeletionOperations/{operationId} {
       allow read, write: if false;
     }
 

@@ -7,6 +7,7 @@ const ROUTE_TITLES: Record<string, string> = {
   [ROUTES.serviceJobs]: 'งานบริการทั้งหมด',
   [ROUTES.newServiceJob]: 'สร้างงานบริการใหม่',
   [ROUTES.masterDataProducts]: 'ข้อมูลหลักสินค้า',
+  [ROUTES.approvalConsole]: 'ศูนย์อนุมัติใบรายงาน',
 };
 
 export function routeDocumentTitle(pathname: string): string {

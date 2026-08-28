@@ -10,6 +10,7 @@ export const ROUTE_PATTERNS = {
   track: '/track/:trackingNumber',
   masterDataProducts: '/master-data/products',
   masterDataProductDetail: '/master-data/products/:id',
+  approvalConsole: '/approval-console',
 } as const;
 
 // Concrete paths / builders for navigate() and <Link to>.
@@ -24,4 +25,5 @@ export const ROUTES = {
   track: (trackingNumber: string) => `/track/${trackingNumber}`,
   masterDataProducts: '/master-data/products',
   masterDataProductDetail: (id: string) => `/master-data/products/${id}`,
+  approvalConsole: '/approval-console',
 } as const;

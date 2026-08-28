@@ -1,16 +1,27 @@
 import {
-  collection,
   doc,
   getDocFromServer,
   onSnapshot,
-  query,
   runTransaction,
   serverTimestamp,
-  where,
 } from 'firebase/firestore';
 import { getFirestoreDb } from '../lib/firebase/firebase';
-import type { ServiceJob, ServiceReport, ServiceReportDraftPatch } from '../types';
+import type {
+  ServiceJob,
+  ServiceReport,
+  ServiceReportDocument,
+  ServiceReportDraftPatch,
+  ServiceReportV2,
+  ServiceReportV2Content,
+  ServiceReportV2DraftPatch,
+  FinalContentDigest,
+} from '../types';
 import { editableServiceReportFields, orderServiceReports } from '../services/serviceReport';
+import {
+  isServiceReportV2,
+  normalizeServiceReportV2DraftPatch,
+  parseServiceReportV2,
+} from '../services/serviceReportV2';
 import type { ServiceJobsRepository, ServiceReportsRepository } from './types';
 import { fromFirestoreData, SERVICE_REPORTS_COLLECTION } from './firestore/serviceReportMapping';
 import {
@@ -21,6 +32,9 @@ import type { WorkerTokenProvider } from '../auth/workerTokenProvider';
 import { fetchWithWorkerToken } from '../auth/workerTokenProvider';
 import { getFilesWorkerBaseUrl } from '../config/workerUrl';
 import { WorkerServiceReportError } from './types';
+import {
+  createWorkerServiceReportHistoryRepository,
+} from './workerServiceReportReadRepository';
 
 function reportReference(reportId: string) {
   return doc(getFirestoreDb(), SERVICE_REPORTS_COLLECTION, reportId);
@@ -37,7 +51,7 @@ function requireServiceJob(
   return serviceJob;
 }
 
-async function readReport(reportId: string): Promise<ServiceReport | undefined> {
+async function readReport(reportId: string): Promise<ServiceReportDocument | undefined> {
   const snapshot = await getDocFromServer(reportReference(reportId));
   if (!snapshot.exists()) return undefined;
   return fromFirestoreData(snapshot.id, snapshot.data()) ?? undefined;
@@ -69,41 +83,73 @@ async function readWorkerReportResponse(response: Response): Promise<ServiceRepo
   return body.report as ServiceReport;
 }
 
+function parseReturnedV2Report(value: unknown): ServiceReportV2 | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  const id = typeof candidate.id === 'string' ? candidate.id : candidate.reportId;
+  if (typeof id !== 'string') return null;
+  const persisted = Object.fromEntries(
+    Object.entries(candidate).filter(([key]) => key !== 'id')
+  );
+  return parseServiceReportV2(id, persisted);
+}
+
+async function readWorkerV2Data<T>(
+  response: Response,
+  parseData: (value: unknown) => T | null
+): Promise<{ data: T; replayed: boolean }> {
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = body && typeof body === 'object' && 'error' in body && body.error &&
+      typeof body.error === 'object' ? body.error as Record<string, unknown> : null;
+    throw new WorkerServiceReportError(
+      typeof error?.message === 'string' ? error.message : `Worker Service Report request failed (${response.status})`,
+      response.status,
+      typeof error?.code === 'string' ? error.code : null,
+      error?.retryClass === 'never' || error?.retryClass === 'reload' ||
+      error?.retryClass === 'same-idempotency-key' || error?.retryClass === 'operator'
+        ? error.retryClass
+        : null
+    );
+  }
+  if (!body || typeof body !== 'object' || !('ok' in body) || body.ok !== true ||
+      !('data' in body) || typeof (body as { replayed?: unknown }).replayed !== 'boolean') {
+    throw new Error('Worker returned a malformed V2 success envelope');
+  }
+  const parsed = parseData((body as { data: unknown }).data);
+  if (!parsed) throw new Error('Worker returned malformed V2 operation data');
+  return { data: parsed, replayed: (body as unknown as { replayed: boolean }).replayed };
+}
+
+function reportFromV2Payload(value: unknown): ServiceReportV2 | null {
+  return value && typeof value === 'object' && 'report' in value
+    ? parseReturnedV2Report((value as { report: unknown }).report)
+    : null;
+}
+
+async function postV2(
+  tokenProvider: WorkerTokenProvider,
+  path: string,
+  body: unknown,
+  idempotencyKey?: string
+): Promise<Response> {
+  return fetchWithWorkerToken(tokenProvider, `${getFilesWorkerBaseUrl()}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+}
+
 export async function createFirestoreServiceReportsRepository(
   serviceJobs: ServiceJobsRepository,
   tokenProvider: WorkerTokenProvider
 ): Promise<ServiceReportsRepository> {
-  const reportsById = new Map<string, ServiceReport>();
-  const subscribedJobIds = new Set<string>();
+  const reportsById = new Map<string, ServiceReportDocument>();
   const subscribedReportIds = new Set<string>();
-
-  const subscribeToServiceJob = (serviceJobId: string): void => {
-    if (subscribedJobIds.has(serviceJobId)) return;
-    subscribedJobIds.add(serviceJobId);
-    void onSnapshot(
-      query(
-        collection(getFirestoreDb(), SERVICE_REPORTS_COLLECTION),
-        where('serviceJobId', '==', serviceJobId)
-      ),
-      (snapshot) => {
-        for (const [reportId, report] of reportsById) {
-          if (report.serviceJobId === serviceJobId) reportsById.delete(reportId);
-        }
-        snapshot.forEach((document) => {
-          const report = fromFirestoreData(document.id, document.data(), serviceJobId);
-          if (report?.serviceJobId === serviceJobId) reportsById.set(report.id, report);
-        });
-      },
-      (err) => {
-        recordFirestoreInitFailure(
-          describeFirestoreInitError(err, 'serviceReports', 'listener')
-        );
-        for (const [reportId, report] of reportsById) {
-          if (report.serviceJobId === serviceJobId) reportsById.delete(reportId);
-        }
-      }
-    );
-  };
+  const historyRepository = createWorkerServiceReportHistoryRepository(tokenProvider);
 
   const subscribeToReport = (reportId: string): void => {
     if (subscribedReportIds.has(reportId)) return;
@@ -134,9 +180,12 @@ export async function createFirestoreServiceReportsRepository(
   };
 
   return {
+    fetchHistoryForServiceJob(serviceJobId, signal) {
+      return historyRepository.fetchHistoryForServiceJob(serviceJobId, signal);
+    },
+
     listForServiceJob(serviceJobId) {
       if (!serviceJobs.getById(serviceJobId)) return [];
-      subscribeToServiceJob(serviceJobId);
       return orderServiceReports(
         Array.from(reportsById.values()).filter(
           (report) => report.serviceJobId === serviceJobId
@@ -219,6 +268,130 @@ export async function createFirestoreServiceReportsRepository(
       const finalized = await readWorkerReportResponse(response);
       reportsById.set(finalized.id, finalized);
       return finalized;
+    },
+
+    async createDraftV2(
+      serviceJobId: string,
+      content: ServiceReportV2Content,
+      idempotencyKey: string
+    ) {
+      requireServiceJob(serviceJobs, serviceJobId);
+      const response = await postV2(
+        tokenProvider,
+        `/service-jobs/${encodeURIComponent(serviceJobId)}/service-reports`,
+        { contractVersion: 2, content },
+        idempotencyKey
+      );
+      const result = await readWorkerV2Data(response, reportFromV2Payload);
+      reportsById.set(result.data.id, result.data);
+      return result.data;
+    },
+
+    async updateDraftV2(
+      reportId: string,
+      expectedContentRevision: number,
+      patch: ServiceReportV2DraftPatch
+    ) {
+      const normalizedPatch = normalizeServiceReportV2DraftPatch(patch);
+      if (!normalizedPatch) throw new Error('A non-empty V2 draft patch is required');
+      const reference = reportReference(reportId);
+      await runTransaction(getFirestoreDb(), async (transaction) => {
+        const snapshot = await transaction.get(reference);
+        if (!snapshot.exists()) throw new Error(`Cannot update Service Report "${reportId}": no report exists`);
+        const existing = fromFirestoreData(snapshot.id, snapshot.data());
+        if (!existing || !isServiceReportV2(existing)) throw new Error(`Cannot update malformed V2 Service Report "${reportId}"`);
+        if (existing.status !== 'draft' || existing.approvalState !== 'not-submitted') {
+          throw new Error('Only a V2 draft that has not been submitted may be edited');
+        }
+        if (existing.contentRevision !== expectedContentRevision) {
+          throw new WorkerServiceReportError('The draft revision is stale', 412, 'stale_revision', 'reload');
+        }
+        transaction.update(reference, {
+          ...normalizedPatch,
+          contentRevision: expectedContentRevision + 1,
+          updatedAt: serverTimestamp(),
+        });
+      });
+      const updated = await readReport(reportId);
+      if (!updated || !isServiceReportV2(updated)) throw new Error(`Firestore did not return updated V2 Service Report "${reportId}"`);
+      reportsById.set(reportId, updated);
+      return updated;
+    },
+
+    async finalizeV2(reportId, expectedContentRevision, idempotencyKey) {
+      const report = reportsById.get(reportId) ?? await readReport(reportId);
+      if (!report || !isServiceReportV2(report)) throw new Error(`Cannot finalize V2 Service Report "${reportId}"`);
+      const response = await postV2(
+        tokenProvider,
+        `/service-jobs/${encodeURIComponent(report.serviceJobId)}/service-reports/${encodeURIComponent(reportId)}/finalize`,
+        { contractVersion: 2, expectedContentRevision },
+        idempotencyKey
+      );
+      const result = await readWorkerV2Data(response, reportFromV2Payload);
+      reportsById.set(reportId, result.data);
+      return result.data;
+    },
+
+    async decideV2(
+      reportId: string,
+      decision: 'approved' | 'rejected',
+      rejectionReason: string | null,
+      expectedFinalDigest: FinalContentDigest,
+      idempotencyKey: string
+    ) {
+      const report = reportsById.get(reportId) ?? await readReport(reportId);
+      if (!report || !isServiceReportV2(report)) throw new Error(`Cannot decide V2 Service Report "${reportId}"`);
+      const response = await postV2(
+        tokenProvider,
+        `/service-jobs/${encodeURIComponent(report.serviceJobId)}/service-reports/${encodeURIComponent(reportId)}/approval-decision`,
+        { contractVersion: 2, decision, rejectionReason, expectedFinalDigest },
+        idempotencyKey
+      );
+      const result = await readWorkerV2Data(response, (value) =>
+        value && typeof value === 'object' && 'report' in value
+          ? parseReturnedV2Report((value as { report: unknown }).report)
+          : null
+      );
+      reportsById.set(reportId, result.data);
+      return result.data;
+    },
+
+    async createSuccessorV2(
+      predecessorReportId: string,
+      expectedPredecessorDigest: FinalContentDigest,
+      confirmedOmittedEvidenceAttachmentIds: string[],
+      idempotencyKey: string
+    ) {
+      const predecessor = reportsById.get(predecessorReportId) ?? await readReport(predecessorReportId);
+      if (!predecessor || !isServiceReportV2(predecessor)) throw new Error(`Cannot create successor for "${predecessorReportId}"`);
+      const response = await postV2(
+        tokenProvider,
+        `/service-jobs/${encodeURIComponent(predecessor.serviceJobId)}/service-reports/${encodeURIComponent(predecessorReportId)}/successor`,
+        { contractVersion: 2, expectedPredecessorDigest, confirmedOmittedEvidenceAttachmentIds },
+        idempotencyKey
+      );
+      const result = await readWorkerV2Data(response, reportFromV2Payload);
+      reportsById.set(result.data.id, result.data);
+      return result.data;
+    },
+
+    async trustedPrint(reportId, contractVersion, mode) {
+      const report = reportsById.get(reportId) ?? await readReport(reportId);
+      if (!report) throw new Error(`Cannot print Service Report "${reportId}"`);
+      const response = await postV2(
+        tokenProvider,
+        `/service-jobs/${encodeURIComponent(report.serviceJobId)}/service-reports/${encodeURIComponent(reportId)}/trusted-print`,
+        { contractVersion, mode }
+      );
+      const result = await readWorkerV2Data(response, (value) => {
+        if (!value || typeof value !== 'object' || !('report' in value) || !('printState' in value)) return null;
+        const payload = value as Record<string, unknown>;
+        const parsedReport = contractVersion === 2
+          ? parseReturnedV2Report(payload.report)
+          : payload.report as ServiceReport;
+        return parsedReport ? { ...payload, report: parsedReport } as import('./types').TrustedPrintResult : null;
+      });
+      return result.data;
     },
   };
 }

@@ -1,5 +1,5 @@
 // F5d-11 regression test — no test framework, matching this repo's
-// existing convention (see test/smoke.mjs,
+// existing convention (see scripts/smoke.mjs,
 // test/googleAuthEmailNormalization.test.mts). Proves the exact retention
 // boundary conditions F5d-11's dry run is required to demonstrate, using
 // the REAL deriveRetentionStatus() from src/attachmentRetention.ts — the

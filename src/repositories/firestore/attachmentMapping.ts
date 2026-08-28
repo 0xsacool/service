@@ -1,6 +1,7 @@
 import { Timestamp, type DocumentData } from 'firebase/firestore';
 import type {
   Attachment,
+  CanonicalAttachmentKey,
   AttachmentCategory,
   RetentionExtension,
   RetentionStatus,
@@ -10,17 +11,9 @@ import type {
 // role in serviceJobMapping.ts/customerMapping.ts.
 export const ATTACHMENTS_COLLECTION = 'serviceJobAttachments';
 
-// Attachment.id === Attachment.path (the R2 object key, e.g.
-// "service-jobs/{jobId}/{category}/{uuid}-{name}") everywhere else in this
-// codebase, but Firestore document IDs cannot contain "/" — one is always
-// interpreted as a path separator into a subcollection. R2 key characters
-// are otherwise restricted to [a-zA-Z0-9._-] by the Worker's own
-// ATTACHMENT_KEY_PATTERN (worker/src/paths.ts), so "/" -> "__" is a safe,
-// lossless, deterministic transform: it can never collide with a
-// legitimately-named file, and it means a document can always be addressed
-// directly by its R2 key without a query. This keeps the document ID
-// deterministic (per F5d-1's brief) rather than a random Firestore auto-ID.
-export function attachmentDocId(path: string): string {
+// Compatibility address only. This mapping is not injective because "__"
+// remains legal inside path segments. New metadata uses the framed ak2 hash.
+export function attachmentDocId(path: CanonicalAttachmentKey): string {
   return path.replace(/\//g, '__');
 }
 
@@ -36,7 +29,7 @@ export interface AttachmentFirestoreFields {
   jobId: string;
   category: AttachmentCategory;
   name: string;
-  path: string;
+  path: CanonicalAttachmentKey;
   contentType: string;
   size: number;
   uploadedAt: string;
@@ -57,6 +50,8 @@ export interface AttachmentFirestoreFields {
   // firestoreAttachmentsRepository.ts's markDeleted(), a narrow
   // single-field updateDoc(), never through toFirestoreFields() again.
   deletedAt: string | null;
+  metadataKeyVersion?: 2;
+  approvalRetainUntil?: string | null;
 }
 
 export function toFirestoreFields(entry: Attachment): AttachmentFirestoreFields {
@@ -73,6 +68,8 @@ export function toFirestoreFields(entry: Attachment): AttachmentFirestoreFields 
     retentionStatus: entry.retentionStatus,
     retentionExtensions: entry.retentionExtensions,
     deletedAt: entry.deletedAt,
+    ...(entry.metadataKeyVersion === 2 ? { metadataKeyVersion: 2 as const } : {}),
+    ...(entry.approvalRetainUntil !== undefined ? { approvalRetainUntil: entry.approvalRetainUntil } : {}),
   };
 }
 
@@ -103,5 +100,7 @@ export function fromFirestoreData(data: DocumentData): Attachment {
       data.deletedAt instanceof Timestamp
         ? data.deletedAt.toDate().toISOString()
         : (data.deletedAt ?? null),
+    ...(data.metadataKeyVersion === 2 ? { metadataKeyVersion: 2 as const } : {}),
+    approvalRetainUntil: data.approvalRetainUntil ?? null,
   };
 }

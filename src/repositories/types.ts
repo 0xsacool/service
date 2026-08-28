@@ -13,6 +13,12 @@ import type {
   ServiceReport,
   ServiceReportDraftInput,
   ServiceReportDraftPatch,
+  ServiceReportDocument,
+  ServiceReportV2,
+  ServiceReportV2Content,
+  ServiceReportV2DraftPatch,
+  FinalContentDigest,
+  ServiceReportHistoryItem,
 } from '../types';
 import type { BrandId } from '../types';
 import type {
@@ -285,13 +291,32 @@ export interface UploadAttachmentInput {
 // onSnapshot-backed cache once attachment metadata moves there. upload()/
 // deleteAttachment() can never be sync facades — they're real byte
 // transport to the Worker, not a cached read — so they stay Promises
-// regardless of what backs getForJob() later. getDownloadUrl() is sync
-// because both implementations can answer it without a round-trip: Mock via
-// a local object URL it already holds, Worker-backed via direct string
-// construction (id is always the R2 key — see workerAttachmentsRepository.ts).
+// regardless of what backs getForJob() later.
 export interface AttachmentsRepository {
   getForJob(jobId: string): Attachment[];
   upload(input: UploadAttachmentInput): Promise<Attachment>;
+  /**
+   * Resolves an attachment id to a viewable URL. Asynchronous in every
+   * implementation — Mock reads the Blob it holds locally, Worker-backed
+   * performs an authenticated GET through the Worker and reads the response
+   * Blob. Neither returns the raw R2 key, a provider URL, a signed URL, or a
+   * public URL, and no implementation may start doing so.
+   *
+   * The returned string is a browser object URL created by
+   * `URL.createObjectURL`, and ownership of it transfers to the CALLER. A
+   * fresh URL is created per call; the repository retains no reference and
+   * never revokes it. The caller must call `URL.revokeObjectURL(url)` once
+   * the preview/download no longer needs it — when replacing it, when losing
+   * ownership of the surface that displayed it, and on unmount — and must not
+   * persist it, because it is valid only for the lifetime of the document
+   * that created it.
+   *
+   * Phase 6R-B.3 (Phase 4R.6R finding R6R-SF2): this replaces wording that
+   * called the method synchronous and described Worker-backed resolution as
+   * direct provider-string construction. Neither was ever true of the
+   * implementations, and useEvidencePreview.ts / useServiceReportEvidence.ts
+   * have always depended on the caller-owned disposable behavior stated here.
+   */
   getDownloadUrl(id: string): Promise<string>;
   deleteAttachment(id: string): Promise<void>;
 }
@@ -310,16 +335,37 @@ export interface AttachmentsRepository {
 // (DECISIONS.md #006/#017). Never thrown by the Mock repository.
 export class WorkerServiceReportError extends Error {
   public readonly status: number;
-  constructor(message: string, status: number) {
+  public readonly code: string | null;
+  public readonly retryClass: 'never' | 'reload' | 'same-idempotency-key' | 'operator' | null;
+  constructor(
+    message: string,
+    status: number,
+    code: string | null = null,
+    retryClass: 'never' | 'reload' | 'same-idempotency-key' | 'operator' | null = null
+  ) {
     super(message);
     this.name = 'WorkerServiceReportError';
     this.status = status;
+    this.code = code;
+    this.retryClass = retryClass;
   }
 }
 
+export interface TrustedPrintResult {
+  printState: 'legacy-v1' | 'v2-draft' | 'v2-pending' | 'v2-approved' | 'v2-rejected' | 'integrity-incident';
+  report: ServiceReportDocument;
+  event: Record<string, unknown> | null;
+  evidence: { canonicalAttachmentKey: string; status: 'available' | 'missing' }[];
+  verifiedAt: string;
+}
+
 export interface ServiceReportsRepository {
-  listForServiceJob(serviceJobId: string): ServiceReport[];
-  getById(reportId: string): ServiceReport | undefined;
+  fetchHistoryForServiceJob(
+    serviceJobId: string,
+    signal?: AbortSignal
+  ): Promise<readonly ServiceReportHistoryItem[]>;
+  listForServiceJob(serviceJobId: string): ServiceReportDocument[];
+  getById(reportId: string): ServiceReportDocument | undefined;
   // F5d-66 Phase 2B-R — idempotencyKey is owned by the caller (see
   // useServiceReports.ts), not generated inside this method: only the
   // caller initiating a retry knows whether a given call is a resumption
@@ -334,4 +380,33 @@ export interface ServiceReportsRepository {
   ): Promise<ServiceReport>;
   updateDraft(reportId: string, patch: ServiceReportDraftPatch): Promise<ServiceReport>;
   finalize(reportId: string): Promise<ServiceReport>;
+  createDraftV2(
+    serviceJobId: string,
+    content: ServiceReportV2Content,
+    idempotencyKey: string
+  ): Promise<ServiceReportV2>;
+  updateDraftV2(
+    reportId: string,
+    expectedContentRevision: number,
+    patch: ServiceReportV2DraftPatch
+  ): Promise<ServiceReportV2>;
+  finalizeV2(
+    reportId: string,
+    expectedContentRevision: number,
+    idempotencyKey: string
+  ): Promise<ServiceReportV2>;
+  decideV2(
+    reportId: string,
+    decision: 'approved' | 'rejected',
+    rejectionReason: string | null,
+    expectedFinalDigest: FinalContentDigest,
+    idempotencyKey: string
+  ): Promise<ServiceReportV2>;
+  createSuccessorV2(
+    predecessorReportId: string,
+    expectedPredecessorDigest: FinalContentDigest,
+    confirmedOmittedEvidenceAttachmentIds: string[],
+    idempotencyKey: string
+  ): Promise<ServiceReportV2>;
+  trustedPrint(reportId: string, contractVersion: 1 | 2, mode: 'normal' | 'diagnostic'): Promise<TrustedPrintResult>;
 }

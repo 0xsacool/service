@@ -3,6 +3,10 @@
 // {category}/...), this is the frontend's copy of the same four values.
 export type AttachmentCategory = 'before' | 'after' | 'documents' | 'report';
 
+// The exact immutable raw R2 object key is the business identity. Derived
+// Firestore metadata, hold, and deletion-claim IDs are addresses only.
+export type CanonicalAttachmentKey = string;
+
 // F5d-2: only the two states reachable without a deletion mechanism.
 // 'active' also covers "not yet closed" (deleteAfter is null, so the
 // question doesn't apply). 'expiring-soon' covers both "within the 30-day
@@ -36,11 +40,11 @@ export interface RetentionExtension {
 // as `path` (the R2 object key), the same "id doubles as the natural
 // identifier" pattern already used by ServiceJob (id === tracking number).
 export interface Attachment {
-  id: string;
+  id: CanonicalAttachmentKey;
   jobId: string;
   category: AttachmentCategory;
   name: string;
-  path: string;
+  path: CanonicalAttachmentKey;
   contentType: string;
   size: number;
   uploadedAt: string;
@@ -67,4 +71,6 @@ export interface Attachment {
   // by default; see firestoreAttachmentsRepository.ts's
   // getForJobIncludingDeleted() for the internal audit-only escape hatch.
   deletedAt: string | null;
+  metadataKeyVersion?: 2;
+  approvalRetainUntil?: string | null;
 }

@@ -1,3 +1,8 @@
+import {
+  canonicalAttachmentKeyByteLength,
+  isCanonicalAttachmentKey,
+} from '../../src/services/attachmentIdentity.ts';
+
 export const ATTACHMENT_CATEGORIES = ['before', 'after', 'documents', 'report'] as const;
 export type AttachmentCategory = (typeof ATTACHMENT_CATEGORIES)[number];
 
@@ -20,6 +25,8 @@ export function sanitizeFileName(fileName: string): string {
   return sanitized || 'file';
 }
 
+export class AttachmentKeyTooLongError extends Error {}
+
 // service-jobs/{jobId}/{category}/{uuid}-{sanitizedFileName} — the approved
 // F5 path convention. The uuid prefix is always generated here, never
 // accepted from the caller, so two uploads named "photo.jpg" never collide
@@ -31,7 +38,11 @@ export function generateAttachmentPath(
   fileName: string
 ): string {
   const uniqueName = `${crypto.randomUUID()}-${sanitizeFileName(fileName)}`;
-  return `service-jobs/${jobId}/${category}/${uniqueName}`;
+  const key = `service-jobs/${jobId}/${category}/${uniqueName}`;
+  if (canonicalAttachmentKeyByteLength(key) > 1024) {
+    throw new AttachmentKeyTooLongError('Attachment key exceeds the R2 limit');
+  }
+  return key;
 }
 
 // Applied to every GET/DELETE key, not just what this Worker itself
@@ -45,7 +56,7 @@ const ATTACHMENT_KEY_PATTERN = new RegExp(
 );
 
 export function isValidAttachmentKey(key: string): boolean {
-  return ATTACHMENT_KEY_PATTERN.test(key);
+  return ATTACHMENT_KEY_PATTERN.test(key) && isCanonicalAttachmentKey(key);
 }
 
 export function getServiceJobIdFromAttachmentKey(key: string): string | null {

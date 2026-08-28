@@ -3,10 +3,12 @@ import type {
   ResultStatus,
   ServiceAction,
   ServiceReport,
+  ServiceReportDocument,
   ServiceReportPart,
   ServiceReportSnapshot,
 } from '../../types';
 import { isValidServiceReport } from '../../services/serviceReport';
+import { parseServiceReportV2 } from '../../services/serviceReportV2';
 
 export const SERVICE_REPORTS_COLLECTION = 'serviceReports';
 
@@ -64,9 +66,26 @@ export function fromFirestoreData(
   documentId: string,
   data: DocumentData,
   expectedServiceJobId?: string
-): ServiceReport | null {
+): ServiceReportDocument | null {
   if (expectedServiceJobId !== undefined && data.serviceJobId !== expectedServiceJobId) {
     return null;
+  }
+  if (data.schemaVersion === 2) {
+    const timestampFields = new Set([
+      'createdAt',
+      'updatedAt',
+      'finalizedAt',
+      'approvalDecidedAt',
+    ]);
+    const canonical = Object.fromEntries(
+      Object.entries(data).map(([key, value]) => [
+        key,
+        timestampFields.has(key) && value instanceof Timestamp
+          ? value.toDate().toISOString()
+          : value,
+      ])
+    );
+    return parseServiceReportV2(documentId, canonical);
   }
   const createdAt = readTimestamp(data.createdAt);
   const updatedAt = readTimestamp(data.updatedAt);

@@ -1,4 +1,40 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "serviceReports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brandId", "order": "ASCENDING" },
+        { "fieldPath": "schemaVersion", "order": "ASCENDING" },
+        { "fieldPath": "approvalState", "order": "ASCENDING" },
+        { "fieldPath": "finalizedAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "serviceReports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brandId", "order": "ASCENDING" },
+        { "fieldPath": "schemaVersion", "order": "ASCENDING" },
+        { "fieldPath": "approvalState", "order": "ASCENDING" },
+        { "fieldPath": "reportNo", "order": "ASCENDING" },
+        { "fieldPath": "finalizedAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "serviceReports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brandId", "order": "ASCENDING" },
+        { "fieldPath": "schemaVersion", "order": "ASCENDING" },
+        { "fieldPath": "approvalState", "order": "ASCENDING" },
+        { "fieldPath": "snapshot.trackingReference", "order": "ASCENDING" },
+        { "fieldPath": "finalizedAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }

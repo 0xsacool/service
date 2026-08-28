@@ -72,10 +72,11 @@ export const attachmentsRepository: AttachmentsRepository = {
     return attachment;
   },
 
-  // Real, working object URL — not a placeholder string — so Mock mode
-  // behaves identically to the Worker-backed implementation from a
-  // consumer's point of view (a future gallery/preview UI can just use
-  // whatever getDownloadUrl() returns, in either mode, unmodified).
+  // A real, working object URL — not a placeholder string — so Mock mode
+  // behaves identically to the Worker-backed implementation from a consumer's
+  // point of view. Per the AttachmentsRepository contract (types.ts) this is a
+  // FRESH caller-owned URL on every call: nothing here retains or revokes it,
+  // and the stored Blob, not this URL, is what survives between calls.
   async getDownloadUrl(id) {
     const entry = attachmentsById.get(id);
     if (!entry || entry.attachment.deletedAt !== null) {
