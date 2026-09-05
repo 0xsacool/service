@@ -3967,6 +3967,57 @@ Production — every activation gate listed under Phase 3R.4B above still
 applies unchanged. Rules, indexes, IAM, R2, Product Import, and Public
 Tracking are untouched.
 
+## Phase 7D-B.4C — Worker timestamp decoding and R8 correction (offline only)
+
+The shared Worker Firestore decoder previously converted `timestampValue` to
+`null`. A legacy V1 draft whose `updatedAt` was written with `serverTimestamp`
+therefore failed canonical Service Report validation and took the finalize
+report-not-found path before lock lookup. The scoped source correction in
+`worker/src/firestoreClient.ts` decodes validated timestamps to domain strings,
+preserving fractional precision. Invalid calendar dates, timezone/range values,
+non-string timestamp payloads, and ambiguous timestamp wire unions throw a
+fixed error; they cannot become an accepted nullable `finalizedAt`. Nested
+map/array timestamps use the same decoder. Existing non-timestamp decoding,
+finalize implementation, transaction retry policy, and commit encoding are
+unchanged. No architecture decision or deployment configuration changed.
+
+Offline evidence:
+
+- `node worker/test/firestoreTimestampDecode.test.mjs`: 8 regression groups
+  pass, including the exact observed A-style failure reproduced with synthetic
+  content, real report parsing, mocked route/finalize flow, malformed and missing
+  reports, auth/brand/lock/state checks, and unchanged commit shape.
+- Existing `worker/test/serviceReportFinalization.test.mts`,
+  `serviceReportAllocatorCommit.test.mts`, `serviceReportRoutes.test.mts`, and
+  `firestoreClientMarkDeleted.test.mts`: pass. Worker TypeScript check passes.
+- `worker/test/phase7db4cR8Offline.test.ps1`, run using the approved PowerShell
+  7.6.5 runtime: parser/AST, R7-to-R8 exact scope audit, timestamp preflight,
+  3,500 HTTP-status cases, privacy, seven-write order/body inventory, and
+  unchanged no-retry executor control flow pass. Tests parse executor source
+  and invoke only selected pure helpers with a memory-backed status writer;
+  neither executor's entry point nor its business/auth/network functions run.
+
+R7 remains frozen with SHA-256
+`8d1537d45197b94295b5f72d462812bfef8478d7c0b2f2479133b7f600129de1`.
+Both requested R8 paths were absent before creation. The new read-only executor
+is `C:\Users\sacoo\AppData\Local\Temp\phase7db3-executor-instrumented-frozen-20260905-r8.ps1`,
+SHA-256 `2c32f7767c25450cbbe2d48d4926e860ed0fc67418a7fdac2dbc34222c7bb289`.
+Its status path, `C:\Users\sacoo\AppData\Local\Temp\phase7db3-executor-instrumented-status-20260905-r8.log`,
+remains absent. R8 changes only status-path rotation, corrected-contract
+report timestamp preflight, and bounded HTTP diagnostic/stop codes. B/C patch
+text, three-field masks, server timestamp transforms, C's fuse part, A/D/E
+finalize-only bodies, and the exact seven-write sequence remain unchanged.
+
+No production read/call, authentication, business execution, Firestore mutation,
+Worker upload/deploy/traffic change, commit, push, or tag occurred. The user-
+provided production baseline remains five active V1 drafts, five matching locks,
+and zero of seven committed business writes; it was not re-read in this phase.
+The source fix is not deployed. Next is a separately authorized review/deploy
+gate for the corrected Worker, followed by an executor readiness review before
+any execution authorization. R8's original repository/platform/version pins
+remain unchanged; they must be reconciled explicitly at that later gate and
+must never be bypassed to run against a changed deployment.
+
 ## Development Principles
 
 1. **Docs before backend expansion.** Any future repository or production-data expansion gets the same documentation, review, and approval treatment as the delivered Firestore repositories, not a silent bulk migration.

@@ -206,8 +206,37 @@ async function getDocument(
     : await readDocument();
 }
 
+function decodeTimestamp(value: unknown): string {
+  if (typeof value !== 'string') throw new Error('Invalid Firestore timestamp');
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/.exec(value);
+  if (!match) throw new Error('Invalid Firestore timestamp');
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  const zone = match[7] ?? '';
+  const instant = Date.parse(value);
+  if (
+    year < 1 || month < 1 || month > 12 || day < 1 || day > (days[month - 1] ?? 0) ||
+    Number(match[4]) > 23 || Number(match[5]) > 59 || Number(match[6]) > 59 ||
+    (zone !== 'Z' && (Number(zone.slice(1, 3)) > 23 || Number(zone.slice(4)) > 59)) ||
+    !Number.isFinite(instant) || instant < -62135596800000 || instant > 253402300799999
+  ) {
+    throw new Error('Invalid Firestore timestamp');
+  }
+  // Preserve Firestore's sub-millisecond precision in the domain string.
+  return value;
+}
+
 function valueToJson(value: FirestoreValue | undefined): unknown {
   if (!value) return null;
+  // Malformed timestamps must not become null: null is valid for draft finalizedAt.
+  if (Object.hasOwn(value, 'timestampValue')) {
+    if (Object.keys(value).length !== 1) throw new Error('Invalid Firestore timestamp');
+    return decodeTimestamp(value.timestampValue);
+  }
   if (value.nullValue !== undefined) return null;
   if (typeof value.stringValue === 'string') return value.stringValue;
   if (typeof value.booleanValue === 'boolean') return value.booleanValue;
