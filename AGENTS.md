@@ -84,3 +84,15 @@ Conventional Commits: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, `test:`. 
 - **No skipped hooks or bypassed checks** (`--no-verify` or equivalent) without explicit user instruction.
 - **No package installs or dependency changes** without the user's go-ahead — this project has explicitly gated even documentation work behind "do not install packages" instructions; treat that caution as the default posture, not just a one-off restriction for Phase 1.
 - **No cross-brand data leakage** — any new query or view must respect brand scoping ([DECISIONS.md](DECISIONS.md) #002); this is a correctness requirement, not a nice-to-have.
+
+
+# Codex project instructions
+
+For complex coding tasks, use the `astra-orchestrator` skill when its trigger conditions match.
+
+The root agent owns architecture, decomposition, integration, and final verification.
+Prefer specialized subagents for bounded exploration, implementation, testing, review, and technical research.
+
+Do not delegate trivial work merely for parallelism.
+Do not let multiple implementation agents edit the same files without explicit ownership boundaries.
+User instructions always take precedence over this orchestration policy.
