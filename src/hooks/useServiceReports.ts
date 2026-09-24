@@ -28,7 +28,8 @@ export interface UseServiceReportsResult {
   createDraft: (input?: ServiceReportDraftInput) => Promise<ServiceReportDocument>;
   updateDraft: (
     reportId: string,
-    patch: ServiceReportDraftPatch
+    patch: ServiceReportDraftPatch,
+    displayedVersion?: { sourceSchemaVersion: 1 | 2; updatedAt: string; contentRevision?: number }
   ) => Promise<ServiceReportDocument>;
   finalize: (reportId: string, expectedContentRevision?: number) => Promise<ServiceReportDocument>;
   // D25: there is deliberately no decide() here. A terminal approval decision
@@ -48,6 +49,24 @@ export interface UseServiceReportsResult {
 }
 
 const historyCache = new Map<string, readonly ServiceReportHistoryItem[]>();
+
+interface DraftSaveAttempt {
+  sourceSchemaVersion: 1 | 2;
+  expectedUpdatedAt?: string;
+  expectedContentRevision?: number;
+  idempotencyKey: string;
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, entry]) => entry !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right));
+    return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
 
 function assertLegacyMutationAllowed(): void {
   if (getServiceReportV2ClientMode() === 'v2-active') {
@@ -136,6 +155,7 @@ export function useServiceReports(serviceJobId: string): UseServiceReportsResult
   // full ownership/lifetime reasoning and its own direct unit tests.
   const attemptKey = useRef(createServiceReportDraftAttemptKeyController()).current;
   const operationKeys = useRef(new Map<string, string>()).current;
+  const draftSaveAttempts = useRef(new Map<string, DraftSaveAttempt>()).current;
   const reports = reportsJobId === serviceJobId
     ? storedReports
     : [...(historyCache.get(serviceJobId) ?? [])];
@@ -251,20 +271,65 @@ export function useServiceReports(serviceJobId: string): UseServiceReportsResult
     }
   };
 
-  const updateDraft = async (reportId: string, patch: ServiceReportDraftPatch) => {
+  const updateDraft = async (
+    reportId: string,
+    patch: ServiceReportDraftPatch,
+    displayedVersion?: { sourceSchemaVersion: 1 | 2; updatedAt: string; contentRevision?: number }
+  ) => {
     const current = reports.find((item) => item.id === reportId);
-    let report: ServiceReportDocument;
-    if (current?.sourceSchemaVersion === 2) {
-      report = await repositories.serviceReports.updateDraftV2(
-        reportId, current.contentRevision, patch
-      );
-    } else {
-      assertLegacyMutationAllowed();
-      report = await repositories.serviceReports.updateDraft(reportId, patch);
+    if (!current) throw new Error('Cannot save a Service Report that is not in the displayed history');
+    const version = displayedVersion ?? {
+      sourceSchemaVersion: current.sourceSchemaVersion,
+      updatedAt: current.updatedAt,
+      ...(current.sourceSchemaVersion === 2 ? { contentRevision: current.contentRevision } : {}),
+    };
+    if (version.sourceSchemaVersion !== current.sourceSchemaVersion) {
+      throw new WorkerServiceReportError('The displayed Service Report version is stale', 412, 'stale_revision', 'reload');
     }
-    applyProvisional(report);
-    await refreshHistory();
-    return report;
+    const expectedContentRevision = version.sourceSchemaVersion === 2
+      ? version.contentRevision ?? (current.sourceSchemaVersion === 2 ? current.contentRevision : undefined)
+      : undefined;
+    if (version.sourceSchemaVersion === 2 && expectedContentRevision === undefined) {
+      throw new WorkerServiceReportError('The displayed V2 revision is unavailable', 412, 'stale_revision', 'reload');
+    }
+    const attemptScope = `draft-save:${reportId}:${stableJson(patch)}`;
+    let attempt = draftSaveAttempts.get(attemptScope);
+    if (!attempt) {
+      attempt = {
+        sourceSchemaVersion: version.sourceSchemaVersion,
+        expectedUpdatedAt: version.updatedAt,
+        ...(version.sourceSchemaVersion === 2 ? {
+          expectedContentRevision,
+        } : {}),
+        idempotencyKey: crypto.randomUUID(),
+      };
+      draftSaveAttempts.set(attemptScope, attempt);
+    }
+    if (attempt.sourceSchemaVersion !== version.sourceSchemaVersion) {
+      throw new WorkerServiceReportError('The pending draft save belongs to a different report version', 412, 'stale_revision', 'reload');
+    }
+    try {
+      let report: ServiceReportDocument;
+      if (attempt.sourceSchemaVersion === 2) {
+        report = await repositories.serviceReports.updateDraftV2(
+          reportId, attempt.expectedContentRevision!, patch, attempt.idempotencyKey
+        );
+      } else {
+        assertLegacyMutationAllowed();
+        report = await repositories.serviceReports.updateDraft(
+          reportId, patch, attempt.expectedUpdatedAt, attempt.idempotencyKey
+        );
+      }
+      draftSaveAttempts.delete(attemptScope);
+      applyProvisional(report);
+      await refreshHistory();
+      return report;
+    } catch (error) {
+      if (error instanceof WorkerServiceReportError && error.status >= 400 && error.status < 500) {
+        draftSaveAttempts.delete(attemptScope);
+      }
+      throw error;
+    }
   };
 
   const operationKey = (scope: string): string => {

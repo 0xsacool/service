@@ -2,6 +2,7 @@ import { createWorkerHandler, type WorkerDependencies } from '../src/index.ts';
 import type { Env } from '../src/env.ts';
 import type { FirestoreClient } from '../src/firestoreClient.ts';
 import type { ServiceReport } from '../../src/types/serviceReport.ts';
+import type { ActiveDraftLock } from '../src/serviceReportCreation.ts';
 import type { ServiceJob } from '../../src/types/serviceJob.ts';
 import type { CanonicalAttachmentKey } from '../../src/types/attachment.ts';
 import { attachmentMetadataDocId } from '../../src/services/attachmentIdentity.ts';
@@ -56,7 +57,7 @@ interface FakeState {
   jobs: Map<string, ServiceJob>;
   reports: Map<string, ServiceReport>;
   draftKeys: Map<string, string>;
-  locks: Map<string, { draftReportId: string }>;
+  locks: Map<string, ActiveDraftLock>;
   sequences: Map<string, number>;
 }
 
@@ -97,7 +98,15 @@ function createHandler(
           return state.reports.get(reportId) ?? null;
         },
         async getActiveDraftLock(_: unknown, serviceJobId: string) {
-          return state.locks.get(serviceJobId) ?? null;
+          const lock = state.locks.get(serviceJobId);
+          if (!lock) return null;
+          if (lock.slotVersion === 1) {
+            return {
+              ...lock,
+              draftReportId: lock.state === 'active' ? String(lock.activeReportId) : '',
+            };
+          }
+          return lock;
         },
         async getSequence(_: unknown, brandId: string, __: string, year: number) {
           return state.sequences.get(`${brandId}__${year}`) ?? null;
@@ -113,11 +122,13 @@ function createHandler(
             brandId: string;
             sequence: number;
             year: number;
+            activeDraftSlot: ActiveDraftLock;
+            activeDraftSlotExists: boolean;
           }
         ) {
           state.reports.set(input.report.id, input.report);
           state.draftKeys.set(input.key, input.report.id);
-          state.locks.set(input.report.serviceJobId, { draftReportId: input.report.id });
+          state.locks.set(input.report.serviceJobId, input.activeDraftSlot);
           state.sequences.set(`${input.brandId}__${input.year}`, input.sequence);
         },
         async commitFinalization(
@@ -906,6 +917,180 @@ for (const mode of ['disabled', 'compatibility'] as const) {
   check('V1 text-only save rejects retained evidence whose metadata owner changed without writes',
     foreignOwner.status === 403 && store.committedWrites.length === 0 &&
     JSON.stringify(store.read('serviceReports', report.id)) === before);
+}
+
+// V2 creation/finalization in compatibility mode releases a versioned slot
+// that the ordinary V1 create route can advance without duplicate drafts.
+{
+  const jobId = 'BRN-2026-000023';
+  const serviceJob = makeServiceJob(jobId, 'bruno-thailand');
+  const state: FakeState = {
+    profile: { uid: 'staff-uid-1', brandId: 'bruno-thailand' },
+    jobs: new Map([[jobId, serviceJob]]),
+    reports: new Map(),
+    draftKeys: new Map(),
+    locks: new Map(),
+    sequences: new Map(),
+  };
+  const store = new MemoryV2Store();
+  store.set('serviceJobs', jobId, { ...serviceJob });
+  store.set('staffProfiles', 'staff-uid-1', {
+    brandId: 'bruno-thailand', role: 'technician', displayName: 'QA Technician',
+  });
+  const { handler, env } = createHandler(state, { mode: 'compatibility', v2Store: store });
+  const base = `http://worker.test/service-jobs/${jobId}/service-reports`;
+  const v2Create = await handler.fetch(new Request(base, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json',
+      'Idempotency-Key': 'aeeeeeee-eeee-4eee-8eee-eeeeeeeeee01' },
+    body: JSON.stringify({
+      contractVersion: 2,
+      content: {
+        technician: 'QA Technician',
+        customerReportedProblem: 'Fault reported',
+        inspectionFindings: 'Fault reproduced',
+        serviceActions: ['repair'],
+        parts: [],
+        technicianRemark: '',
+        resultStatus: 'repaired',
+        resultDetail: '',
+        evidenceAttachmentIds: [],
+        claimNo: null,
+        factoryReference: null,
+        warrantyOutcome: 'undetermined',
+      },
+    }),
+  }), env);
+  const v2Body = await v2Create.json() as { data?: { report?: { id: string } } };
+  const v2ReportId = v2Body.data?.report?.id;
+  const v2Save = v2ReportId ? await handler.fetch(new Request(
+    `${base}/${v2ReportId}/draft-save`,
+    {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json',
+        'Idempotency-Key': 'aeeeeeee-eeee-4eee-8eee-eeeeeeeeee04' },
+      body: JSON.stringify({
+        contractVersion: 2, expectedContentRevision: 0,
+        patch: { technicianRemark: 'Saved before finalize' },
+      }),
+    }
+  ), env) : null;
+  const v2FinalizeRequest = () => new Request(
+    `${base}/${v2ReportId}/finalize`,
+    {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json',
+        'Idempotency-Key': 'aeeeeeee-eeee-4eee-8eee-eeeeeeeeee02' },
+      body: JSON.stringify({ contractVersion: 2, expectedContentRevision: 1 }),
+    }
+  );
+  const v2Finalize = v2ReportId ? await handler.fetch(v2FinalizeRequest(), env) : null;
+  // The client may lose the committed response. Resending the exact request
+  // must return the final report without another transaction commit.
+  const writesAfterV2Finalize = store.committedWrites.length;
+  const v2FinalizeReplay = v2ReportId ? await handler.fetch(v2FinalizeRequest(), env) : null;
+  const v2FinalizeReplayBody = v2FinalizeReplay
+    ? await v2FinalizeReplay.json() as { replayed?: boolean; data?: { report?: { status?: string } } }
+    : null;
+  check('compatibility V2 finalize replays a committed lost response without another write',
+    v2Finalize?.status === 200 && v2FinalizeReplay?.status === 200 &&
+    v2FinalizeReplayBody?.replayed === true &&
+    v2FinalizeReplayBody.data?.report?.status === 'final' &&
+    store.committedWrites.length === writesAfterV2Finalize);
+  const slot = store.read('serviceReportActiveDrafts', jobId);
+
+  check('compatibility V2 create/finalize leaves the expected released slot',
+    v2Create.status === 201 && v2Finalize?.status === 200 &&
+      slot?.slotVersion === 1 && slot.state === 'released' &&
+      slot.activeReportId === null && slot.lastReleasedReportId === v2ReportId);
+  if (slot) state.locks.set(jobId, slot as unknown as ActiveDraftLock);
+  const v1Create = await handler.fetch(new Request(base, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json',
+      'Idempotency-Key': 'aeeeeeee-eeee-4eee-8eee-eeeeeeeeee03' },
+    body: JSON.stringify({ input: {} }),
+  }), env);
+  const v1Body = await v1Create.json() as { report?: ServiceReport };
+  check('compatibility mode creates one V1 draft after a V2 finalized slot',
+    v1Create.status === 201 && v1Body.report?.status === 'draft' &&
+      state.locks.get(jobId)?.state === 'active' &&
+      state.locks.get(jobId)?.generation === 2 &&
+      state.locks.get(jobId)?.activeReportId === v1Body.report.id);
+}
+
+// Explicit V1 finalize replay must reauthorize the current profile inside the transaction.
+{
+  const jobId = 'BRN-2026-000022';
+  const serviceJob = makeServiceJob(jobId, 'bruno-thailand');
+  const report = createServiceReportDraft(
+    '00000000-0000-4000-8000-000000000022',
+    'FR-2026-000022',
+    serviceJob,
+    {
+      customerReportedProblem: 'Fault reported',
+      inspectionFindings: 'Fault reproduced',
+      serviceActions: ['repair'],
+      resultStatus: 'repaired',
+    },
+    new Date('2026-03-01T00:00:00.000Z')
+  );
+  const state: FakeState = {
+    profile: { uid: 'staff-uid-1', brandId: 'bruno-thailand' },
+    jobs: new Map([[jobId, serviceJob]]),
+    reports: new Map([[report.id, report]]),
+    draftKeys: new Map(),
+    locks: new Map([[jobId, { draftReportId: report.id }]]),
+    sequences: new Map(),
+  };
+  const store = new MemoryV2Store();
+  store.set('serviceJobs', jobId, { ...serviceJob });
+  store.set('staffProfiles', 'staff-uid-1', {
+    brandId: 'bruno-thailand', role: 'technician', displayName: 'QA Technician',
+  });
+  const reportData = { ...report } as unknown as Record<string, unknown>;
+  delete reportData.id;
+  store.set('serviceReports', report.id, reportData);
+  store.set('serviceReportActiveDrafts', jobId, { draftReportId: report.id });
+  const { handler, env } = createHandler(state, { mode: 'disabled', v2Store: store });
+  const key = 'accccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const request = () => new Request(
+    `http://worker.test/service-jobs/${jobId}/service-reports/${report.id}/finalize`,
+    {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json', 'Idempotency-Key': key },
+      body: JSON.stringify({ contractVersion: 1, expectedUpdatedAt: report.updatedAt }),
+    }
+  );
+  const finalized = await handler.fetch(request(), env);
+  check('explicit V1 finalize succeeds before access is revoked', finalized.status === 200);
+  const writesAfterFinalize = store.committedWrites.length;
+  const releasedSlot = store.read('serviceReportActiveDrafts', jobId);
+  if (!releasedSlot) throw new Error('explicit V1 finalize did not retain a released slot');
+  state.locks.set(jobId, releasedSlot as unknown as ActiveDraftLock);
+  const nextDraftResponse = await handler.fetch(new Request(
+    `http://worker.test/service-jobs/${jobId}/service-reports`,
+    {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json',
+        'Idempotency-Key': 'addddddd-dddd-4ddd-8ddd-dddddddddddd' },
+      body: JSON.stringify({ input: {} }),
+    }
+  ), env);
+  const nextDraftBody = await nextDraftResponse.json() as { report?: ServiceReport };
+  check('disabled mode creates a new V1 draft after explicit versioned V1 finalization',
+    nextDraftResponse.status === 201 && nextDraftBody.report?.status === 'draft' &&
+      state.locks.get(jobId)?.state === 'active' &&
+      state.locks.get(jobId)?.activeReportId === nextDraftBody.report.id &&
+      state.locks.get(jobId)?.generation === 2);
+
+  store.set('staffProfiles', 'staff-uid-1', {
+    brandId: 'bruno-thailand', role: 'customer', displayName: 'QA Technician',
+  });
+  const replay = await handler.fetch(request(), env);
+  const replayBody = await replay.json() as { data?: { report?: unknown }; report?: unknown };
+  check('explicit V1 finalize replay after role removal is 403 with no report data or writes',
+    replay.status === 403 && replayBody.data?.report === undefined && replayBody.report === undefined &&
+    store.committedWrites.length === writesAfterFinalize);
 }
 
 if (failures) process.exitCode = 1;

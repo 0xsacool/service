@@ -23,6 +23,7 @@ import type {
   ServiceAction,
   ServiceJob,
   ServiceReport,
+  ServiceReportDocument,
   ServiceReportDraftPatch,
   ServiceReportPart,
   ResultStatus,
@@ -30,6 +31,7 @@ import type {
 import { RESULT_STATUSES, SERVICE_ACTIONS } from '../../../types';
 import { useServiceReports } from '../../../hooks/useServiceReports';
 import { getServiceReportV2ClientMode } from '../../../config/serviceReportV2';
+import { WorkerServiceReportError } from '../../../repositories/types';
 import {
   useServiceJobAttachments,
   type ServiceJobAttachmentOption,
@@ -56,6 +58,28 @@ import {
   toDraftPatch,
 } from './serviceReportUi';
 import { ServiceReportPrintPreview } from './ServiceReportPrintPreview';
+
+interface DisplayedServiceReportVersion {
+  sourceSchemaVersion: 1 | 2;
+  updatedAt: string;
+  contentRevision?: number;
+}
+
+function versionFromReport(report: ServiceReport): DisplayedServiceReportVersion {
+  const sourceSchemaVersion: 1 | 2 = 'sourceSchemaVersion' in report
+    ? report.sourceSchemaVersion === 2 ? 2 : 1
+    : 'schemaVersion' in report ? 2 : 1;
+  const contentRevision = 'contentRevision' in report && typeof report.contentRevision === 'number'
+    ? report.contentRevision
+    : undefined;
+  return {
+    sourceSchemaVersion,
+    updatedAt: report.updatedAt,
+    ...(sourceSchemaVersion === 2 && contentRevision !== undefined
+      ? { contentRevision }
+      : {}),
+  };
+}
 
 interface DraftFormState {
   technician: string;
@@ -189,14 +213,29 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
     }
   };
 
-  const handleSave = async (reportId: string, patch: ServiceReportDraftPatch) => {
-    await updateDraft(reportId, patch);
-  };
+  const handleSave = async (
+    reportId: string,
+    patch: ServiceReportDraftPatch,
+    displayedVersion: DisplayedServiceReportVersion
+  ) => updateDraft(reportId, patch, displayedVersion);
 
-  const handleFinalize = async (reportId: string, patch: ServiceReportDraftPatch) => {
-    await updateDraft(reportId, patch);
-    await finalize(reportId);
+  const handleFinalize = async (
+    reportId: string,
+    patch: ServiceReportDraftPatch,
+    displayedVersion: DisplayedServiceReportVersion,
+    onDraftSaved: (saved: ServiceReportDocument) => void,
+    pendingFinalize: ServiceReportDocument | null
+  ) => {
+    const saved = pendingFinalize ?? await updateDraft(reportId, patch, displayedVersion);
+    if (!pendingFinalize) onDraftSaved(saved);
+    const finalized = await finalize(
+      reportId,
+      'schemaVersion' in saved && saved.schemaVersion === 2
+        ? saved.contentRevision
+        : undefined
+    );
     setMode('view');
+    return finalized;
   };
 
   if (selectedReport && mode === 'edit' && canEditDraft(selectedReport)) {
@@ -211,8 +250,10 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
           setSelectedReportId(null);
           setMode(null);
         }}
-        onSave={(patch) => handleSave(selectedReport.id, patch)}
-        onFinalize={(patch) => handleFinalize(selectedReport.id, patch)}
+        onSave={(patch, displayedVersion) => handleSave(selectedReport.id, patch, displayedVersion)}
+        onFinalize={(patch, displayedVersion, onDraftSaved, pendingFinalize) =>
+          handleFinalize(selectedReport.id, patch, displayedVersion, onDraftSaved, pendingFinalize)
+        }
       />
     );
   }
@@ -545,10 +586,22 @@ function ServiceReportEditor({
   attachments: ServiceJobAttachmentOption[];
   finalizePromptToken: number;
   onClose: () => void;
-  onSave: (patch: ServiceReportDraftPatch) => Promise<void>;
-  onFinalize: (patch: ServiceReportDraftPatch) => Promise<void>;
+  onSave: (
+    patch: ServiceReportDraftPatch,
+    displayedVersion: DisplayedServiceReportVersion
+  ) => Promise<ServiceReportDocument>;
+  onFinalize: (
+    patch: ServiceReportDraftPatch,
+    displayedVersion: DisplayedServiceReportVersion,
+    onDraftSaved: (saved: ServiceReportDocument) => void,
+    pendingFinalize: ServiceReportDocument | null
+  ) => Promise<ServiceReportDocument>;
 }) {
   const [form, setForm] = useState<DraftFormState>(() => formStateFromReport(report));
+  // Keep the version the form was opened against. A background history refresh
+  // may update the report prop, but must never pair its new token with old dirty form data.
+  const [displayedVersion, setDisplayedVersion] = useState(() => versionFromReport(report));
+  const [pendingFinalize, setPendingFinalize] = useState<ServiceReportDocument | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -567,6 +620,10 @@ function ServiceReportEditor({
     key: K,
     value: DraftFormState[K]
   ) => {
+    if (pendingFinalize) {
+      setError('ผลการสรุปยังไม่ยืนยัน กรุณาลองสรุปผลอีกครั้งก่อนแก้ไขร่าง');
+      return;
+    }
     setForm((current) => ({ ...current, [key]: value }));
     setSuccess(null);
   };
@@ -594,6 +651,10 @@ function ServiceReportEditor({
   };
 
   const validateAndSave = async () => {
+    if (pendingFinalize) {
+      setError('ผลการสรุปยังไม่ยืนยัน กรุณาลองสรุปผลอีกครั้งก่อนบันทึกร่าง');
+      return;
+    }
     if (invalidParts) {
       setError('กรุณากรอกรายละเอียด หมายเหตุ และจำนวนอย่างน้อย 1 ในทุกแถวอะไหล่');
       return;
@@ -602,7 +663,8 @@ function ServiceReportEditor({
     setError(null);
     setSuccess(null);
     try {
-      await onSave(toPatch(form));
+      const saved = await onSave(toPatch(form), displayedVersion);
+      setDisplayedVersion(versionFromReport(saved));
       setSuccess('บันทึกร่างเรียบร้อยแล้ว');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'ไม่สามารถบันทึกร่างได้');
@@ -621,8 +683,17 @@ function ServiceReportEditor({
     setError(null);
     setSuccess(null);
     try {
-      await onFinalize(toPatch(form));
+      await onFinalize(toPatch(form), displayedVersion, (saved) => {
+        setDisplayedVersion(versionFromReport(saved));
+        setPendingFinalize(saved);
+      }, pendingFinalize);
     } catch (finalizeError) {
+      if (
+        finalizeError instanceof WorkerServiceReportError &&
+        finalizeError.status >= 400 && finalizeError.status < 500
+      ) {
+        setPendingFinalize(null);
+      }
       setError(
         finalizeError instanceof Error
           ? finalizeError.message
@@ -662,7 +733,7 @@ function ServiceReportEditor({
           </SecondaryButton>
           <PrimaryButton
             onClick={() => void validateAndSave()}
-            disabled={isSaving || isFinalizing}
+            disabled={isSaving || isFinalizing || Boolean(pendingFinalize)}
             className="px-4 py-2.5 text-sm"
           >
             <Save className="h-4 w-4" />
@@ -671,6 +742,11 @@ function ServiceReportEditor({
         </div>
       </div>
 
+      {pendingFinalize && !isFinalizing ? (
+        <div role="status" className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-200">
+          ผลการสรุปอาจสำเร็จแล้ว กรุณายืนยันการสรุปผลอีกครั้งเพื่อตรวจผลก่อนแก้ไขร่าง
+        </div>
+      ) : null}
       {error ? (
         <div className="rounded-2xl bg-danger-50 px-4 py-3 text-sm text-danger-600 ring-1 ring-danger-200">
           {error}
@@ -968,7 +1044,7 @@ function ServiceReportEditor({
         <div className="flex flex-col gap-3 sm:flex-row">
           <SecondaryButton
             onClick={() => void validateAndSave()}
-            disabled={isSaving || isFinalizing}
+            disabled={isSaving || isFinalizing || Boolean(pendingFinalize)}
           >
             <Save className="h-4 w-4" /> {isSaving ? 'กำลังบันทึก…' : 'บันทึกร่าง'}
           </SecondaryButton>

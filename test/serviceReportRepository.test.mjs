@@ -356,14 +356,14 @@ test('Firestore repository delegates create/finalize/history and draft saves to 
   assert.equal(source.includes('getDocs('), false);
   assert.equal(source.includes('already has an active draft'), false);
   assert.match(source, /legacy-draft-save/);
-  assert.match(source, /expectedUpdatedAt: existing.updatedAt/);
+  assert.match(source, /expectedUpdatedAt: current.updatedAt/);
   assert.match(source, /contractVersion: 2, expectedContentRevision, patch: normalizedPatch/);
   assert.doesNotMatch(source, /runTransaction|transaction\.update|serverTimestamp/);
   assert.equal(source.includes('createdAt: serverTimestamp()'), false);
   assert.equal(source.includes('finalizedAt: serverTimestamp()'), false);
 });
 
-async function draftSaveHarness(storedReport, respond) {
+async function draftSaveHarness(storedReport, respond, state = { report: storedReport, history: [] }) {
   const source = await readFile(
     new URL('../src/repositories/firestoreServiceReportsRepository.ts', import.meta.url), 'utf8'
   );
@@ -374,10 +374,10 @@ async function draftSaveHarness(storedReport, respond) {
     'firebase/firestore': {
       doc: (_db, collection, id) => ({ collection, id }),
       getDocFromServer: async () => ({
-        exists: () => true, id: storedReport.id,
-        data: () => storedReport.schemaVersion === 2
-          ? Object.fromEntries(Object.entries(storedReport).filter(([key]) => key !== 'id'))
-          : toFirestoreFields(storedReport),
+        exists: () => true, id: state.report.id,
+        data: () => state.report.schemaVersion === 2
+          ? Object.fromEntries(Object.entries(state.report).filter(([key]) => key !== 'id'))
+          : toFirestoreFields(state.report),
       }),
       onSnapshot: () => {},
     },
@@ -394,7 +394,11 @@ async function draftSaveHarness(storedReport, respond) {
       },
     },
     '../config/workerUrl': { getFilesWorkerBaseUrl: () => 'https://worker.invalid' },
-    './workerServiceReportReadRepository': { createWorkerServiceReportHistoryRepository: () => ({}) },
+    './workerServiceReportReadRepository': {
+      createWorkerServiceReportHistoryRepository: () => ({
+        fetchHistoryForServiceJob: async () => state.history,
+      }),
+    },
     './firestoreInitDiagnostics': {},
   };
   for (const path of ['../services/serviceReport', '../services/serviceReportV2', './types', './firestore/serviceReportMapping']) {
@@ -411,7 +415,7 @@ async function draftSaveHarness(storedReport, respond) {
   const repository = await exports.createFirestoreServiceReportsRepository(
     { getById: () => ({ id: storedReport.serviceJobId }) }, tokenProvider
   );
-  return { repository, requests };
+  return { repository, requests, state };
 }
 
 async function browserDraft(version) {
@@ -431,9 +435,9 @@ async function browserDraft(version) {
 }
 
 for (const version of [1, 2]) {
-  const save = (repository, report, patch) => version === 1
-    ? repository.updateDraft(report.id, patch)
-    : repository.updateDraftV2(report.id, report.contentRevision, patch);
+  const save = (repository, report, patch, idempotencyKey = crypto.randomUUID()) => version === 1
+    ? repository.updateDraft(report.id, patch, report.updatedAt, idempotencyKey)
+    : repository.updateDraftV2(report.id, report.contentRevision, patch, idempotencyKey);
 
   test(`V${version} browser draft save sends authenticated Worker contract and caches returned revision`, async () => {
     const report = await browserDraft(version);
@@ -460,6 +464,17 @@ for (const version of [1, 2]) {
       contractVersion: version, patch,
       ...(version === 1 ? { expectedUpdatedAt: report.updatedAt } : { expectedContentRevision: 3 }),
     });
+  });
+
+  test(`V${version} draft save rejects a response linked to another Service Job`, async () => {
+    const report = await browserDraft(version);
+    const foreign = { ...report, serviceJobId: 'BRN-2026-999999' };
+    const { repository, requests } = await draftSaveHarness(report, () => Response.json({
+      ok: true, data: { report: foreign }, replayed: false,
+    }));
+    await assert.rejects(save(repository, report, { technicianRemark: 'edit' }), /malformed V2 operation data/);
+    assert.equal(requests.length, 1);
+    assert.equal(repository.getById(report.id), undefined);
   });
 
   test(`V${version} browser draft errors preserve Worker semantics without Firestore fallback`, async () => {
@@ -493,6 +508,95 @@ for (const version of [1, 2]) {
     await save(repository, report, { technicianRemark: 'edit' });
     assert.equal(requests.length, 2);
     assert.deepEqual(requests[0], requests[1]);
+  });
+}
+
+for (const version of [1, 2]) {
+  const save = (repository, report, patch, idempotencyKey) => version === 1
+    ? repository.updateDraft(report.id, patch, report.updatedAt, idempotencyKey)
+    : repository.updateDraftV2(report.id, report.contentRevision, patch, idempotencyKey);
+
+  test(`V${version} draft save replays the same committed request after its response is lost`, async () => {
+    const report = await browserDraft(version);
+    const patch = { technicianRemark: 'Committed before the response was lost' };
+    const updated = {
+      ...report, ...patch, updatedAt: '2026-09-24T02:00:00.000Z',
+      ...(version === 2 ? { contentRevision: report.contentRevision + 1 } : {}),
+    };
+    const state = { report, history: [] };
+    let commits = 0;
+    const { repository, requests } = await draftSaveHarness(report, (attempt) => {
+      if (attempt === 1) {
+        state.report = updated;
+        commits += 1;
+        throw new Error('Response connection closed after commit');
+      }
+      return Response.json({ ok: true, data: { report: updated }, replayed: true });
+    }, state);
+
+    await assert.rejects(save(repository, report, patch, 'retry-stable-key'), /Response connection closed/);
+    assert.deepEqual(await save(repository, report, patch, 'retry-stable-key'), updated);
+    assert.equal(commits, 1);
+    assert.equal(requests.length, 2);
+    assert.equal(requests[0].headers['Idempotency-Key'], 'retry-stable-key');
+    assert.deepEqual(requests[1], requests[0]);
+  });
+
+  test(`V${version} history refresh invalidates stale cache and refuses the old displayed version`, async () => {
+    const report = await browserDraft(version);
+    const firstPatch = { technicianRemark: 'first save' };
+    const firstSaved = {
+      ...report, ...firstPatch, updatedAt: '2026-09-24T03:00:00.000Z',
+      ...(version === 2 ? { contentRevision: report.contentRevision + 1 } : {}),
+    };
+    const remotelySaved = {
+      ...firstSaved, technicianRemark: 'remote edit',
+      updatedAt: '2026-09-24T04:00:00.000Z',
+      ...(version === 2 ? { contentRevision: firstSaved.contentRevision + 1 } : {}),
+    };
+    const finalSaved = {
+      ...remotelySaved, technicianRemark: 'current form save',
+      updatedAt: '2026-09-24T05:00:00.000Z',
+      ...(version === 2 ? { contentRevision: remotelySaved.contentRevision + 1 } : {}),
+    };
+    const state = { report, history: [] };
+    const { repository, requests } = await draftSaveHarness(
+      report,
+      () => Response.json({
+        ok: true,
+        data: { report: requests.length === 1 ? firstSaved : finalSaved },
+        replayed: false,
+      }),
+      state
+    );
+
+    await save(repository, report, firstPatch, 'initial-save-key');
+    state.report = remotelySaved;
+    state.history = [{
+      ...remotelySaved,
+      historyItemVersion: 1,
+      sourceSchemaVersion: version,
+    }];
+    await repository.fetchHistoryForServiceJob(report.serviceJobId);
+    assert.equal(repository.getById(report.id), undefined, 'history projections must not remain as full-document cache');
+
+    const stale = version === 1
+      ? repository.updateDraft(report.id, { technicianRemark: 'stale dirty form' }, firstSaved.updatedAt, 'stale-save-key')
+      : repository.updateDraftV2(report.id, firstSaved.contentRevision, { technicianRemark: 'stale dirty form' }, 'stale-save-key');
+    await assert.rejects(stale, (error) => error.status === 412);
+    assert.equal(requests.length, 1, 'stale displayed form must be refused before a Worker write');
+
+    const latestReport = remotelySaved;
+    const saved = await save(repository, latestReport, { technicianRemark: 'current form save' }, 'current-save-key');
+    assert.deepEqual(saved, finalSaved);
+    assert.equal(requests.length, 2);
+    assert.deepEqual(requests[1].body, {
+      contractVersion: version,
+      ...(version === 1
+        ? { expectedUpdatedAt: remotelySaved.updatedAt }
+        : { expectedContentRevision: remotelySaved.contentRevision }),
+      patch: { technicianRemark: 'current form save' },
+    });
   });
 }
 

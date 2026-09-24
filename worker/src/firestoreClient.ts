@@ -323,10 +323,35 @@ function parseServiceReportDocument(doc: FirestoreDocument): ServiceReport | nul
 }
 
 function parseActiveDraftLockDocument(doc: FirestoreDocument): ActiveDraftLock | null {
-  const draftReportId = doc.fields?.draftReportId?.stringValue;
-  return typeof draftReportId === 'string' && draftReportId.length > 0
-    ? { draftReportId }
-    : null;
+  const decoded = Object.fromEntries(
+    Object.entries(doc.fields ?? {}).map(([key, value]) => [key, valueToJson(value)])
+  ) as Record<string, unknown>;
+  const draftReportId = decoded.draftReportId;
+  // Historical V1 locks are active by definition and must continue to block
+  // another draft until their report is finalized.
+  if (typeof draftReportId === 'string' && draftReportId.length > 0 && decoded.slotVersion === undefined) {
+    return { draftReportId };
+  }
+  if (
+    decoded.slotVersion !== 1 || typeof decoded.serviceJobId !== 'string' ||
+    typeof decoded.brandId !== 'string' ||
+    (decoded.state !== 'active' && decoded.state !== 'released') ||
+    !Number.isSafeInteger(decoded.generation) || Number(decoded.generation) < 1 || Number(decoded.generation) > 2_147_483_647 ||
+    (decoded.state === 'active' && (typeof decoded.activeReportId !== 'string' || decoded.activeReportId.length === 0)) ||
+    (decoded.state === 'released' && decoded.activeReportId !== null) ||
+    (decoded.lastReleasedReportId !== null && typeof decoded.lastReleasedReportId !== 'string') ||
+    (decoded.lastReleasedGeneration !== null && !Number.isSafeInteger(decoded.lastReleasedGeneration)) ||
+    typeof decoded.updatedAt !== 'string'
+  ) {
+    throw new Error('Firestore Service Report active draft slot is malformed');
+  }
+  if (decoded.state === 'released' && decoded.lastReleasedGeneration !== decoded.generation) {
+    throw new Error('Firestore Service Report released slot invariants are invalid');
+  }
+  return {
+    ...(decoded as unknown as ActiveDraftLock),
+    draftReportId: decoded.state === 'active' ? String(decoded.activeReportId) : undefined,
+  };
 }
 
 function authHeaders(token: string | null): HeadersInit {
@@ -706,9 +731,20 @@ export function createFirestoreClient(env: Env): FirestoreClient {
               input.report.id,
               input.report as unknown as Record<string, unknown>
             ),
-            createWrite('serviceReportActiveDrafts', input.report.serviceJobId, {
-              draftReportId: input.report.id,
-            }),
+            input.activeDraftSlotExists
+              ? {
+                  update: {
+                    name: resourceName('serviceReportActiveDrafts', input.report.serviceJobId),
+                    fields: fields(input.activeDraftSlot as unknown as Record<string, unknown>),
+                  },
+                  updateMask: { fieldPaths: Object.keys(input.activeDraftSlot) },
+                  currentDocument: { exists: true },
+                }
+              : createWrite(
+                  'serviceReportActiveDrafts',
+                  input.report.serviceJobId,
+                  input.activeDraftSlot as unknown as Record<string, unknown>
+                ),
             {
               update: {
                 name: resourceName('numberSequences', sequenceId),

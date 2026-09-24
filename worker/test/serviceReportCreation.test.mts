@@ -131,6 +131,7 @@ class FakeStore implements ServiceReportCreationDataAccess {
   jobs = new Map<string, ServiceJob>();
   conflicts = 0;
   writes = 0;
+  lastSlotWriteWasUpdate = false;
 
   async beginTransaction(): Promise<AllocationTransaction> {
     return { id: crypto.randomUUID() };
@@ -163,18 +164,22 @@ class FakeStore implements ServiceReportCreationDataAccess {
       brandId: 'bruno-thailand' | 'join-lux-club';
       sequence: number;
       year: number;
+      activeDraftSlot: ActiveDraftLock;
+      activeDraftSlotExists: boolean;
     }
   ) {
     if (this.conflicts-- > 0) throw new TransactionConflictError();
+    this.lastSlotWriteWasUpdate = input.activeDraftSlotExists;
     if (
       this.reports.has(input.report.id) ||
       this.draftKeys.has(input.key) ||
-      this.locks.has(input.report.serviceJobId)
+      (this.locks.get(input.report.serviceJobId)?.state !== 'released' &&
+        this.locks.has(input.report.serviceJobId))
     )
       throw new TransactionConflictError();
     this.reports.set(input.report.id, input.report);
     this.draftKeys.set(input.key, input.report.id);
-    this.locks.set(input.report.serviceJobId, { draftReportId: input.report.id });
+    this.locks.set(input.report.serviceJobId, input.activeDraftSlot);
     this.sequences.set(`${input.brandId}__${input.year}`, input.sequence);
     this.writes += 1;
   }
@@ -199,7 +204,12 @@ check(
     first.snapshot === null &&
     first.customerReportedProblem === 'Reported issue'
 );
-check('the active-draft lock is created atomically with the draft', store.locks.has('BRN-2026-000001'));
+check('the active-draft lock is created atomically as a V2-compatible versioned slot', (() => {
+  const slot = store.locks.get('BRN-2026-000001');
+  return slot?.slotVersion === 1 && slot.state === 'active' &&
+    slot.activeReportId === first.id && slot.generation === 1 &&
+    slot.lastReleasedGeneration === null;
+})());
 
 const replay = await allocateServiceReportDraft({
   serviceJobId: 'BRN-2026-000001',
@@ -259,6 +269,43 @@ check(
     afterConflict.serviceJobId === 'JLC-2026-000002' &&
     store.writes === 2
 );
+
+// A valid released versioned slot from either V2 finalization or the explicit V1
+// compatibility finalizer can be reused only by advancing its generation.
+for (const scenario of [
+  { jobId: 'BRN-2026-000070', generation: 3, releasedId: 'v2-final-report' },
+  { jobId: 'BRN-2026-000071', generation: 1, releasedId: 'v1-final-report' },
+]) {
+  const interopStore = new FakeStore();
+  interopStore.jobs.set(scenario.jobId, makeServiceJob(scenario.jobId, 'bruno-thailand'));
+  interopStore.locks.set(scenario.jobId, {
+    slotVersion: 1,
+    serviceJobId: scenario.jobId,
+    brandId: 'bruno-thailand',
+    state: 'released',
+    activeReportId: null,
+    generation: scenario.generation,
+    lastReleasedReportId: scenario.releasedId,
+    lastReleasedGeneration: scenario.generation,
+    updatedAt: '2026-08-11T11:00:00.000Z',
+  });
+  const created = await allocateServiceReportDraft({
+    serviceJobId: scenario.jobId,
+    brandId: 'bruno-thailand',
+    key: `77777777-7777-4777-8777-${scenario.generation.toString().padStart(12, '0')}`,
+    input: {},
+    dataAccess: interopStore,
+    now: () => new Date('2026-08-11T12:00:00.000Z'),
+  });
+  const slot = interopStore.locks.get(scenario.jobId);
+  check(
+    `${scenario.releasedId.startsWith('v2') ? 'compatibility V2 create-finalize' : 'disabled V1 explicit finalize'} permits the next V1 draft without replacing the prior slot`,
+    created.status === 'draft' && slot?.state === 'active' &&
+      slot.activeReportId === created.id && slot.generation === scenario.generation + 1 &&
+      slot.lastReleasedReportId === scenario.releasedId &&
+      interopStore.lastSlotWriteWasUpdate
+  );
+}
 
 // F5d-66 Phase 2B-R2 — a replay key is bound to the Service Job it was
 // originally issued for, never merely globally unique by key. `first`'s

@@ -378,7 +378,12 @@ export interface ServiceReportsRepository {
     input?: ServiceReportDraftInput,
     idempotencyKey?: string
   ): Promise<ServiceReport>;
-  updateDraft(reportId: string, patch: ServiceReportDraftPatch): Promise<ServiceReport>;
+  updateDraft(
+    reportId: string,
+    patch: ServiceReportDraftPatch,
+    expectedUpdatedAt?: string,
+    idempotencyKey?: string
+  ): Promise<ServiceReport>;
   finalize(reportId: string): Promise<ServiceReport>;
   createDraftV2(
     serviceJobId: string,
@@ -388,7 +393,8 @@ export interface ServiceReportsRepository {
   updateDraftV2(
     reportId: string,
     expectedContentRevision: number,
-    patch: ServiceReportV2DraftPatch
+    patch: ServiceReportV2DraftPatch,
+    idempotencyKey?: string
   ): Promise<ServiceReportV2>;
   finalizeV2(
     reportId: string,

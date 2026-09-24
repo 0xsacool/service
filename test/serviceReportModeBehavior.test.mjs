@@ -123,6 +123,10 @@ function makeServiceJob(id) {
 
 function installRepositories(serviceJobId, initialReports) {
   let history = [...initialReports];
+  let failNextV2Finalize = false;
+  let loseNextV2FinalizeResponse = false;
+  let committedV2Finalizations = 0;
+  const finalizedByKey = new Map();
   const calls = { v1Update: [], v1Finalize: [], v2Update: [], v2Finalize: [] };
   const replace = (report) => {
     history = [...history.filter((item) => item.id !== report.id), report];
@@ -141,10 +145,13 @@ function installRepositories(serviceJobId, initialReports) {
     async fetchHistoryForServiceJob(id) {
       return id === serviceJobId ? [...history] : [];
     },
-    async updateDraft(reportId, patch) {
-      calls.v1Update.push({ reportId, patch });
+    async updateDraft(reportId, patch, expectedUpdatedAt, idempotencyKey) {
+      calls.v1Update.push({ reportId, patch, expectedUpdatedAt, idempotencyKey });
       const current = history.find((item) => item.id === reportId);
       assert.ok(current);
+      if (expectedUpdatedAt && current.updatedAt !== expectedUpdatedAt) {
+        throw Object.assign(new Error('The V1 draft timestamp is stale'), { status: 412 });
+      }
       return replace({ ...current, ...patch, updatedAt: '2026-02-01T00:00:00.000Z' });
     },
     async finalize(reportId) {
@@ -158,10 +165,13 @@ function installRepositories(serviceJobId, initialReports) {
         updatedAt: '2026-02-02T00:00:00.000Z',
       });
     },
-    async updateDraftV2(reportId, expectedContentRevision, patch) {
-      calls.v2Update.push({ reportId, expectedContentRevision, patch });
+    async updateDraftV2(reportId, expectedContentRevision, patch, idempotencyKey) {
+      calls.v2Update.push({ reportId, expectedContentRevision, patch, idempotencyKey });
       const current = history.find((item) => item.id === reportId);
       assert.ok(current);
+      if (current.contentRevision !== expectedContentRevision) {
+        throw Object.assign(new Error('The V2 draft revision is stale'), { status: 412 });
+      }
       return replace({
         ...current,
         ...patch,
@@ -171,17 +181,44 @@ function installRepositories(serviceJobId, initialReports) {
     },
     async finalizeV2(reportId, expectedContentRevision, idempotencyKey) {
       calls.v2Finalize.push({ reportId, expectedContentRevision, idempotencyKey });
+      const prior = finalizedByKey.get(idempotencyKey);
+      if (prior) {
+        assert.equal(prior.reportId, reportId);
+        assert.equal(prior.expectedContentRevision, expectedContentRevision);
+        return prior.report;
+      }
       const current = history.find((item) => item.id === reportId);
       assert.ok(current);
-      return replace({
+      if (current.contentRevision !== expectedContentRevision) {
+        throw Object.assign(new Error('The V2 finalize revision is stale'), { status: 412 });
+      }
+      if (failNextV2Finalize) {
+        failNextV2Finalize = false;
+        throw Object.assign(new Error('Simulated finalize failure'), { status: 503 });
+      }
+      const finalized = replace({
         ...current,
         status: 'final',
         finalizedAt: '2026-02-02T00:00:00.000Z',
         updatedAt: '2026-02-02T00:00:00.000Z',
       });
+      finalizedByKey.set(idempotencyKey, { reportId, expectedContentRevision, report: finalized });
+      committedV2Finalizations += 1;
+      if (loseNextV2FinalizeResponse) {
+        loseNextV2FinalizeResponse = false;
+        throw new TypeError('Simulated lost finalize response');
+      }
+      return finalized;
     },
   };
-  return { calls, setHistory(next) { history = [...next]; } };
+  return {
+    calls,
+    failNextV2Finalize() { failNextV2Finalize = true; },
+    loseNextV2FinalizeResponse() { loseNextV2FinalizeResponse = true; },
+    committedV2Finalizations: () => committedV2Finalizations,
+    setHistory(next) { history = [...next]; },
+    getHistory: () => [...history],
+  };
 }
 
 function mountHookFor(serviceJobId) {
@@ -250,6 +287,123 @@ test('V2 draft mutations remain enabled in v2-active mode', async () => {
   assert.equal(calls.v2Finalize.length, 1);
   host.root.unmount();
 });
+
+test('V2 finalize 503 retries the saved revision without another draft write', async () => {
+  globalThis.__SERVICE_REPORT_TEST_MODE__ = 'v2-active';
+  const serviceJob = makeServiceJob(nextJobId());
+  const draft = makeV2Draft('v2-finalize-retry', serviceJob.id);
+  const repository = installRepositories(serviceJob.id, [draft]);
+  repository.failNextV2Finalize();
+  const root = mountSection(serviceJob);
+  await root.flush();
+  await root.click(root.button('ดำเนินการแก้ไขต่อ'));
+
+  const confirmFinalize = async () => {
+    await root.click(root.button('สรุปผลใบรายงาน'));
+    await root.click(root.button('ยืนยันการสรุปผล'));
+  };
+
+  await confirmFinalize();
+  assert.equal(repository.getHistory()[0].contentRevision, 1, 'the draft save commits before the simulated finalize failure');
+  assert.equal(repository.getHistory()[0].status, 'draft');
+  assert.equal(repository.calls.v2Update[0].expectedContentRevision, 0);
+  assert.equal(repository.calls.v2Finalize[0].expectedContentRevision, 1, 'first finalize uses the saved revision N+1');
+  assert.ok(root.text().includes('Simulated finalize failure'));
+
+  await confirmFinalize();
+  assert.equal(repository.calls.v2Update.length, 1, 'an ambiguous finalize response must not resave the draft');
+  assert.equal(repository.calls.v2Finalize[1].expectedContentRevision, 1, 'retry finalizes the same saved revision');
+  assert.equal(repository.calls.v2Finalize[1].idempotencyKey, repository.calls.v2Finalize[0].idempotencyKey);
+  assert.equal(repository.getHistory()[0].status, 'final');
+  root.unmount();
+});
+
+test('V2 finalize retries the same request when the committed response is lost', async () => {
+  globalThis.__SERVICE_REPORT_TEST_MODE__ = 'v2-active';
+  const serviceJob = makeServiceJob(nextJobId());
+  const draft = makeV2Draft('v2-finalize-lost-response', serviceJob.id);
+  const repository = installRepositories(serviceJob.id, [draft]);
+  repository.loseNextV2FinalizeResponse();
+  const root = mountSection(serviceJob);
+  await root.flush();
+  await root.click(root.button('ดำเนินการแก้ไขต่อ'));
+
+  const confirmFinalize = async () => {
+    await root.click(root.button('สรุปผลใบรายงาน'));
+    await root.click(root.button('ยืนยันการสรุปผล'));
+  };
+
+  await confirmFinalize();
+  assert.equal(repository.getHistory()[0].status, 'final', 'the server committed before its response was lost');
+  assert.equal(repository.committedV2Finalizations(), 1);
+  assert.equal(repository.calls.v2Update.length, 1);
+  assert.equal(repository.calls.v2Finalize[0].expectedContentRevision, 1);
+  assert.ok(root.text().includes('Simulated lost finalize response'));
+  assert.ok(root.text().includes('ผลการสรุปอาจสำเร็จแล้ว'));
+
+  await confirmFinalize();
+  assert.equal(repository.calls.v2Update.length, 1, 'retry does not attempt to save a finalized report');
+  assert.equal(repository.calls.v2Finalize.length, 2);
+  assert.equal(repository.calls.v2Finalize[1].expectedContentRevision, 1);
+  assert.equal(
+    repository.calls.v2Finalize[1].idempotencyKey,
+    repository.calls.v2Finalize[0].idempotencyKey,
+    'retry uses the same idempotency key'
+  );
+  assert.equal(repository.committedV2Finalizations(), 1, 'replay causes no second finalization');
+  root.unmount();
+});
+
+for (const version of [1, 2]) {
+  test(`V${version} editor keeps dirty form data and refuses a stale displayed version after history refresh`, async () => {
+    globalThis.__SERVICE_REPORT_TEST_MODE__ = version === 2 ? 'v2-active' : 'compatibility';
+    const serviceJob = makeServiceJob(nextJobId());
+    const draft = version === 2
+      ? makeV2Draft(`stale-editor-v${version}`, serviceJob.id)
+      : makeReport(`stale-editor-v${version}`, serviceJob.id);
+    const repository = installRepositories(serviceJob.id, [draft]);
+    const root = mountSection(serviceJob);
+    await root.flush();
+    await root.click(root.button('ดำเนินการแก้ไขต่อ'));
+
+    const findingsField = () => root.find(
+      (node) => node.type === 'textarea' && node.props.placeholder === 'บันทึกผลการตรวจสอบ…'
+    );
+    await root.type(findingsField(), 'Unsaved dirty form');
+    const remote = {
+      ...draft,
+      inspectionFindings: 'Remote edit',
+      updatedAt: '2026-02-10T00:00:00.000Z',
+      ...(version === 2 ? { contentRevision: draft.contentRevision + 1 } : {}),
+    };
+    repository.setHistory([remote]);
+    window.dispatchEvent(new Event('focus'));
+    await root.flush();
+
+    assert.equal(findingsField().props.value, 'Unsaved dirty form', 'history refresh must not replace dirty editor state');
+    await root.click(root.button('บันทึกร่าง'));
+    assert.equal(repository.getHistory()[0].inspectionFindings, 'Remote edit', 'stale editor must not overwrite the remote change');
+    assert.ok(root.text().includes('stale'), 'the stale-save refusal is shown to the technician');
+
+    await root.click(root.button('กลับใบรายงาน'));
+    await root.click(root.button('ดำเนินการแก้ไขต่อ'));
+    assert.equal(findingsField().props.value, 'Remote edit', 'a newly opened editor uses the current report');
+    await root.type(findingsField(), 'Fresh editor save');
+    await root.click(root.button('บันทึกร่าง'));
+    assert.equal(repository.getHistory()[0].inspectionFindings, 'Fresh editor save');
+    const saves = version === 2 ? repository.calls.v2Update : repository.calls.v1Update;
+    assert.equal(saves.length, 2);
+    assert.equal(
+      version === 2 ? saves[0].expectedContentRevision : saves[0].expectedUpdatedAt,
+      version === 2 ? draft.contentRevision : draft.updatedAt
+    );
+    assert.equal(
+      version === 2 ? saves[1].expectedContentRevision : saves[1].expectedUpdatedAt,
+      version === 2 ? remote.contentRevision : remote.updatedAt
+    );
+    root.unmount();
+  });
+}
 
 test('v2-active keeps V1 drafts viewable in history without edit or finalize controls', async () => {
   globalThis.__SERVICE_REPORT_TEST_MODE__ = 'v2-active';
@@ -371,7 +525,8 @@ test('a V2 editor switches to read-only if the selected report becomes V1', asyn
     approvalDecidedAt: undefined,
   });
   repository.setHistory([changedReport]);
-  await root.click(root.button('บันทึกร่าง'));
+  window.dispatchEvent(new Event('focus'));
+  await root.flush();
 
   assert.ok(root.text().includes('รายงานรูปแบบเดิมสามารถดูได้เท่านั้นในขณะนี้'));
   assert.equal(root.button('บันทึกร่าง'), null);

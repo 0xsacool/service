@@ -136,6 +136,46 @@ async function postV2(
     body: JSON.stringify(body),
   });
 }
+interface PendingDraftSaveRequest {
+  fingerprint: string;
+  serviceJobId: string;
+  path: string;
+  body: unknown;
+}
+
+async function runDraftSaveAttempt<T>(
+  attempts: Map<string, PendingDraftSaveRequest>,
+  idempotencyKey: string,
+  fingerprint: string,
+  prepare: () => Promise<Omit<PendingDraftSaveRequest, 'fingerprint'>>,
+  send: (request: PendingDraftSaveRequest) => Promise<T>
+): Promise<T> {
+  let pending = attempts.get(idempotencyKey);
+  if (pending && pending.fingerprint !== fingerprint) {
+    throw new WorkerServiceReportError(
+      'The idempotency key is already bound to a different draft save',
+      409,
+      'idempotency_mismatch'
+    );
+  }
+  if (!pending) {
+    const request = await prepare();
+    pending = { fingerprint, ...request };
+    attempts.set(idempotencyKey, pending);
+  }
+  try {
+    const result = await send(pending);
+    attempts.delete(idempotencyKey);
+    return result;
+  } catch (error) {
+    // A 4xx is a definitive rejection. Network failures, malformed success
+    // envelopes, and 5xx responses remain ambiguous and must reuse this key.
+    if (error instanceof WorkerServiceReportError && error.status >= 400 && error.status < 500) {
+      attempts.delete(idempotencyKey);
+    }
+    throw error;
+  }
+}
 
 export async function createFirestoreServiceReportsRepository(
   serviceJobs: ServiceJobsRepository,
@@ -143,6 +183,7 @@ export async function createFirestoreServiceReportsRepository(
 ): Promise<ServiceReportsRepository> {
   const reportsById = new Map<string, ServiceReportDocument>();
   const subscribedReportIds = new Set<string>();
+  const pendingDraftSaveRequests = new Map<string, PendingDraftSaveRequest>();
   const historyRepository = createWorkerServiceReportHistoryRepository(tokenProvider);
 
   const subscribeToReport = (reportId: string): void => {
@@ -174,8 +215,15 @@ export async function createFirestoreServiceReportsRepository(
   };
 
   return {
-    fetchHistoryForServiceJob(serviceJobId, signal) {
-      return historyRepository.fetchHistoryForServiceJob(serviceJobId, signal);
+    async fetchHistoryForServiceJob(serviceJobId, signal) {
+      const history = await historyRepository.fetchHistoryForServiceJob(serviceJobId, signal);
+      // Worker history contains projections, not complete report documents. Drop
+      // full-document cache entries for this job so the next save must perform
+      // an authoritative server read instead of trusting an older revision.
+      for (const [reportId, report] of reportsById) {
+        if (report.serviceJobId === serviceJobId) reportsById.delete(reportId);
+      }
+      return history;
     },
 
     listForServiceJob(serviceJobId) {
@@ -214,30 +262,43 @@ export async function createFirestoreServiceReportsRepository(
       return report;
     },
 
-    async updateDraft(reportId, patch: ServiceReportDraftPatch) {
+    async updateDraft(reportId, patch: ServiceReportDraftPatch, expectedUpdatedAt, idempotencyKey) {
       const normalizedPatch = editableServiceReportFields(patch);
-      const existing = reportsById.get(reportId) ?? await readReport(reportId);
-      if (!existing || isServiceReportV2(existing)) {
-        throw new Error('Cannot update a missing or mismatched V1 Service Report');
-      }
-      if (existing.status !== 'draft') {
-        throw new Error('Final Service Reports are immutable through ordinary updates');
-      }
-      const response = await postV2(
-        tokenProvider,
-        `/service-jobs/${encodeURIComponent(existing.serviceJobId)}/service-reports/${encodeURIComponent(reportId)}/legacy-draft-save`,
-        { contractVersion: 1, expectedUpdatedAt: existing.updatedAt, patch: normalizedPatch },
-        crypto.randomUUID()
+      const expected = expectedUpdatedAt ?? reportsById.get(reportId)?.updatedAt;
+      const key = idempotencyKey ?? crypto.randomUUID();
+      const fingerprint = JSON.stringify([reportId, expected ?? null, normalizedPatch]);
+      return runDraftSaveAttempt(
+        pendingDraftSaveRequests, key, fingerprint,
+        async () => {
+          const current = await readReport(reportId);
+          if (!current || isServiceReportV2(current)) {
+            throw new Error('Cannot update a missing or mismatched V1 Service Report');
+          }
+          if (current.status !== 'draft') {
+            throw new Error('Final Service Reports are immutable through ordinary updates');
+          }
+          if (expected && current.updatedAt !== expected) {
+            throw new WorkerServiceReportError('The V1 draft timestamp is stale', 412, 'stale_updated_at', 'reload');
+          }
+          return {
+            serviceJobId: current.serviceJobId,
+            path: `/service-jobs/${encodeURIComponent(current.serviceJobId)}/service-reports/${encodeURIComponent(reportId)}/legacy-draft-save`,
+            body: { contractVersion: 1, expectedUpdatedAt: current.updatedAt, patch: normalizedPatch },
+          };
+        },
+        async (request) => {
+          const response = await postV2(tokenProvider, request.path, request.body, key);
+          const result = await readWorkerV2Data(response, (value) => {
+            if (!value || typeof value !== 'object' || !('report' in value)) return null;
+            const report = value.report;
+            return isValidServiceReport(report) && !('schemaVersion' in report) &&
+              report.id === reportId && report.serviceJobId === request.serviceJobId
+              ? report : null;
+          });
+          reportsById.set(reportId, result.data);
+          return result.data;
+        }
       );
-      const result = await readWorkerV2Data(response, (value) => {
-        if (!value || typeof value !== 'object' || !('report' in value)) return null;
-        const report = value.report;
-        return isValidServiceReport(report) && !('schemaVersion' in report) &&
-          report.id === reportId && report.serviceJobId === existing.serviceJobId
-          ? report : null;
-      });
-      reportsById.set(reportId, result.data);
-      return result.data;
     },
 
     // F5d-66 — also Worker-mediated: the only other operation that touches
@@ -282,33 +343,43 @@ export async function createFirestoreServiceReportsRepository(
     async updateDraftV2(
       reportId: string,
       expectedContentRevision: number,
-      patch: ServiceReportV2DraftPatch
+      patch: ServiceReportV2DraftPatch,
+      idempotencyKey?: string
     ) {
       const normalizedPatch = normalizeServiceReportV2DraftPatch(patch);
       if (!normalizedPatch) throw new Error('A non-empty V2 draft patch is required');
-      const existing = reportsById.get(reportId) ?? await readReport(reportId);
-      if (!existing || !isServiceReportV2(existing)) {
-        throw new Error('Cannot update a missing or mismatched V2 Service Report');
-      }
-      if (existing.status !== 'draft' || existing.approvalState !== 'not-submitted') {
-        throw new Error('Only a V2 draft that has not been submitted may be edited');
-      }
-      if (existing.contentRevision !== expectedContentRevision) {
-        throw new WorkerServiceReportError('The draft revision is stale', 412, 'stale_revision', 'reload');
-      }
-      const response = await postV2(
-        tokenProvider,
-        `/service-jobs/${encodeURIComponent(existing.serviceJobId)}/service-reports/${encodeURIComponent(reportId)}/draft-save`,
-        { contractVersion: 2, expectedContentRevision, patch: normalizedPatch },
-        crypto.randomUUID()
+      const key = idempotencyKey ?? crypto.randomUUID();
+      const fingerprint = JSON.stringify([reportId, expectedContentRevision, normalizedPatch]);
+      return runDraftSaveAttempt(
+        pendingDraftSaveRequests, key, fingerprint,
+        async () => {
+          const current = await readReport(reportId);
+          if (!current || !isServiceReportV2(current)) {
+            throw new Error('Cannot update a missing or mismatched V2 Service Report');
+          }
+          if (current.status !== 'draft' || current.approvalState !== 'not-submitted') {
+            throw new Error('Only a V2 draft that has not been submitted may be edited');
+          }
+          if (current.contentRevision !== expectedContentRevision) {
+            throw new WorkerServiceReportError('The draft revision is stale', 412, 'stale_revision', 'reload');
+          }
+          return {
+            serviceJobId: current.serviceJobId,
+            path: `/service-jobs/${encodeURIComponent(current.serviceJobId)}/service-reports/${encodeURIComponent(reportId)}/draft-save`,
+            body: { contractVersion: 2, expectedContentRevision, patch: normalizedPatch },
+          };
+        },
+        async (request) => {
+          const response = await postV2(tokenProvider, request.path, request.body, key);
+          const result = await readWorkerV2Data(response, (value) => {
+            const report = reportFromV2Payload(value);
+            return report && report.id === reportId && report.serviceJobId === request.serviceJobId
+              ? report : null;
+          });
+          reportsById.set(reportId, result.data);
+          return result.data;
+        }
       );
-      const result = await readWorkerV2Data(response, (value) => {
-        const report = reportFromV2Payload(value);
-        return report?.id === reportId && report.serviceJobId === existing.serviceJobId
-          ? report : null;
-      });
-      reportsById.set(reportId, result.data);
-      return result.data;
     },
 
     async finalizeV2(reportId, expectedContentRevision, idempotencyKey) {

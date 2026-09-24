@@ -203,6 +203,54 @@ try {
     (call) => call.url.pathname.endsWith(':commit') && call.body?.writes?.some((w: { delete?: string }) => w.delete)
   );
   if (!finalizeCommit) throw new Error('no finalize :commit request was captured');
+  // A released V2 slot remains present after V2 finalization. The legacy
+  // allocator advances it with a transaction update, preserving generation.
+  documents.set('serviceReportActiveDrafts/BRN-2026-000001', {
+    name: `${RESOURCE_NAME_PREFIX}serviceReportActiveDrafts/BRN-2026-000001`,
+    fields: {
+      slotVersion: { integerValue: '1' },
+      serviceJobId: { stringValue: 'BRN-2026-000001' },
+      brandId: { stringValue: 'bruno-thailand' },
+      state: { stringValue: 'released' },
+      activeReportId: { nullValue: null },
+      generation: { integerValue: '4' },
+      lastReleasedReportId: { stringValue: 'v2-final-report' },
+      lastReleasedGeneration: { integerValue: '4' },
+      updatedAt: { stringValue: '2026-08-11T11:00:00.000Z' },
+    },
+  });
+  const afterReleasedSlot = await allocateServiceReportDraft({
+    serviceJobId: 'BRN-2026-000001',
+    brandId: 'bruno-thailand',
+    key: '22222222-2222-4222-8222-222222222222',
+    input: {},
+    dataAccess: client,
+    now: () => new Date('2026-08-11T12:00:00.000Z'),
+  });
+  const releasedReuseCommit = [...captured].reverse().find(
+    (call) => call.url.pathname.endsWith(':commit') &&
+      call.body?.writes?.some((w: { update?: { name?: string } }) =>
+        w.update?.name === `${RESOURCE_NAME_PREFIX}serviceReportActiveDrafts/BRN-2026-000001`)
+  );
+  const releasedReuseWrite = releasedReuseCommit?.body?.writes?.find(
+    (w: { update?: { name?: string } }) =>
+      w.update?.name === `${RESOURCE_NAME_PREFIX}serviceReportActiveDrafts/BRN-2026-000001`
+  ) as {
+    update?: { fields?: {
+      state?: { stringValue?: string };
+      generation?: { integerValue?: string };
+      activeReportId?: { stringValue?: string };
+    } };
+    updateMask?: { fieldPaths?: string[] };
+    currentDocument?: { exists?: boolean };
+  } | undefined;
+  check('V1 allocation after a V2-style released slot advances generation with an exists:true masked update',
+    afterReleasedSlot.status === 'draft' && releasedReuseWrite?.currentDocument?.exists === true &&
+      releasedReuseWrite.update?.fields?.state?.stringValue === 'active' &&
+      releasedReuseWrite.update?.fields?.generation?.integerValue === '5' &&
+      releasedReuseWrite.update?.fields?.activeReportId?.stringValue === afterReleasedSlot.id &&
+      releasedReuseWrite.updateMask?.fieldPaths?.includes('generation') === true
+  );
   const finalizeBody = finalizeCommit.body as {
     writes?: {
       update?: { name?: string };

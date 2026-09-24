@@ -149,7 +149,18 @@ export function isValidReportId(value: string): boolean {
 }
 
 export interface ActiveDraftLock {
-  draftReportId: string;
+  // Legacy active locks contain only draftReportId. Versioned V2-compatible
+  // slots carry the remaining fields and can be either active or released.
+  draftReportId?: string;
+  slotVersion?: 1;
+  serviceJobId?: string;
+  brandId?: BrandId;
+  state?: 'active' | 'released';
+  activeReportId?: string | null;
+  generation?: number;
+  lastReleasedReportId?: string | null;
+  lastReleasedGeneration?: number | null;
+  updatedAt?: string;
 }
 
 // Thrown when a Service Job already has an active draft — a legitimate
@@ -206,6 +217,8 @@ export interface ServiceReportCreationDataAccess {
       brandId: BrandId;
       sequence: number;
       year: number;
+      activeDraftSlot: ActiveDraftLock;
+      activeDraftSlotExists: boolean;
     }
   ): Promise<void>;
 }
@@ -245,7 +258,9 @@ export async function allocateServiceReportDraft(input: {
     // retry's fresh read correctly finds the now-existing lock and rejects
     // with ActiveDraftExistsError instead of allocating a second draft.
     const lock = await input.dataAccess.getActiveDraftLock(transaction, input.serviceJobId);
-    if (lock) {
+    if (lock && (lock.slotVersion !== 1 || lock.state !== 'released')) {
+      // Legacy locks have no version/state fields and are conservatively
+      // treated as active. A versioned active slot is also never replaced.
       throw new ActiveDraftExistsError(
         `Service Job "${input.serviceJobId}" already has an active draft Service Report`
       );
@@ -254,6 +269,18 @@ export async function allocateServiceReportDraft(input: {
     const serviceJob = await input.dataAccess.getServiceJob(transaction, input.serviceJobId);
     if (!serviceJob) {
       throw new ServiceJobMissingError(`Service Job "${input.serviceJobId}" does not exist`);
+    }
+    if (
+      lock &&
+      (lock.serviceJobId !== input.serviceJobId ||
+        lock.brandId !== serviceJob.brandId ||
+        lock.activeReportId !== null ||
+        !Number.isSafeInteger(lock.generation) ||
+        Number(lock.generation) < 1 ||
+        Number(lock.generation) >= 2_147_483_647 ||
+        lock.lastReleasedGeneration !== lock.generation)
+    ) {
+      throw new Error('Firestore Service Report active draft slot is malformed');
     }
 
     const current = now();
@@ -276,6 +303,18 @@ export async function allocateServiceReportDraft(input: {
         brandId: input.brandId,
         sequence,
         year,
+        activeDraftSlot: {
+          slotVersion: 1,
+          serviceJobId: input.serviceJobId,
+          brandId: serviceJob.brandId as BrandId,
+          state: 'active',
+          activeReportId: draft.id,
+          generation: lock ? Number(lock.generation) + 1 : 1,
+          lastReleasedReportId: lock?.lastReleasedReportId ?? null,
+          lastReleasedGeneration: lock ? Number(lock.generation) : null,
+          updatedAt: draft.createdAt,
+        },
+        activeDraftSlotExists: lock !== null,
       });
       return draft;
     } catch (error) {

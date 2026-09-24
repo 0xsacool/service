@@ -351,6 +351,11 @@ export async function finalizeLegacyServiceReport(input: {
     input.objects
   );
   return runTransaction(input.store, async (transaction) => {
+    // Recheck authorization from the same Firestore transaction as replay.
+    // A previously valid idempotency key must not disclose report data after
+    // the actor's current role or authoritative job brand has changed.
+    const job = parseJob(await input.store.get('serviceJobs', input.serviceJobId, transaction), input.serviceJobId);
+    requireActor(await input.store.get('staffProfiles', input.actor.uid, transaction), input.actor, job.brandId!);
     const existing = parseIdempotency(await input.store.get('serviceReportIdempotency', keyHash, transaction));
     if (existing) {
       return {
@@ -358,8 +363,6 @@ export async function finalizeLegacyServiceReport(input: {
         replayed: true,
       };
     }
-    const job = parseJob(await input.store.get('serviceJobs', input.serviceJobId, transaction), input.serviceJobId);
-    requireActor(await input.store.get('staffProfiles', input.actor.uid, transaction), input.actor, job.brandId!);
     const report = parseV1Report(await input.store.get('serviceReports', input.reportId, transaction), input.serviceJobId);
     if (report.status === 'final') {
       throw new ServiceReportV2Error(409, 'report_already_final', 'The Service Report is already final', 'reload');
