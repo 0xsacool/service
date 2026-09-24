@@ -241,7 +241,7 @@ service cloud.firestore {
       allow get: if staffOwnsServiceReport(resource.data);
       allow list: if false;
       allow create: if false;
-      allow update: if validV2DraftUpdate();
+      allow update: if false;
       allow delete: if false;
 
       function validV2DraftUpdate() {

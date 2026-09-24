@@ -93,12 +93,23 @@ test('read surfaces expose no transaction, mutation, R2, Product Import, or publ
   }
 });
 
-test('final Rules deny all report lists and retain direct GET plus V2 draft CAS', () => {
+test('final Rules deny all report lists and updates while retaining direct GET', () => {
   const match = rules.match(/match \/serviceReports\/\{reportId\} \{([\s\S]*?)\n    \}/);
   assert.ok(match);
   assert.match(match[1], /allow get: if staffOwnsServiceReport/);
   assert.match(match[1], /allow list: if false/);
-  assert.match(match[1], /allow update: if validV2DraftUpdate/);
+  assert.match(match[1], /allow update: if false/);
+  assert.deepEqual(
+    [...match[1].matchAll(/allow\s+([^:]+):\s*if\s+([^;]+);/g)]
+      .map(([, operations, condition]) => [operations.trim(), condition.trim()]),
+    [
+      ['get', 'staffOwnsServiceReport(resource.data)'],
+      ['list', 'false'],
+      ['create', 'false'],
+      ['update', 'false'],
+      ['delete', 'false'],
+    ]
+  );
 });
 
 test('the frozen three indexes remain exact and no fourth index is introduced', () => {

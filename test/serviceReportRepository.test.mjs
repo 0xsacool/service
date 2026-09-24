@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { after, test } from 'node:test';
 import { createServer } from 'vite';
+import ts from 'typescript';
 
 const vite = await createServer({ appType: 'custom', server: { middlewareMode: true } });
 after(() => vite.close());
@@ -333,13 +334,7 @@ test('missing Service Jobs fail safely before report creation', async () => {
   );
 });
 
-// F5d-66 — createDraft/finalize moved from direct client-side Firestore
-// writes to the privileged Worker (DECISIONS.md #036/#040): FR-{YYYY}-{SEQ}
-// allocation and the one-active-draft lock both require a transaction the
-// browser must never perform itself. updateDraft is unchanged — it remains
-// a direct-client Firestore transaction, now Rules-protected instead of
-// blocked by ServiceReportsSection's removed unavailable gate.
-test('Firestore repository delegates create/finalize/history to the Worker and keeps ordinary draft edits direct-client', async () => {
+test('Firestore repository delegates create/finalize/history and draft saves to the Worker', async () => {
   const source = await readFile(
     new URL('../src/repositories/firestoreServiceReportsRepository.ts', import.meta.url),
     'utf8'
@@ -360,10 +355,160 @@ test('Firestore repository delegates create/finalize/history to the Worker and k
   assert.equal(source.includes('numberSequences'), false);
   assert.equal(source.includes('getDocs('), false);
   assert.equal(source.includes('already has an active draft'), false);
-  // updateDraft alone remains a direct-client write.
-  assert.match(source, /updatedAt: serverTimestamp\(\)/);
+  assert.match(source, /legacy-draft-save/);
+  assert.match(source, /expectedUpdatedAt: existing.updatedAt/);
+  assert.match(source, /contractVersion: 2, expectedContentRevision, patch: normalizedPatch/);
+  assert.doesNotMatch(source, /runTransaction|transaction\.update|serverTimestamp/);
   assert.equal(source.includes('createdAt: serverTimestamp()'), false);
   assert.equal(source.includes('finalizedAt: serverTimestamp()'), false);
+});
+
+async function draftSaveHarness(storedReport, respond) {
+  const source = await readFile(
+    new URL('../src/repositories/firestoreServiceReportsRepository.ts', import.meta.url), 'utf8'
+  );
+  const requests = [];
+  const tokenProvider = { getIdToken: async () => 'local-test-token' };
+  const { fetchWithWorkerToken } = await vite.ssrLoadModule('/src/auth/workerTokenProvider.ts');
+  const modules = {
+    'firebase/firestore': {
+      doc: (_db, collection, id) => ({ collection, id }),
+      getDocFromServer: async () => ({
+        exists: () => true, id: storedReport.id,
+        data: () => storedReport.schemaVersion === 2
+          ? Object.fromEntries(Object.entries(storedReport).filter(([key]) => key !== 'id'))
+          : toFirestoreFields(storedReport),
+      }),
+      onSnapshot: () => {},
+    },
+    '../lib/firebase/firebase': { getFirestoreDb: () => ({}) },
+    '../auth/workerTokenProvider': {
+      fetchWithWorkerToken: (provider, url, init) => {
+        assert.equal(provider, tokenProvider);
+        return fetchWithWorkerToken(provider, url, init, {
+          fetch: async (input, options) => {
+            requests.push({ url: input, ...options, body: JSON.parse(options.body) });
+            return respond(requests.length);
+          },
+        });
+      },
+    },
+    '../config/workerUrl': { getFilesWorkerBaseUrl: () => 'https://worker.invalid' },
+    './workerServiceReportReadRepository': { createWorkerServiceReportHistoryRepository: () => ({}) },
+    './firestoreInitDiagnostics': {},
+  };
+  for (const path of ['../services/serviceReport', '../services/serviceReportV2', './types', './firestore/serviceReportMapping']) {
+    modules[path] = await vite.ssrLoadModule(`/src/repositories/${path}.ts`);
+  }
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const exports = {};
+  new Function('require', 'exports', compiled)((name) => {
+    assert.ok(Object.hasOwn(modules, name), `Unexpected dependency: ${name}`);
+    return modules[name];
+  }, exports);
+  const repository = await exports.createFirestoreServiceReportsRepository(
+    { getById: () => ({ id: storedReport.serviceJobId }) }, tokenProvider
+  );
+  return { repository, requests };
+}
+
+async function browserDraft(version) {
+  const job = await createJob();
+  const v1 = await serviceReportsRepository.createDraft(job.id);
+  if (version === 1) return v1;
+  return {
+    ...v1, schemaVersion: 2, reportId: v1.id, brandId: 'bruno-thailand',
+    activeDraftGeneration: 1, contentRevision: 3, predecessorReportId: null,
+    warrantyOutcome: 'undetermined',
+    createdByUid: 'test-technician', createdByRoleSnapshot: 'technician',
+    createdByDisplayNameSnapshot: null, finalizedByUid: null,
+    finalizedByRoleSnapshot: null, finalizedByDisplayNameSnapshot: null,
+    finalizedFromRevision: null, finalContentDigest: null,
+    approvalState: 'not-submitted', currentApprovalEventId: null, approvalDecidedAt: null,
+  };
+}
+
+for (const version of [1, 2]) {
+  const save = (repository, report, patch) => version === 1
+    ? repository.updateDraft(report.id, patch)
+    : repository.updateDraftV2(report.id, report.contentRevision, patch);
+
+  test(`V${version} browser draft save sends authenticated Worker contract and caches returned revision`, async () => {
+    const report = await browserDraft(version);
+    const patch = {
+      technicianRemark: 'Updated findings',
+      evidenceAttachmentIds: [version === 1 ? 'attachment-1' : `service-jobs/${report.serviceJobId}/report/photo.jpg`],
+    };
+    const updated = {
+      ...report, ...patch, updatedAt: '2026-09-24T01:00:00.000Z',
+      ...(version === 2 ? { contentRevision: 4 } : {}),
+    };
+    const { repository, requests } = await draftSaveHarness(report, () => Response.json({
+      ok: true, data: { report: updated }, replayed: false,
+    }));
+    assert.deepEqual(await save(repository, report, patch), updated);
+    assert.deepEqual(repository.getById(report.id), updated);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, `https://worker.invalid/service-jobs/${encodeURIComponent(report.serviceJobId)}/service-reports/${encodeURIComponent(report.id)}/${version === 1 ? 'legacy-draft-save' : 'draft-save'}`);
+    assert.equal(requests[0].method, 'POST');
+    assert.equal(requests[0].headers.Authorization, 'Bearer local-test-token');
+    assert.equal(requests[0].headers['Content-Type'], 'application/json');
+    assert.match(requests[0].headers['Idempotency-Key'], /^[0-9a-f-]{36}$/);
+    assert.deepEqual(requests[0].body, {
+      contractVersion: version, patch,
+      ...(version === 1 ? { expectedUpdatedAt: report.updatedAt } : { expectedContentRevision: 3 }),
+    });
+  });
+
+  test(`V${version} browser draft errors preserve Worker semantics without Firestore fallback`, async () => {
+    const report = await browserDraft(version);
+    for (const status of [400, 403, 409, 412, 503]) {
+      const error = { code: 'save_denied', message: 'Save denied', retryClass: 'reload' };
+      const { repository, requests } = await draftSaveHarness(report, () => Response.json(
+        { ok: false, error }, { status }
+      ));
+      await assert.rejects(save(repository, report, { technicianRemark: 'edit' }), (failure) => {
+        assert.equal(failure.status, status);
+        assert.equal(failure.code, error.code);
+        assert.equal(failure.retryClass, error.retryClass);
+        assert.equal(failure.message, error.message);
+        return true;
+      });
+      assert.equal(requests.length, 1);
+      assert.equal(repository.getById(report.id), undefined);
+    }
+    const networkError = new Error('Network unavailable');
+    const { repository, requests } = await draftSaveHarness(report, () => { throw networkError; });
+    await assert.rejects(save(repository, report, { technicianRemark: 'edit' }), (error) => error === networkError);
+    assert.equal(requests.length, 1);
+  });
+
+  test(`V${version} authorization retry keeps the same draft-save body and idempotency key`, async () => {
+    const report = await browserDraft(version);
+    const { repository, requests } = await draftSaveHarness(report, (attempt) => attempt === 1
+      ? Response.json({}, { status: 401 })
+      : Response.json({ ok: true, data: { report }, replayed: true }));
+    await save(repository, report, { technicianRemark: 'edit' });
+    assert.equal(requests.length, 2);
+    assert.deepEqual(requests[0], requests[1]);
+  });
+}
+
+test('browser draft validation and stale V2 revisions fail before any Worker request', async () => {
+  for (const version of [1, 2]) {
+    const report = await browserDraft(version);
+    const { repository, requests } = await draftSaveHarness(report, () => assert.fail('Unexpected request'));
+    await assert.rejects(version === 1
+      ? repository.updateDraft(report.id, { parts: [{ quantity: 0 }] })
+      : repository.updateDraftV2(report.id, 3, { evidenceAttachmentIds: ['invalid'] }));
+    if (version === 2) {
+      await assert.rejects(repository.updateDraftV2(report.id, 2, { technicianRemark: 'edit' }),
+        (error) => error.status === 412 && error.code === 'stale_revision' && error.retryClass === 'reload');
+    }
+    assert.equal(requests.length, 0);
+  }
 });
 
 test('D24 ordinal comparator is code-unit based, not locale-collated', () => {

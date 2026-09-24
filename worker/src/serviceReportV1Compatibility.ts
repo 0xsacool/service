@@ -221,6 +221,7 @@ function legacyFinalizeFingerprint(
 
 export async function saveLegacyServiceReportDraft(input: {
   store: ServiceReportV2Store;
+  objects: EvidenceObjectStore;
   actor: OperationActor;
   serviceJobId: string;
   reportId: string;
@@ -232,6 +233,8 @@ export async function saveLegacyServiceReportDraft(input: {
   const keyHash = await idempotencyDocumentId(input.idempotencyKey);
   const fingerprint = await legacySaveFingerprint(input.serviceJobId, input.reportId, input.request);
   return runTransaction(input.store, async (transaction) => {
+    const job = parseJob(await input.store.get('serviceJobs', input.serviceJobId, transaction), input.serviceJobId);
+    requireActor(await input.store.get('staffProfiles', input.actor.uid, transaction), input.actor, job.brandId!);
     const existing = parseIdempotency(await input.store.get('serviceReportIdempotency', keyHash, transaction));
     if (existing) {
       return {
@@ -239,8 +242,6 @@ export async function saveLegacyServiceReportDraft(input: {
         replayed: true,
       };
     }
-    const job = parseJob(await input.store.get('serviceJobs', input.serviceJobId, transaction), input.serviceJobId);
-    requireActor(await input.store.get('staffProfiles', input.actor.uid, transaction), input.actor, job.brandId!);
     const report = parseV1Report(await input.store.get('serviceReports', input.reportId, transaction), input.serviceJobId);
     if (report.status !== 'draft') {
       throw new ServiceReportV2Error(409, 'report_already_final', 'The Service Report is already final', 'reload');
@@ -249,6 +250,17 @@ export async function saveLegacyServiceReportDraft(input: {
       throw new ServiceReportV2Error(412, 'stale_revision', 'The draft timestamp is stale', 'reload');
     }
     const updated = updateServiceReportDraft(report, input.request.patch, new Date(now));
+    const evidenceAttachmentIds = updated.evidenceAttachmentIds;
+    if (!evidenceAttachmentIds.every(isCanonicalAttachmentKey)) {
+      malformed('The V1 evidence identity is malformed');
+    }
+    await resolveServiceReportEvidence(
+      input.store,
+      transaction,
+      evidenceAttachmentIds,
+      input.serviceJobId,
+      input.objects
+    );
     const fields = { ...input.request.patch, updatedAt: updated.updatedAt };
     await input.store.commit(transaction, [
       {

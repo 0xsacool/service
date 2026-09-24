@@ -206,6 +206,35 @@ class FakeStore implements ServiceReportFinalizationDataAccess {
   );
 }
 
+// --- schema boundary: the legacy V1 finalizer must not mutate a V2 record ---
+{
+  const store = new FakeStore();
+  store.jobs.set('BRN-2026-000004', makeServiceJob('BRN-2026-000004', 'bruno-thailand'));
+  const v2Draft = {
+    ...makeDraftReport({ id: 'v2-draft-report', serviceJobId: 'BRN-2026-000004' }),
+    schemaVersion: 2,
+    approvalState: 'not-submitted',
+    contentRevision: 0,
+  } as unknown as ServiceReport;
+  store.reports.set(v2Draft.id, v2Draft);
+  store.locks.set('BRN-2026-000004', { draftReportId: v2Draft.id });
+  let rejected = false;
+  try {
+    await finalizeServiceReportTransaction({
+      serviceJobId: 'BRN-2026-000004',
+      reportId: v2Draft.id,
+      dataAccess: store,
+    });
+  } catch (error) {
+    rejected = error instanceof ServiceReportNotFoundError;
+  }
+  check(
+    'the V1 finalizer rejects a V2 schema without changing report or lock',
+    rejected && store.commits === 0 && store.locks.has('BRN-2026-000004') &&
+      store.reports.get(v2Draft.id)?.status === 'draft'
+  );
+}
+
 // --- lock inconsistency: missing lock ---
 {
   const store = new FakeStore();

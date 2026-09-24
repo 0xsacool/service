@@ -7,6 +7,7 @@ import {
   parseFinalizeReportRequest,
   parseLegacyDraftSaveRequest,
   parseManualDeletionRequest,
+  parseV2DraftPatch,
   parseStrictJson,
   parseSuccessorRequest,
   parseTrustedPrintRequest,
@@ -21,9 +22,11 @@ import {
   decideServiceReportV2,
   finalizeServiceReportV2,
   prepareTrustedPrint,
+  saveServiceReportV2Draft,
   type EvidenceObjectStore,
   type ServiceReportV2Store,
 } from './serviceReportV2Operations.ts';
+import type { ServiceReportV2DraftPatch } from '../../src/types/serviceReportV2.ts';
 import {
   createEvidenceObjectStore,
   createServiceReportV2Store,
@@ -46,6 +49,46 @@ export function serviceReportV2Mode(env: Env): ServiceReportV2Mode {
   return env.SERVICE_REPORT_V2_MODE === 'compatibility' || env.SERVICE_REPORT_V2_MODE === 'v2-active'
     ? env.SERVICE_REPORT_V2_MODE
     : 'disabled';
+}
+
+export function rejectServiceReportContract(contractVersion: 1 | 2): Response {
+  const message = contractVersion === 1
+    ? 'V1 Service Report mutations are not enabled in this mode'
+    : 'V2 Service Report mutations are not enabled in this mode';
+  return v2Failure(
+    crypto.randomUUID(),
+    new ServiceReportV2Error(428, 'upgrade_required', message, 'never')
+  );
+}
+
+interface SaveReportV2DraftRequest {
+  contractVersion: 2;
+  expectedContentRevision: number;
+  patch: ServiceReportV2DraftPatch;
+}
+
+function parseSaveReportV2DraftRequest(value: unknown): SaveReportV2DraftRequest {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ServiceReportV2Error(400, 'validation_failed', 'The request body is not valid', 'never');
+  }
+  const body = value as Record<string, unknown>;
+  const keys = Object.keys(body);
+  if (
+    keys.length !== 3 ||
+    !keys.includes('contractVersion') ||
+    !keys.includes('expectedContentRevision') ||
+    !keys.includes('patch') ||
+    body.contractVersion !== 2 ||
+    !Number.isSafeInteger(body.expectedContentRevision) ||
+    Number(body.expectedContentRevision) < 0
+  ) {
+    throw new ServiceReportV2Error(400, 'validation_failed', 'The request body is not valid', 'never');
+  }
+  return {
+    contractVersion: 2,
+    expectedContentRevision: Number(body.expectedContentRevision),
+    patch: parseV2DraftPatch(body.patch),
+  };
 }
 
 export interface ServiceReportV2RouteDependencies {
@@ -182,15 +225,39 @@ export function handleLegacyDraftSaveV1(
   reportId: string,
   dependencies: ServiceReportV2RouteDependencies
 ): Promise<Response> {
-  return runRoute(request, env, dependencies, async ({ requestId, uid, body, store }) => {
+  return runRoute(request, env, dependencies, async ({ requestId, uid, body, store, objects }) => {
     const idempotencyKey = requireV2IdempotencyKey(request);
     const result = await saveLegacyServiceReportDraft({
       store,
+      objects,
       actor: { uid },
       serviceJobId,
       reportId,
       idempotencyKey,
       request: parseLegacyDraftSaveRequest(body),
+    });
+    return v2Success(requestId, { report: result.data }, result.replayed);
+  });
+}
+
+export function handleSaveReportV2Draft(
+  request: Request,
+  env: Env,
+  serviceJobId: string,
+  reportId: string,
+  dependencies: ServiceReportV2RouteDependencies
+): Promise<Response> {
+  return runRoute(request, env, dependencies, async ({ requestId, uid, body, store }) => {
+    const idempotencyKey = requireV2IdempotencyKey(request);
+    const parsed = parseSaveReportV2DraftRequest(body);
+    const result = await saveServiceReportV2Draft({
+      store,
+      actor: { uid },
+      serviceJobId,
+      reportId,
+      idempotencyKey,
+      expectedContentRevision: parsed.expectedContentRevision,
+      patch: parsed.patch,
     });
     return v2Success(requestId, { report: result.data }, result.replayed);
   });

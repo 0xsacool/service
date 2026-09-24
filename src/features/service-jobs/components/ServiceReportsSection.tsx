@@ -29,6 +29,7 @@ import type {
 } from '../../../types';
 import { RESULT_STATUSES, SERVICE_ACTIONS } from '../../../types';
 import { useServiceReports } from '../../../hooks/useServiceReports';
+import { getServiceReportV2ClientMode } from '../../../config/serviceReportV2';
 import {
   useServiceJobAttachments,
   type ServiceJobAttachmentOption,
@@ -139,6 +140,16 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
   const latestReport = getLatestServiceReport(reports);
   const activeDraft = getActiveDraft(reports);
   const history = getReportHistory(reports);
+  const clientMode = getServiceReportV2ClientMode();
+  const canEditDraft = (report: ServiceReport): boolean => {
+    const schemaVersion = 'sourceSchemaVersion' in report
+      ? report.sourceSchemaVersion
+      : 'schemaVersion' in report
+        ? report.schemaVersion
+        : 1;
+    return report.status === 'draft' &&
+      !(clientMode === 'v2-active' && schemaVersion !== 2);
+  };
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [mode, setMode] = useState<'edit' | 'view' | null>(null);
   const [finalizePromptToken, setFinalizePromptToken] = useState(0);
@@ -146,6 +157,9 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
   const [actionError, setActionError] = useState<string | null>(null);
 
   const selectedReport = reports.find((report) => report.id === selectedReportId);
+  const selectedReportV1ReadOnly = Boolean(
+    selectedReport && clientMode === 'v2-active' && selectedReport.sourceSchemaVersion !== 2
+  );
 
   const openReport = (
     reportId: string,
@@ -160,7 +174,7 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
 
   const handleCreate = async () => {
     if (activeDraft) {
-      openReport(activeDraft.id, 'edit');
+      openReport(activeDraft.id, canEditDraft(activeDraft) ? 'edit' : 'view');
       return;
     }
     setIsCreating(true);
@@ -185,7 +199,7 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
     setMode('view');
   };
 
-  if (selectedReport && mode === 'edit' && selectedReport.status === 'draft') {
+  if (selectedReport && mode === 'edit' && canEditDraft(selectedReport)) {
     return (
       <ServiceReportEditor
         key={selectedReport.id}
@@ -203,21 +217,25 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
     );
   }
 
-  if (selectedReport && mode === 'view') {
+  if (
+    selectedReport &&
+    (mode === 'view' || (mode === 'edit' && !canEditDraft(selectedReport)))
+  ) {
     return (
       <ServiceReportReadOnly
         report={selectedReport}
         serviceJob={serviceJob}
         attachments={attachments}
+        readOnlyNotice={selectedReportV1ReadOnly
+          ? 'รายงานรูปแบบเดิมสามารถดูได้เท่านั้นในขณะนี้'
+          : undefined}
         onBack={() => {
           setSelectedReportId(null);
           setMode(null);
         }}
-        onEdit={
-          selectedReport.status === 'draft'
-            ? () => openReport(selectedReport.id, 'edit')
-            : undefined
-        }
+        onEdit={canEditDraft(selectedReport)
+          ? () => openReport(selectedReport.id, 'edit')
+          : undefined}
       />
     );
   }
@@ -258,11 +276,18 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
             {isCreating
               ? 'กำลังสร้าง…'
               : activeDraft
-                ? 'ดำเนินการร่างต่อ'
+                ? canEditDraft(activeDraft) ? 'ดำเนินการร่างต่อ' : 'ดูร่างเดิม'
                 : 'สร้างใบรายงาน'}
           </PrimaryButton>
         </div>
       </div>
+
+      {clientMode === 'v2-active' &&
+      reports.some((report) => report.sourceSchemaVersion !== 2) ? (
+        <p className="text-sm text-neutral-600" role="status">
+          รายงานรูปแบบเดิมสามารถดูได้เท่านั้นในขณะนี้
+        </p>
+      ) : null}
 
       {actionError ? (
         <ErrorState
@@ -270,8 +295,13 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
           description={actionError}
           action={
             activeDraft ? (
-              <SecondaryButton onClick={() => openReport(activeDraft.id, 'edit')}>
-                ดำเนินการแก้ไขต่อ
+              <SecondaryButton
+                onClick={() => openReport(
+                  activeDraft.id,
+                  canEditDraft(activeDraft) ? 'edit' : 'view'
+                )}
+              >
+                {canEditDraft(activeDraft) ? 'ดำเนินการแก้ไขต่อ' : 'ดูร่างเดิม'}
               </SecondaryButton>
             ) : undefined
           }
@@ -359,8 +389,9 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
                       <ReportStatusBadge status="draft" />
                     </div>
                     <p className="mt-1 text-sm text-neutral-600">
-                      อนุญาตให้มีร่างที่กำลังดำเนินการได้เพียงฉบับเดียว
-                      ดำเนินการฉบับนี้ต่อหรือสรุปผลก่อนสร้างฉบับใหม่
+                      {canEditDraft(activeDraft)
+                        ? 'อนุญาตให้มีร่างที่กำลังดำเนินการได้เพียงฉบับเดียว ดำเนินการฉบับนี้ต่อหรือสรุปผลก่อนสร้างฉบับใหม่'
+                        : 'รายงานรูปแบบเดิมสามารถดูได้เท่านั้นในขณะนี้'}
                     </p>
                   </div>
                 </div>
@@ -371,19 +402,23 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
                   >
                     ดู
                   </SecondaryButton>
-                  <SecondaryButton
-                    onClick={() => openReport(activeDraft.id, 'edit')}
-                    className="px-4 py-2.5 text-sm"
-                  >
-                    ดำเนินการแก้ไขต่อ
-                  </SecondaryButton>
-                  <PrimaryButton
-                    onClick={() => openReport(activeDraft.id, 'edit', true)}
-                    className="px-4 py-2.5 text-sm"
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    สรุปผล
-                  </PrimaryButton>
+                  {canEditDraft(activeDraft) ? (
+                    <>
+                      <SecondaryButton
+                        onClick={() => openReport(activeDraft.id, 'edit')}
+                        className="px-4 py-2.5 text-sm"
+                      >
+                        ดำเนินการแก้ไขต่อ
+                      </SecondaryButton>
+                      <PrimaryButton
+                        onClick={() => openReport(activeDraft.id, 'edit', true)}
+                        className="px-4 py-2.5 text-sm"
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        สรุปผล
+                      </PrimaryButton>
+                    </>
+                  ) : null}
                 </div>
               </div>
             </GlassCard>
@@ -395,11 +430,9 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
               serviceJob={serviceJob}
               prominent
               onView={() => openReport(latestReport.id, 'view')}
-              onEdit={
-                latestReport.status === 'draft'
-                  ? () => openReport(latestReport.id, 'edit')
-                  : undefined
-              }
+              onEdit={canEditDraft(latestReport)
+                ? () => openReport(latestReport.id, 'edit')
+                : undefined}
             />
           ) : null}
 
@@ -418,11 +451,9 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
                     report={report}
                     serviceJob={serviceJob}
                     onView={() => openReport(report.id, 'view')}
-                    onEdit={
-                      report.status === 'draft'
-                        ? () => openReport(report.id, 'edit')
-                        : undefined
-                    }
+                    onEdit={canEditDraft(report)
+                      ? () => openReport(report.id, 'edit')
+                      : undefined}
                   />
                 ))}
               </div>
@@ -1016,12 +1047,14 @@ function ServiceReportReadOnly({
   report,
   serviceJob,
   attachments,
+  readOnlyNotice,
   onBack,
   onEdit,
 }: {
   report: ServiceReport;
   serviceJob: ServiceJob;
   attachments: ServiceJobAttachmentOption[];
+  readOnlyNotice?: string;
   onBack: () => void;
   onEdit?: () => void;
 }) {
@@ -1042,6 +1075,11 @@ function ServiceReportReadOnly({
   }
   return (
     <div className="space-y-6">
+      {readOnlyNotice ? (
+        <p className="text-sm text-neutral-600" role="status">
+          {readOnlyNotice}
+        </p>
+      ) : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <button
@@ -1069,7 +1107,8 @@ function ServiceReportReadOnly({
             </SecondaryButton>
           ) : (
             <div className="flex items-center gap-2 rounded-full bg-neutral-100 px-3 py-2 text-xs font-medium text-neutral-500">
-              <LockKeyhole className="h-3.5 w-3.5" /> สรุปผลแล้ว อ่านได้อย่างเดียว
+              <LockKeyhole className="h-3.5 w-3.5" />
+              {report.status === 'draft' ? 'อ่านได้อย่างเดียว' : 'สรุปผลแล้ว อ่านได้อย่างเดียว'}
             </div>
           )}
           <PrimaryButton

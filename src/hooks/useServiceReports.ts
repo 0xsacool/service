@@ -9,7 +9,10 @@ import type {
 import { orderServiceReports } from '../services/serviceReport';
 import { defaultContent, isServiceReportV2 } from '../services/serviceReportV2';
 import { canonicalizeEvidenceKeys } from '../services/evidenceOmission';
-import { isServiceReportV2ClientEnabled } from '../config/serviceReportV2';
+import {
+  getServiceReportV2ClientMode,
+  isServiceReportV2ClientEnabled,
+} from '../config/serviceReportV2';
 import { repositories } from '../repositories/repositoryProvider';
 import { WorkerServiceReportError, type TrustedPrintResult } from '../repositories/types';
 import { createServiceReportDraftAttemptKeyController } from './serviceReportDraftAttemptKey';
@@ -45,6 +48,12 @@ export interface UseServiceReportsResult {
 }
 
 const historyCache = new Map<string, readonly ServiceReportHistoryItem[]>();
+
+function assertLegacyMutationAllowed(): void {
+  if (getServiceReportV2ClientMode() === 'v2-active') {
+    throw new Error('V1 Service Reports are read-only in v2-active mode');
+  }
+}
 
 function projectHistoryItem(report: ServiceReportDocument): ServiceReportHistoryItem {
   const common = {
@@ -244,11 +253,15 @@ export function useServiceReports(serviceJobId: string): UseServiceReportsResult
 
   const updateDraft = async (reportId: string, patch: ServiceReportDraftPatch) => {
     const current = reports.find((item) => item.id === reportId);
-    const report = current?.sourceSchemaVersion === 2
-      ? await repositories.serviceReports.updateDraftV2(
-          reportId, current.contentRevision, patch
-        )
-      : await repositories.serviceReports.updateDraft(reportId, patch);
+    let report: ServiceReportDocument;
+    if (current?.sourceSchemaVersion === 2) {
+      report = await repositories.serviceReports.updateDraftV2(
+        reportId, current.contentRevision, patch
+      );
+    } else {
+      assertLegacyMutationAllowed();
+      report = await repositories.serviceReports.updateDraft(reportId, patch);
+    }
     applyProvisional(report);
     await refreshHistory();
     return report;
@@ -277,16 +290,20 @@ export function useServiceReports(serviceJobId: string): UseServiceReportsResult
 
   const finalize = async (reportId: string, expectedContentRevision?: number) => {
     const current = reports.find((item) => item.id === reportId);
-    const report = current?.sourceSchemaVersion === 2
-      ? await runIdempotent(
+    let report: ServiceReportDocument;
+    if (current?.sourceSchemaVersion === 2) {
+      report = await runIdempotent(
           `finalize:${reportId}:${expectedContentRevision ?? current.contentRevision}`,
           (key) => repositories.serviceReports.finalizeV2(
             reportId,
             expectedContentRevision ?? current.contentRevision,
             key
           )
-        )
-      : await repositories.serviceReports.finalize(reportId);
+        );
+    } else {
+      assertLegacyMutationAllowed();
+      report = await repositories.serviceReports.finalize(reportId);
+    }
     applyProvisional(report);
     await refreshHistory();
     return report;

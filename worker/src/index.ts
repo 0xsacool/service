@@ -66,12 +66,15 @@ import {
   handleApprovalDecisionV2,
   handleCreateReportV2,
   handleFinalizeReportV2,
+  handleSaveReportV2Draft,
   handleLegacyDraftSaveV1,
   handleManualDeletionV2,
   handleSuccessorV2,
   handleTrustedPrintV2,
   serviceReportV2Mode,
+  rejectServiceReportContract,
 } from './serviceReportV2Routes.ts';
+import { parseStrictJson } from './serviceReportV2Contracts.ts';
 import type {
   ServiceReportV2Store,
 } from './serviceReportV2Operations.ts';
@@ -131,6 +134,40 @@ function json(data: unknown, init: ResponseInit = {}): Response {
     ...init,
     headers: { 'Content-Type': 'application/json', ...init.headers },
   });
+}
+
+async function inspectServiceReportMutationBody(
+  request: Request
+): Promise<{ valid: true; body: unknown } | { valid: false }> {
+  const copy = request.clone();
+  const body = copy.body;
+  if (!body) return { valid: true, body: undefined };
+  const mediaType = copy.headers.get('Content-Type')?.split(';', 1)[0]?.trim().toLowerCase();
+  const contentLength = copy.headers.get('Content-Length');
+  if (
+    mediaType !== 'application/json' ||
+    (contentLength !== null && Number(contentLength) > MAX_SERVICE_REPORT_INPUT_BYTES)
+  ) {
+    return { valid: false };
+  }
+  try {
+    const bytes = await readBodyWithLimit(body, MAX_SERVICE_REPORT_INPUT_BYTES);
+    const text = new TextDecoder().decode(bytes);
+    return { valid: true, body: text.length > 0 ? parseStrictJson(text) : undefined };
+  } catch {
+    return { valid: false };
+  }
+}
+
+function requestContractVersion(body: unknown): unknown {
+  return body !== null && typeof body === 'object' && !Array.isArray(body)
+    ? (body as Record<string, unknown>).contractVersion
+    : undefined;
+}
+
+function isEmptyRequestObject(body: unknown): boolean {
+  return body !== null && typeof body === 'object' && !Array.isArray(body) &&
+    Object.keys(body).length === 0;
 }
 
 function publicTrackingNotFound(): Response {
@@ -557,7 +594,7 @@ async function handleServiceReportCreateDraft(
     if (request.body) {
       const raw = await readBodyWithLimit(request.body, MAX_SERVICE_REPORT_INPUT_BYTES);
       const text = new TextDecoder().decode(raw);
-      if (text.length > 0) parsedBody = JSON.parse(text);
+      if (text.length > 0) parsedBody = parseStrictJson(text);
     }
     const input = parseServiceReportDraftRequest(parsedBody);
     if (input === null) {
@@ -987,12 +1024,23 @@ export function createWorkerHandler(
       };
       const v2Mode = serviceReportV2Mode(env);
       if (segments.length === 2 && segments[1] === 'service-reports') {
-        if (v2Mode !== 'disabled') {
+        const inspected = await inspectServiceReportMutationBody(request);
+        if (!inspected.valid) {
+          return withCors(json({ error: 'Invalid Service Report draft input' }, { status: 400 }), request, env);
+        }
+        const version = requestContractVersion(inspected.body);
+        if (version === 2) {
+          if (v2Mode === 'disabled') {
+            return withCors(rejectServiceReportContract(2), request, env);
+          }
           return withCors(
             await handleCreateReportV2(request, env, segments[0]!, v2Dependencies),
             request,
             env
           );
+        }
+        if (v2Mode === 'v2-active') {
+          return withCors(rejectServiceReportContract(1), request, env);
         }
         return withCors(
           await handleServiceReportCreateDraft(request, env, segments[0]!, dependencies),
@@ -1001,9 +1049,12 @@ export function createWorkerHandler(
         );
       }
       if (
-        v2Mode !== 'disabled' && segments.length === 4 &&
-        segments[1] === 'service-reports' && segments[3] === 'legacy-draft-save'
+        segments.length === 4 && segments[1] === 'service-reports' &&
+        segments[3] === 'legacy-draft-save'
       ) {
+        if (v2Mode === 'v2-active') {
+          return withCors(rejectServiceReportContract(1), request, env);
+        }
         return withCors(
           await handleLegacyDraftSaveV1(
             request, env, segments[0]!, segments[2]!, v2Dependencies
@@ -1012,13 +1063,50 @@ export function createWorkerHandler(
           env
         );
       }
+      if (
+        segments.length === 4 && segments[1] === 'service-reports' &&
+        segments[3] === 'draft-save'
+      ) {
+        if (v2Mode === 'disabled') {
+          return withCors(rejectServiceReportContract(2), request, env);
+        }
+        return withCors(
+          await handleSaveReportV2Draft(request, env, segments[0]!, segments[2]!, v2Dependencies),
+          request,
+          env
+        );
+      }
       if (segments.length === 4 && segments[1] === 'service-reports' && segments[3] === 'finalize') {
-        if (v2Mode !== 'disabled') {
+        const inspected = await inspectServiceReportMutationBody(request);
+        if (!inspected.valid) {
+          return withCors(json({ error: 'Invalid Service Report finalize request' }, { status: 400 }), request, env);
+        }
+        const version = requestContractVersion(inspected.body);
+        if (version === 2) {
+          if (v2Mode === 'disabled') {
+            return withCors(rejectServiceReportContract(2), request, env);
+          }
           return withCors(
             await handleFinalizeReportV2(request, env, segments[0]!, segments[2]!, v2Dependencies),
             request,
             env
           );
+        }
+        if (version === 1) {
+          if (v2Mode === 'v2-active') {
+            return withCors(rejectServiceReportContract(1), request, env);
+          }
+          return withCors(
+            await handleFinalizeReportV2(request, env, segments[0]!, segments[2]!, v2Dependencies),
+            request,
+            env
+          );
+        }
+        if (!isEmptyRequestObject(inspected.body)) {
+          return withCors(json({ error: 'Invalid Service Report finalize request' }, { status: 400 }), request, env);
+        }
+        if (v2Mode === 'v2-active') {
+          return withCors(rejectServiceReportContract(1), request, env);
         }
         return withCors(
           await handleServiceReportFinalize(request, env, segments[0]!, segments[2]!, dependencies),

@@ -2,8 +2,6 @@ import {
   doc,
   getDocFromServer,
   onSnapshot,
-  runTransaction,
-  serverTimestamp,
 } from 'firebase/firestore';
 import { getFirestoreDb } from '../lib/firebase/firebase';
 import type {
@@ -16,7 +14,7 @@ import type {
   ServiceReportV2DraftPatch,
   FinalContentDigest,
 } from '../types';
-import { editableServiceReportFields, orderServiceReports } from '../services/serviceReport';
+import { editableServiceReportFields, isValidServiceReport, orderServiceReports } from '../services/serviceReport';
 import {
   isServiceReportV2,
   normalizeServiceReportV2DraftPatch,
@@ -57,10 +55,6 @@ async function readReport(reportId: string): Promise<ServiceReportDocument | und
   return fromFirestoreData(snapshot.id, snapshot.data()) ?? undefined;
 }
 
-// F5d-66 — parses the Worker's { report } response body or throws the
-// Worker's own { error } message; used by both createDraft() and
-// finalize() below, the only two operations this repository delegates to
-// the privileged Worker transaction (see DECISIONS.md #036/#040).
 async function readWorkerReportResponse(response: Response): Promise<ServiceReport> {
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null);
@@ -221,31 +215,29 @@ export async function createFirestoreServiceReportsRepository(
     },
 
     async updateDraft(reportId, patch: ServiceReportDraftPatch) {
-      const reference = reportReference(reportId);
-      await runTransaction(getFirestoreDb(), async (transaction) => {
-        const snapshot = await transaction.get(reference);
-        if (!snapshot.exists()) {
-          throw new Error(`Cannot update Service Report "${reportId}": no report exists`);
-        }
-        const existing = fromFirestoreData(snapshot.id, snapshot.data());
-        if (!existing) {
-          throw new Error(`Cannot update malformed Service Report "${reportId}"`);
-        }
-        editableServiceReportFields(patch);
-        if (existing.status !== 'draft') {
-          throw new Error('Final Service Reports are immutable through ordinary updates');
-        }
-        transaction.update(reference, {
-          ...editableServiceReportFields(patch),
-          updatedAt: serverTimestamp(),
-        });
-      });
-      const updated = await readReport(reportId);
-      if (!updated) {
-        throw new Error(`Firestore did not return updated Service Report "${reportId}"`);
+      const normalizedPatch = editableServiceReportFields(patch);
+      const existing = reportsById.get(reportId) ?? await readReport(reportId);
+      if (!existing || isServiceReportV2(existing)) {
+        throw new Error('Cannot update a missing or mismatched V1 Service Report');
       }
-      reportsById.set(reportId, updated);
-      return updated;
+      if (existing.status !== 'draft') {
+        throw new Error('Final Service Reports are immutable through ordinary updates');
+      }
+      const response = await postV2(
+        tokenProvider,
+        `/service-jobs/${encodeURIComponent(existing.serviceJobId)}/service-reports/${encodeURIComponent(reportId)}/legacy-draft-save`,
+        { contractVersion: 1, expectedUpdatedAt: existing.updatedAt, patch: normalizedPatch },
+        crypto.randomUUID()
+      );
+      const result = await readWorkerV2Data(response, (value) => {
+        if (!value || typeof value !== 'object' || !('report' in value)) return null;
+        const report = value.report;
+        return isValidServiceReport(report) && !('schemaVersion' in report) &&
+          report.id === reportId && report.serviceJobId === existing.serviceJobId
+          ? report : null;
+      });
+      reportsById.set(reportId, result.data);
+      return result.data;
     },
 
     // F5d-66 — also Worker-mediated: the only other operation that touches
@@ -294,28 +286,29 @@ export async function createFirestoreServiceReportsRepository(
     ) {
       const normalizedPatch = normalizeServiceReportV2DraftPatch(patch);
       if (!normalizedPatch) throw new Error('A non-empty V2 draft patch is required');
-      const reference = reportReference(reportId);
-      await runTransaction(getFirestoreDb(), async (transaction) => {
-        const snapshot = await transaction.get(reference);
-        if (!snapshot.exists()) throw new Error(`Cannot update Service Report "${reportId}": no report exists`);
-        const existing = fromFirestoreData(snapshot.id, snapshot.data());
-        if (!existing || !isServiceReportV2(existing)) throw new Error(`Cannot update malformed V2 Service Report "${reportId}"`);
-        if (existing.status !== 'draft' || existing.approvalState !== 'not-submitted') {
-          throw new Error('Only a V2 draft that has not been submitted may be edited');
-        }
-        if (existing.contentRevision !== expectedContentRevision) {
-          throw new WorkerServiceReportError('The draft revision is stale', 412, 'stale_revision', 'reload');
-        }
-        transaction.update(reference, {
-          ...normalizedPatch,
-          contentRevision: expectedContentRevision + 1,
-          updatedAt: serverTimestamp(),
-        });
+      const existing = reportsById.get(reportId) ?? await readReport(reportId);
+      if (!existing || !isServiceReportV2(existing)) {
+        throw new Error('Cannot update a missing or mismatched V2 Service Report');
+      }
+      if (existing.status !== 'draft' || existing.approvalState !== 'not-submitted') {
+        throw new Error('Only a V2 draft that has not been submitted may be edited');
+      }
+      if (existing.contentRevision !== expectedContentRevision) {
+        throw new WorkerServiceReportError('The draft revision is stale', 412, 'stale_revision', 'reload');
+      }
+      const response = await postV2(
+        tokenProvider,
+        `/service-jobs/${encodeURIComponent(existing.serviceJobId)}/service-reports/${encodeURIComponent(reportId)}/draft-save`,
+        { contractVersion: 2, expectedContentRevision, patch: normalizedPatch },
+        crypto.randomUUID()
+      );
+      const result = await readWorkerV2Data(response, (value) => {
+        const report = reportFromV2Payload(value);
+        return report?.id === reportId && report.serviceJobId === existing.serviceJobId
+          ? report : null;
       });
-      const updated = await readReport(reportId);
-      if (!updated || !isServiceReportV2(updated)) throw new Error(`Firestore did not return updated V2 Service Report "${reportId}"`);
-      reportsById.set(reportId, updated);
-      return updated;
+      reportsById.set(reportId, result.data);
+      return result.data;
     },
 
     async finalizeV2(reportId, expectedContentRevision, idempotencyKey) {

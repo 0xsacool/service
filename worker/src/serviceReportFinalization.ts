@@ -56,6 +56,11 @@ export async function finalizeServiceReportTransaction(input: {
         `Service Report "${input.reportId}" does not exist for Service Job "${input.serviceJobId}"`
       );
     }
+    if (Object.hasOwn(report, 'schemaVersion')) {
+      throw new ServiceReportNotFoundError(
+        `Service Report "${input.reportId}" is not a V1 Service Report`
+      );
+    }
 
     // Idempotent: a retried/duplicate finalize call for an already-final
     // report returns the existing final report unchanged rather than

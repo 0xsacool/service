@@ -713,19 +713,16 @@ test('every browser serviceReports list is denied after D24/D25 activation', asy
   await assertFails(getDocs(query(reports, limit(51))));
 });
 
-test('authorized same-brand ServiceReport get and V2 draft edit succeed', async () => {
+test('authorized same-brand ServiceReport get succeeds but V1 and V2 draft edits are denied', async () => {
   const brunoDb = staffDb(brunoUid);
   await assertSucceeds(getDoc(doc(brunoDb, 'serviceReports', 'report-bruno-draft')));
-  // Phase 3R/4R.3: a client draft edit is a V2 compare-and-set. A V1 report is
-  // no longer directly client-editable — that path is now the Worker's
-  // saveLegacyServiceReportDraft route — so the V1 shape must be denied here.
   await assertFails(
     updateDoc(doc(brunoDb, 'serviceReports', 'report-bruno-draft'), {
       technicianRemark: 'Updated remark',
       updatedAt: Timestamp.fromDate(new Date('2026-08-17T01:00:00.000Z')),
     })
   );
-  await assertSucceeds(
+  await assertFails(
     updateDoc(doc(brunoDb, 'serviceReports', 'report-bruno-v2-draft'), {
       technicianRemark: 'Updated remark',
       contentRevision: 4,
@@ -734,7 +731,7 @@ test('authorized same-brand ServiceReport get and V2 draft edit succeed', async 
   );
 });
 
-test('a V2 draft edit must advance contentRevision by exactly one', async () => {
+test('browser V2 draft edits are denied for stale, skipped, and absent revisions', async () => {
   const brunoDb = staffDb(brunoUid);
   for (const contentRevision of [3, 5, 2]) {
     await assertFails(

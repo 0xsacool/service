@@ -10,14 +10,17 @@ import type {
   ServiceReportApprovalEvent,
   ServiceReportV2,
   ServiceReportV2Content,
+  ServiceReportV2DraftPatch,
 } from '../../src/types/serviceReportV2.ts';
 import { isCanonicalBrandId } from '../../src/types/brand.ts';
 import { isValidServiceReport } from '../../src/services/serviceReport.ts';
 import {
   buildSuccessorContent,
   computeServiceReportFinalDigest,
+  computeRequestFingerprint,
   createServiceJobSnapshotV2,
   isCompleteServiceReportV2Content,
+  normalizeServiceReportV2DraftPatch,
   parseServiceReportV2,
 } from '../../src/services/serviceReportV2.ts';
 import {
@@ -25,6 +28,7 @@ import {
   attachmentMetadataDocId,
   attachmentRetentionHoldDocId,
   legacyAttachmentMetadataDocId,
+  serviceJobIdFromCanonicalAttachmentKey,
   verifyAttachmentDeletionClaimAddress,
   verifyAttachmentMetadataAddress,
 } from '../../src/services/attachmentIdentity.ts';
@@ -120,6 +124,7 @@ interface CompletedIdempotency {
   brandId: BrandId;
   operationKind:
     | 'create-report'
+    | 'update-draft'
     | 'finalize-report'
     | 'approval-decision'
     | 'create-replacement';
@@ -393,7 +398,12 @@ async function resolveEvidence(
       throw new ServiceReportV2Error(409, 'duplicate_attachment_metadata', 'Duplicate evidence metadata exists', 'operator');
     }
     const selected = candidates[0]!;
-    if (selected.data.jobId !== serviceJobId) forbidden();
+    if (
+      serviceJobIdFromCanonicalAttachmentKey(key) !== serviceJobId ||
+      selected.data.jobId !== serviceJobId
+    ) {
+      forbidden();
+    }
     if (selected.data.deletedAt !== null && selected.data.deletedAt !== undefined) {
       throw new ServiceReportV2Error(409, 'evidence_deleted', 'Evidence has been deleted', 'reload');
     }
@@ -569,6 +579,132 @@ export async function createServiceReportV2(input: {
 function withoutId(report: ServiceReportV2): Record<string, unknown> {
   const { id: _id, ...data } = report;
   return data as unknown as Record<string, unknown>;
+}
+
+export async function saveServiceReportV2Draft(input: {
+  store: ServiceReportV2Store;
+  actor: OperationActor;
+  serviceJobId: string;
+  reportId: string;
+  idempotencyKey: string;
+  expectedContentRevision: number;
+  patch: ServiceReportV2DraftPatch;
+  now?: string;
+}): Promise<ServiceReportV2OperationResult<ServiceReportV2>> {
+  const now = input.now ?? new Date().toISOString();
+  const keyHash = await idempotencyDocumentId(input.idempotencyKey);
+  const fingerprint = await computeRequestFingerprint({
+    contractVersion: 2,
+    operationKind: 'update-draft',
+    serviceJobId: input.serviceJobId,
+    reportId: input.reportId,
+    expectedContentRevision: input.expectedContentRevision,
+    patch: input.patch,
+  });
+  return runTransaction(input.store, async (transaction) => {
+    const serviceJob = parseServiceJob(
+      await input.store.get('serviceJobs', input.serviceJobId, transaction),
+      input.serviceJobId
+    );
+    const profile = parseActor(
+      await input.store.get('staffProfiles', input.actor.uid, transaction),
+      input.actor,
+      serviceJob.brandId!
+    );
+    const existing = parseIdempotency(
+      await input.store.get('serviceReportIdempotency', keyHash, transaction)
+    );
+    if (existing) {
+      const replayed = await replayReport(input.store, existing, input.actor, fingerprint, transaction);
+      if (
+        replayed.reportId !== input.reportId ||
+        replayed.serviceJobId !== serviceJob.id ||
+        replayed.brandId !== serviceJob.brandId
+      ) {
+        malformed('The idempotent Service Report does not match the Service Job');
+      }
+      return {
+        data: replayed,
+        replayed: true,
+      };
+    }
+
+    const report = parseV2Report(
+      await input.store.get('serviceReports', input.reportId, transaction),
+      input.serviceJobId
+    );
+    if (report.brandId !== serviceJob.brandId) {
+      malformed('The Service Report brand does not match the Service Job');
+    }
+    if (report.status !== 'draft' || report.approvalState !== 'not-submitted') {
+      throw new ServiceReportV2Error(
+        409,
+        'report_not_editable',
+        'Only an unsubmitted V2 draft may be edited',
+        'reload'
+      );
+    }
+    if (report.contentRevision !== input.expectedContentRevision) {
+      throw new ServiceReportV2Error(412, 'stale_revision', 'The draft revision is stale', 'reload');
+    }
+    if (report.contentRevision >= Number.MAX_SAFE_INTEGER) {
+      throw new ServiceReportV2Error(409, 'revision_exhausted', 'The draft revision is exhausted', 'operator');
+    }
+
+    const patch = normalizeServiceReportV2DraftPatch(input.patch);
+    if (!patch) {
+      throw new ServiceReportV2Error(400, 'validation_failed', 'The V2 draft patch is not valid', 'never');
+    }
+    const evidenceAttachmentIds = patch.evidenceAttachmentIds;
+    if (evidenceAttachmentIds !== undefined) {
+      await resolveEvidence(input.store, transaction, evidenceAttachmentIds, input.serviceJobId);
+    }
+
+    const updated: Extract<ServiceReportV2, { status: 'draft' }> = {
+      ...report,
+      ...patch,
+      contentRevision: report.contentRevision + 1,
+      updatedAt: now,
+    };
+    const fields = {
+      ...patch,
+      contentRevision: updated.contentRevision,
+      updatedAt: now,
+    };
+    const idem = idempotencyRecord({
+      keyHash,
+      actor: input.actor,
+      brandId: profile.brandId,
+      operationKind: 'update-draft',
+      routeResourceType: 'service-report',
+      serviceJobId: input.serviceJobId,
+      reportId: input.reportId,
+      predecessorReportId: null,
+      fingerprint,
+      resultResourceType: 'service-report',
+      resultResourceId: input.reportId,
+      resultApprovalEventId: null,
+      resultRevision: updated.contentRevision,
+      resultDigest: null,
+      now,
+    });
+    await input.store.commit(transaction, [
+      {
+        kind: 'update',
+        collection: 'serviceReports',
+        id: input.reportId,
+        data: fields,
+        fieldPaths: Object.keys(fields),
+      },
+      {
+        kind: 'create',
+        collection: 'serviceReportIdempotency',
+        id: keyHash,
+        data: idem as unknown as Record<string, unknown>,
+      },
+    ]);
+    return { data: updated, replayed: false };
+  });
 }
 
 function parseV2Report(document: V2StoredDocument | null, serviceJobId: string): ServiceReportV2 {

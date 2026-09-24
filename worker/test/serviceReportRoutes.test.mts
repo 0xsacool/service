@@ -3,6 +3,11 @@ import type { Env } from '../src/env.ts';
 import type { FirestoreClient } from '../src/firestoreClient.ts';
 import type { ServiceReport } from '../../src/types/serviceReport.ts';
 import type { ServiceJob } from '../../src/types/serviceJob.ts';
+import type { CanonicalAttachmentKey } from '../../src/types/attachment.ts';
+import { attachmentMetadataDocId } from '../../src/services/attachmentIdentity.ts';
+import { createServiceReportDraft } from '../../src/services/serviceReport.ts';
+import { MemoryV2Store } from './serviceReportV2StoreHarness.mts';
+import type { DeletionObjectStore } from '../src/attachmentDeletionCoordinatorV2.ts';
 
 let failures = 0;
 function check(label: string, condition: boolean): void {
@@ -55,7 +60,16 @@ interface FakeState {
   sequences: Map<string, number>;
 }
 
-function createHandler(state: FakeState) {
+function createHandler(
+  state: FakeState,
+  options: {
+    mode?: Env['SERVICE_REPORT_V2_MODE'];
+    v2Store?: MemoryV2Store;
+    objects?: DeletionObjectStore;
+  } = {}
+) {
+  const v2Store = options.v2Store;
+  const objects = options.objects;
   const dependencies: WorkerDependencies = {
     tokenVerifier: {
       async verify(token) {
@@ -114,17 +128,112 @@ function createHandler(state: FakeState) {
           state.locks.delete(input.serviceJobId);
         },
       }) as unknown as FirestoreClient,
+    ...(v2Store ? { createServiceReportV2Store: () => v2Store } : {}),
+    ...(objects ? { createEvidenceObjectStore: () => objects } : {}),
   };
   const env: Env = {
     ATTACHMENTS_BUCKET: {} as R2Bucket,
     ALLOWED_ORIGINS: 'http://localhost:5173',
     FIRESTORE_PROJECT_ID: 'test-project',
+    ...(options.mode ? { SERVICE_REPORT_V2_MODE: options.mode } : {}),
   };
   return { handler: createWorkerHandler(dependencies), env };
 }
 
 function authHeaders(token = 'valid-token'): HeadersInit {
   return { Authorization: `Bearer ${token}` };
+}
+
+function createMemoryEvidenceObjects(): DeletionObjectStore & {
+  objects: Map<CanonicalAttachmentKey, number>;
+} {
+  const objects = new Map<CanonicalAttachmentKey, number>();
+  return {
+    objects,
+    async head(key) {
+      const size = objects.get(key);
+      return size === undefined ? null : { key, size };
+    },
+    async delete(key) {
+      objects.delete(key);
+    },
+  };
+}
+
+async function seedEvidence(
+  store: MemoryV2Store,
+  objects: ReturnType<typeof createMemoryEvidenceObjects>,
+  key: CanonicalAttachmentKey,
+  serviceJobId: string,
+  size = 1024,
+  includeObject = true
+): Promise<void> {
+  store.set('serviceJobAttachments', await attachmentMetadataDocId(key), {
+    jobId: serviceJobId,
+    category: 'report',
+    name: 'evidence.jpg',
+    path: key,
+    contentType: 'image/jpeg',
+    size,
+    uploadedAt: '2026-01-01T00:00:00.000Z',
+    uploadedBy: 'staff-uid-1',
+    deleteAfter: '2026-12-31T00:00:00.000Z',
+    retentionStatus: 'active',
+    retentionExtensions: 0,
+    deletedAt: null,
+    metadataKeyVersion: 2,
+    approvalRetainUntil: null,
+  });
+  if (includeObject) objects.objects.set(key, size);
+}
+
+function createLegacySaveFixture(jobId: string, suffix: string) {
+  const serviceJob = makeServiceJob(jobId, 'bruno-thailand');
+  const report = createServiceReportDraft(
+    `00000000-0000-4000-8000-0000000000${suffix}`,
+    `FR-2026-${suffix.padStart(6, '0')}`,
+    serviceJob,
+    {},
+    new Date('2026-03-01T00:00:00.000Z')
+  );
+  const state: FakeState = {
+    profile: { uid: 'staff-uid-1', brandId: 'bruno-thailand' },
+    jobs: new Map([[jobId, serviceJob]]),
+    reports: new Map([[report.id, report]]),
+    draftKeys: new Map(),
+    locks: new Map([[jobId, { draftReportId: report.id }]]),
+    sequences: new Map(),
+  };
+  const store = new MemoryV2Store();
+  store.set('serviceJobs', jobId, { ...serviceJob });
+  store.set('staffProfiles', 'staff-uid-1', {
+    brandId: 'bruno-thailand', role: 'technician', displayName: 'QA Technician',
+  });
+  const reportData = { ...report } as unknown as Record<string, unknown>;
+  delete reportData.id;
+  store.set('serviceReports', report.id, reportData);
+  return { serviceJob, report, state, store };
+}
+
+function legacySaveRequest(
+  jobId: string,
+  reportId: string,
+  idempotencyKey: string,
+  expectedUpdatedAt: string,
+  patch: Record<string, unknown>
+): Request {
+  return new Request(
+    `http://worker.test/service-jobs/${jobId}/service-reports/${reportId}/legacy-draft-save`,
+    {
+      method: 'POST',
+      headers: {
+        ...authHeaders(),
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({ contractVersion: 1, expectedUpdatedAt, patch }),
+    }
+  );
 }
 
 // --- unauthenticated / unauthorized ---
@@ -259,7 +368,11 @@ function authHeaders(token = 'valid-token'): HeadersInit {
   const finalizeResponse = await handler.fetch(
     new Request(
       `http://worker.test/service-jobs/BRN-2026-000001/service-reports/${createBody.report.id}/finalize`,
-      { method: 'POST', headers: authHeaders() }
+      {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: '{}',
+      }
     ),
     env
   );
@@ -273,7 +386,11 @@ function authHeaders(token = 'valid-token'): HeadersInit {
   const secondFinalize = await handler.fetch(
     new Request(
       `http://worker.test/service-jobs/BRN-2026-000001/service-reports/${createBody.report.id}/finalize`,
-      { method: 'POST', headers: authHeaders() }
+      {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: '{}',
+      }
     ),
     env
   );
@@ -305,7 +422,11 @@ function authHeaders(token = 'valid-token'): HeadersInit {
   const finalizeResponse = await handler.fetch(
     new Request(
       `http://worker.test/service-jobs/BRN-2026-000002/service-reports/${created.report.id}/finalize`,
-      { method: 'POST', headers: authHeaders() }
+      {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: '{}',
+      }
     ),
     env
   );
@@ -452,6 +573,339 @@ function authHeaders(token = 'valid-token'): HeadersInit {
     retryBody.report.id === firstBody.report.id &&
       retryBody.report.reportNo === firstBody.report.reportNo
   );
+}
+
+// --- RRC-2A: the compatibility mode retains the checked-in V1 wire contract ---
+{
+  const jobId = 'BRN-2026-000013';
+  const state: FakeState = {
+    profile: { uid: 'staff-uid-1', brandId: 'bruno-thailand' },
+    jobs: new Map([[jobId, makeServiceJob(jobId, 'bruno-thailand')]]),
+    reports: new Map(),
+    draftKeys: new Map(),
+    locks: new Map(),
+    sequences: new Map(),
+  };
+  const { handler, env } = createHandler(state, { mode: 'compatibility' });
+  const create = await handler.fetch(
+    new Request(`http://worker.test/service-jobs/${jobId}/service-reports`, {
+      method: 'POST',
+      headers: {
+        ...authHeaders(),
+        'Content-Type': 'application/json',
+        'Idempotency-Key': '77777777-7777-4777-8777-777777777777',
+      },
+      body: JSON.stringify({
+        input: {
+          customerReportedProblem: 'V1 issue',
+          inspectionFindings: 'Fault reproduced',
+          serviceActions: ['repair'],
+          resultStatus: 'repaired',
+        },
+      }),
+    }),
+    env
+  );
+  const created = (await create.json()) as { report: ServiceReport };
+  check('compatibility mode routes the legacy { input } create to V1', create.status === 201 && !('schemaVersion' in created.report));
+
+  const finalized = await handler.fetch(
+    new Request(`http://worker.test/service-jobs/${jobId}/service-reports/${created.report.id}/finalize`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: '{}',
+    }),
+    env
+  );
+  const finalizedBody = (await finalized.json()) as { report: ServiceReport };
+  check('compatibility mode routes the legacy {} finalize to V1 finalization, not approval',
+    finalized.status === 200 && finalizedBody.report.status === 'final' && !('approvalState' in finalizedBody.report));
+}
+
+// --- RRC-2A: V1 draft-save Worker route is available only outside v2-active ---
+for (const mode of ['disabled', 'compatibility'] as const) {
+  const jobId = mode === 'disabled' ? 'BRN-2026-000014' : 'BRN-2026-000015';
+  const serviceJob = makeServiceJob(jobId, 'bruno-thailand');
+  const report = createServiceReportDraft(
+    `00000000-0000-4000-8000-0000000000${mode === 'disabled' ? '14' : '15'}`,
+    'FR-2026-000001',
+    serviceJob,
+    {},
+    new Date('2026-03-01T00:00:00.000Z')
+  );
+  const state: FakeState = {
+    profile: { uid: 'staff-uid-1', brandId: 'bruno-thailand' },
+    jobs: new Map([[jobId, serviceJob]]),
+    reports: new Map([[report.id, report]]),
+    draftKeys: new Map(),
+    locks: new Map([[jobId, { draftReportId: report.id }]]),
+    sequences: new Map(),
+  };
+  const store = new MemoryV2Store();
+  store.set('serviceJobs', jobId, { ...serviceJob });
+  store.set('staffProfiles', 'staff-uid-1', {
+    brandId: 'bruno-thailand', role: 'technician', displayName: 'QA Technician',
+  });
+  const reportData = { ...report } as unknown as Record<string, unknown>;
+  delete reportData.id;
+  store.set('serviceReports', report.id, reportData);
+  const { handler, env } = createHandler(state, { mode, v2Store: store });
+  const path = `http://worker.test/service-jobs/${jobId}/service-reports/${report.id}/legacy-draft-save`;
+  const request = (key: string, expectedUpdatedAt: string, patch: Record<string, unknown>) =>
+    new Request(path, {
+      method: 'POST',
+      headers: {
+        ...authHeaders(), 'Content-Type': 'application/json', 'Idempotency-Key': key,
+      },
+      body: JSON.stringify({ contractVersion: 1, expectedUpdatedAt, patch }),
+    });
+  const key = mode === 'disabled'
+    ? '88888888-8888-4888-8888-888888888888'
+    : '99999999-9999-4999-8999-999999999999';
+  const first = await handler.fetch(request(key, report.updatedAt, { technicianRemark: 'Saved through Worker' }), env);
+  const firstBody = await first.json() as { replayed: boolean; data: { report: ServiceReport } };
+  check(`${mode} mode routes V1 draft-save through the Worker with a revision check`,
+    first.status === 200 && firstBody.data.report.technicianRemark === 'Saved through Worker');
+  const writesAfterSave = store.committedWrites.length;
+
+  const stale = await handler.fetch(request('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', report.updatedAt, { technicianRemark: 'Stale' }), env);
+  check(`${mode} mode rejects a stale V1 draft timestamp without overwriting`, stale.status === 412);
+
+  const replay = await handler.fetch(request(key, report.updatedAt, { technicianRemark: 'Saved through Worker' }), env);
+  const replayBody = await replay.json() as { replayed: boolean };
+  check(`${mode} mode replays the same V1 save idempotency key`, replay.status === 200 && replayBody.replayed);
+
+  const conflict = await handler.fetch(request(key, report.updatedAt, { technicianRemark: 'Conflicting payload' }), env);
+  check(`${mode} mode rejects a conflicting V1 save idempotency key`, conflict.status === 409);
+
+  const deniedReplayHasNoReport = async (label: string) => {
+    const response = await handler.fetch(
+      request(key, report.updatedAt, { technicianRemark: 'Saved through Worker' }), env
+    );
+    const body = await response.json() as { data?: { report?: unknown }; report?: unknown };
+    check(label, response.status === 403 && body.data?.report === undefined &&
+      body.report === undefined && store.committedWrites.length === writesAfterSave);
+  };
+
+  store.set('staffProfiles', 'staff-uid-1', {
+    brandId: 'join-lux-club', role: 'technician', displayName: 'QA Technician',
+  });
+  await deniedReplayHasNoReport(`${mode} mode denies V1 same-key replay after brand authorization changes`);
+
+  store.set('staffProfiles', 'staff-uid-1', {
+    brandId: 'bruno-thailand', role: 'customer', displayName: 'QA Technician',
+  });
+  await deniedReplayHasNoReport(`${mode} mode denies V1 same-key replay after staff role removal`);
+
+  store.set('staffProfiles', 'staff-uid-1', {
+    brandId: 'invalid-brand', role: 'technician', displayName: 'QA Technician',
+  });
+  await deniedReplayHasNoReport(`${mode} mode denies V1 same-key replay with a malformed profile`);
+
+  store.set('staffProfiles', 'staff-uid-1', {
+    brandId: 'bruno-thailand', role: 'technician', displayName: 'QA Technician',
+  });
+  const authorizedReplay = await handler.fetch(
+    request(key, report.updatedAt, { technicianRemark: 'Saved through Worker' }), env
+  );
+  const authorizedReplayBody = await authorizedReplay.json() as { replayed: boolean };
+  check(`${mode} mode still replays the same V1 save for an authorized actor`,
+    authorizedReplay.status === 200 && authorizedReplayBody.replayed &&
+    store.committedWrites.length === writesAfterSave);
+}
+
+// --- RRC-2A follow-up: V1 saves validate the entire resulting evidence list ---
+{
+  const jobId = 'BRN-2026-000016';
+  const { report, state, store } = createLegacySaveFixture(jobId, '16');
+  const objects = createMemoryEvidenceObjects();
+  const { handler, env } = createHandler(state, {
+    mode: 'compatibility', v2Store: store, objects,
+  });
+  const malformedKey = 'not-a-canonical-attachment-key';
+  const malformed = await handler.fetch(
+    legacySaveRequest(
+      jobId, report.id, 'a1111111-1111-4111-8111-111111111111', report.updatedAt,
+      { evidenceAttachmentIds: [malformedKey] }
+    ),
+    env
+  );
+  const malformedText = await malformed.text();
+  check('V1 save rejects a noncanonical evidence ID without report or idempotency writes',
+    malformed.status === 422 && store.committedWrites.length === 0 &&
+    store.read('serviceReports', report.id)?.evidenceAttachmentIds instanceof Array &&
+    (store.read('serviceReports', report.id)?.evidenceAttachmentIds as string[]).length === 0 &&
+    !malformedText.includes(malformedKey));
+}
+
+{
+  const jobId = 'BRN-2026-000017';
+  const otherJobId = 'BRN-2026-000099';
+  const { report, state, store } = createLegacySaveFixture(jobId, '17');
+  const objects = createMemoryEvidenceObjects();
+  const foreignKey = `service-jobs/${otherJobId}/report/foreign-evidence.jpg`;
+  await seedEvidence(store, objects, foreignKey, otherJobId);
+  const { handler, env } = createHandler(state, {
+    mode: 'compatibility', v2Store: store, objects,
+  });
+  const foreign = await handler.fetch(
+    legacySaveRequest(
+      jobId, report.id, 'a2222222-2222-4222-8222-222222222222', report.updatedAt,
+      { evidenceAttachmentIds: [foreignKey] }
+    ),
+    env
+  );
+  const foreignText = await foreign.text();
+  check('V1 save rejects canonical evidence owned by another Service Job without writes',
+    foreign.status === 403 && store.committedWrites.length === 0 &&
+    !foreignText.includes(foreignKey));
+}
+
+{
+  const jobId = 'BRN-2026-000021';
+  const otherJobId = 'BRN-2026-000099';
+  const { report, state, store } = createLegacySaveFixture(jobId, '21');
+  const objects = createMemoryEvidenceObjects();
+  const mismatchedKey = `service-jobs/${otherJobId}/report/metadata-claims-current-job.jpg`;
+  await seedEvidence(store, objects, mismatchedKey, jobId);
+  const { handler, env } = createHandler(state, {
+    mode: 'compatibility', v2Store: store, objects,
+  });
+  const response = await handler.fetch(
+    legacySaveRequest(
+      jobId, report.id, 'abbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', report.updatedAt,
+      { evidenceAttachmentIds: [mismatchedKey] }
+    ),
+    env
+  );
+  const responseText = await response.text();
+  check('V1 save rejects a foreign-job canonical path even when metadata claims the current owner',
+    response.status === 403 && store.committedWrites.length === 0 &&
+    !responseText.includes(mismatchedKey));
+}
+
+{
+  const jobId = 'BRN-2026-000018';
+  const { report, state, store } = createLegacySaveFixture(jobId, '18');
+  const objects = createMemoryEvidenceObjects();
+  const missingMetadataKey = `service-jobs/${jobId}/report/missing-metadata.jpg`;
+  await seedEvidence(store, objects, missingMetadataKey, jobId, 1024, false);
+  const { handler, env } = createHandler(state, {
+    mode: 'compatibility', v2Store: store, objects,
+  });
+  const missingObject = await handler.fetch(
+    legacySaveRequest(
+      jobId, report.id, 'a3333333-3333-4333-8333-333333333333', report.updatedAt,
+      { evidenceAttachmentIds: [missingMetadataKey] }
+    ),
+    env
+  );
+  check('V1 save rejects evidence with valid metadata but missing object bytes without writes',
+    missingObject.status === 409 && store.committedWrites.length === 0);
+
+  const missingKey = `service-jobs/${jobId}/report/missing-record.jpg`;
+  const missingMetadata = await handler.fetch(
+    legacySaveRequest(
+      jobId, report.id, 'a4444444-4444-4444-8444-444444444444', report.updatedAt,
+      { evidenceAttachmentIds: [missingKey] }
+    ),
+    env
+  );
+  check('V1 save rejects evidence with missing metadata without writes',
+    missingMetadata.status === 409 && store.committedWrites.length === 0);
+}
+
+{
+  const jobId = 'BRN-2026-000019';
+  const { report, state, store } = createLegacySaveFixture(jobId, '19');
+  const objects = createMemoryEvidenceObjects();
+  const evidenceKey = `service-jobs/${jobId}/report/valid-evidence.jpg`;
+  await seedEvidence(store, objects, evidenceKey, jobId);
+  const { handler, env } = createHandler(state, {
+    mode: 'compatibility', v2Store: store, objects,
+  });
+  const first = await handler.fetch(
+    legacySaveRequest(
+      jobId, report.id, 'a5555555-5555-4555-8555-555555555555', report.updatedAt,
+      { evidenceAttachmentIds: [evidenceKey] }
+    ),
+    env
+  );
+  const firstBody = await first.json() as {
+    data?: { report?: ServiceReport };
+  };
+  const firstReport = firstBody.data?.report;
+  check('V1 save accepts same-job evidence and returns the saved report as readable data',
+    first.status === 200 && firstReport?.evidenceAttachmentIds[0] === evidenceKey);
+
+  const unchanged = await handler.fetch(
+    legacySaveRequest(
+      jobId, report.id, 'a6666666-6666-4666-8666-666666666666',
+      firstReport?.updatedAt ?? report.updatedAt,
+      { technicianRemark: 'Evidence retained on the resulting draft' }
+    ),
+    env
+  );
+  const unchangedBody = await unchanged.json() as {
+    data?: { report?: ServiceReport };
+  };
+  check('V1 save keeps unchanged valid evidence and remains editable',
+    unchanged.status === 200 &&
+    unchangedBody.data?.report?.evidenceAttachmentIds[0] === evidenceKey &&
+    unchangedBody.data.report.technicianRemark === 'Evidence retained on the resulting draft');
+
+  const emptied = await handler.fetch(
+    legacySaveRequest(
+      jobId, report.id, 'a7777777-7777-4777-8777-777777777777',
+      unchangedBody.data?.report?.updatedAt ?? report.updatedAt,
+      { evidenceAttachmentIds: [] }
+    ),
+    env
+  );
+  const emptiedBody = await emptied.json() as {
+    data?: { report?: ServiceReport };
+  };
+  check('V1 save accepts an explicit empty evidence list',
+    emptied.status === 200 && emptiedBody.data?.report?.evidenceAttachmentIds.length === 0);
+}
+
+// A text-only edit must revalidate evidence already stored on the V1 draft.
+{
+  const jobId = 'BRN-2026-000020';
+  const { report, state, store } = createLegacySaveFixture(jobId, '20');
+  const objects = createMemoryEvidenceObjects();
+  const evidenceKey = `service-jobs/${jobId}/report/retained-evidence.jpg`;
+  await seedEvidence(store, objects, evidenceKey, jobId, 1024, false);
+  store.set('serviceReports', report.id, {
+    ...store.read('serviceReports', report.id),
+    evidenceAttachmentIds: [evidenceKey],
+  });
+  const before = JSON.stringify(store.read('serviceReports', report.id));
+  const { handler, env } = createHandler(state, {
+    mode: 'compatibility', v2Store: store, objects,
+  });
+  const missingObject = await handler.fetch(
+    legacySaveRequest(
+      jobId, report.id, 'a8888888-8888-4888-8888-888888888888', report.updatedAt,
+      { technicianRemark: 'Text-only update with unavailable retained evidence' }
+    ),
+    env
+  );
+  check('V1 text-only save rejects retained evidence whose object is missing without writes',
+    missingObject.status === 409 && store.committedWrites.length === 0 &&
+    JSON.stringify(store.read('serviceReports', report.id)) === before);
+
+  await seedEvidence(store, objects, evidenceKey, 'BRN-2026-000099');
+  const foreignOwner = await handler.fetch(
+    legacySaveRequest(
+      jobId, report.id, 'a9999999-9999-4999-8999-999999999999', report.updatedAt,
+      { technicianRemark: 'Text-only update with foreign-owned retained evidence' }
+    ),
+    env
+  );
+  check('V1 text-only save rejects retained evidence whose metadata owner changed without writes',
+    foreignOwner.status === 403 && store.committedWrites.length === 0 &&
+    JSON.stringify(store.read('serviceReports', report.id)) === before);
 }
 
 if (failures) process.exitCode = 1;
