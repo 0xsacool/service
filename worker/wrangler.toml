@@ -2,11 +2,12 @@ name = "service-tech-files-worker"
 main = "src/index.ts"
 compatibility_date = "2026-08-08"
 
-# F5a: local development only — this Worker has never been deployed.
-# `account_id` is intentionally left unset; it's required for `wrangler
-# deploy` but not for `wrangler dev`'s local (default, non-remote) mode,
-# which simulates R2 entirely in-process via Miniflare. Fill it in only when
-# a real deploy is explicitly approved (see worker/README.md).
+# This is the default Wrangler configuration; it does not establish the
+# currently deployed Worker version or production settings. Consult the dated
+# rollout history in ../PROJECT_STATE.md and verify Cloudflare before planning
+# another deployment.
+# `account_id` is intentionally unset here. Supply deployment identifiers only
+# through the separately approved deployment procedure.
 
 [[r2_buckets]]
 binding = "ATTACHMENTS_BUCKET"
@@ -24,18 +25,13 @@ bucket_name = "service-tech-attachments-prod"
 # from a browser. Local Vite dev server default; adjust per environment.
 ALLOWED_ORIGINS = "http://localhost:5173,https://luxace-service.web.app"
 
-# F5d-5: the Firestore project ID is not a secret — mirrors
-# VITE_FIREBASE_PROJECT_ID already being public in .env.example. The
-# credential that actually authorizes access (GOOGLE_SERVICE_ACCOUNT_EMAIL/
-# GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY) is deliberately NOT here — those
-# become `wrangler secret put` values only, never a [vars] entry, and do
-# not exist anywhere yet (no real service account has been created — see
-# worker/README.md). FIRESTORE_EMULATOR_HOST is set locally via .dev.vars
-# only, never here — its presence is what tells googleAuth.ts to skip real
-# Google auth entirely, and a real deploy must never accidentally have it set.
+# Firestore project ID is public configuration; credentials are not. Supply
+# Firestore credential values only as Worker secrets, never as [vars]. A local
+# emulator host belongs in .dev.vars and must not appear in this deployment file.
 FIRESTORE_PROJECT_ID = "luxace-service"
 
-PUBLIC_TRACKING_ENABLED = "true"
+# Public Tracking is disabled by default. Keep this optional binding absent;
+# enabling it requires a separately approved deployment.
 
 # Cron is deliberately absent from the default deployment configuration.
 # A future activation requires its own explicitly approved configuration and

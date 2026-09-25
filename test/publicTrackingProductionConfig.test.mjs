@@ -28,12 +28,22 @@ function gitCheckIgnore(relativePath) {
 
 const gitignore = await readFile(new URL('../.gitignore', import.meta.url), 'utf8');
 const envProduction = await readFile(new URL('../.env.production', import.meta.url), 'utf8');
+const defaultWorkerConfig = await readFile(
+  new URL('../worker/wrangler.toml', import.meta.url),
+  'utf8'
+);
 
 const vite = await createServer({ appType: 'custom', server: { middlewareMode: true } });
 after(() => vite.close());
 const { resolvePublicTrackingWorkerUrl } = await vite.ssrLoadModule(
   '/src/features/tracking/publicTracking.ts'
 );
+
+// --- Default Worker deployment configuration remains fail-closed ----------
+
+test('default Wrangler configuration leaves Public Tracking disabled', () => {
+  assert.doesNotMatch(defaultWorkerConfig, /^\s*PUBLIC_TRACKING_ENABLED\s*=/m);
+});
 
 // --- A: .gitignore explicitly allows .env.production, nothing broader -----
 
