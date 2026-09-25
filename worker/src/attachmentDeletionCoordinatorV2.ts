@@ -17,6 +17,7 @@ import {
   idempotencyDocumentId,
 } from './serviceReportV2Contracts.ts';
 import {
+  rollbackOpenTransaction,
   V2TransactionConflictError,
   type EvidenceObjectStore,
   type OperationActor,
@@ -71,8 +72,11 @@ async function transaction<T>(
   for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
     const current = await store.beginTransaction();
     try {
-      return await operation(current);
+      const result = await operation(current);
+      await rollbackOpenTransaction(store, current);
+      return result;
     } catch (error) {
+      await rollbackOpenTransaction(store, current);
       if (error instanceof V2TransactionConflictError && attempt + 1 < MAX_RETRIES) continue;
       if (error instanceof V2TransactionConflictError) {
         throw new ServiceReportV2Error(503, 'transaction_retry_exhausted', 'The deletion transaction could not commit', 'same-idempotency-key');

@@ -21,6 +21,9 @@ export function evidenceKey(name: string, jobId = SERVICE_JOB_ID): string {
 export class MemoryV2Store implements ServiceReportV2Store {
   readonly docs = new Map<string, Record<string, unknown>>();
   readonly committedWrites: V2Write[][] = [];
+  readonly rollbackAttempts: string[] = [];
+  readonly rolledBackTransactionIds: string[] = [];
+  rollbackFailure: Error | null = null;
   private transactionSeq = 0;
 
   // Runs once, immediately before the Nth commit lands, so a test can mutate
@@ -42,7 +45,7 @@ export class MemoryV2Store implements ServiceReportV2Store {
 
   async beginTransaction(): Promise<V2Transaction> {
     this.transactionSeq += 1;
-    return { id: `tx-${this.transactionSeq}` };
+    return { id: `tx-${this.transactionSeq}`, closed: false };
   }
 
   async get(collection: string, id: string): Promise<V2StoredDocument | null> {
@@ -79,7 +82,14 @@ export class MemoryV2Store implements ServiceReportV2Store {
     return results;
   }
 
-  async commit(_transaction: V2Transaction, writes: readonly V2Write[]): Promise<void> {
+  async rollback(transaction: V2Transaction): Promise<void> {
+    this.rollbackAttempts.push(transaction.id);
+    if (this.rollbackFailure) throw this.rollbackFailure;
+    transaction.closed = true;
+    this.rolledBackTransactionIds.push(transaction.id);
+  }
+
+  async commit(transaction: V2Transaction, writes: readonly V2Write[]): Promise<void> {
     this.commitAttempts += 1;
     this.onBeforeCommit?.(this.commitAttempts);
     for (const write of writes) {
@@ -93,6 +103,7 @@ export class MemoryV2Store implements ServiceReportV2Store {
       }
     }
     this.committedWrites.push([...writes]);
+    transaction.closed = true;
   }
 }
 

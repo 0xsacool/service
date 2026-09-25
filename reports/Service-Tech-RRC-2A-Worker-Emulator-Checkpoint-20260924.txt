@@ -1,0 +1,73 @@
+Service Tech — RRC-2A Worker Emulator Checkpoint
+Date: 2026-09-24
+Classification: LOCAL EMULATOR FOLLOW-UP PASS; SOURCE RE-REVIEWS PASS; NOT PRODUCTION ACCEPTANCE
+
+Repository snapshot
+- Root: C:\service
+- Branch: master
+- HEAD: 4af7acae1b0588066e62eb26339f38d2b0a7bb43
+- The scoped Worker emulator harness is untracked and was modified for this local integration checkpoint; it remains uncommitted.
+- No unrelated worktree files or artifact contents were inspected for this checkpoint.
+
+Purpose and boundary
+This checkpoint records local Firestore Emulator validation only. It does not establish deployed Worker, Rules, Hosting, or production behavior. No production or staging endpoint, live configuration, credentials, or customer data was accessed. No npm package or project dependency manifest was changed. During emulator startup, Firebase CLI downloaded cloud-firestore-emulator-v1.21.0.jar to its user cache and removed the outdated v1.22.0 emulator file.
+
+Observed validation
+1. Firestore Rules Emulator suite: 34/34 passed in the earlier local run. It was not rerun in this checkpoint.
+2. The emulator’s raw transactional document GET still triggers the BYTE_STRING error. The integration harness uses a test-only shim to translate those GETs into the supported transactional documents:batchGet REST request; no production read path was changed.
+3. Worker integration passed on the pinned local project f5d26-rules: 1/1 test. It exercised synthetic V2 create/save, stale revision denial (412) with successful rollback, finalize, exact idempotent replay without a second commit, and V1 draft creation using the released slot. The harness asserted two successful rollbacks and fixture cleanup.
+4. Focused local validation passed: worker/test/serviceReportModeBridge.test.mts, worker/test/serviceReportRoutes.test.mts, worker/test/serviceReportV2Successor.test.mts, worker/test/serviceReportV2Retention.test.mts, and Worker npm run typecheck.
+5. Scoped git diff --check passed. Git emitted LF-to-CRLF working-copy warnings for three tracked text files.
+6. Because of the test-only GET shim, this run validates the Worker operation flow against supported REST batchGet/rollback semantics, but does not validate the emulator’s raw transactional GET implementation. No production or staging behavior was tested.
+
+Disposition
+- Scoped checkpoint status: CLOSED for rollback lifecycle handling in serviceReportV2Operations only; this does not establish Worker-wide transaction cleanup.
+- Independent source-only review on 2026-09-25 verified rollback on uncommitted result/error paths, no rollback after successful commit, and preservation of the original result/error when rollback fails. The regression definition specifically checks that a stale 412 response survives rollback failure.
+- Scope gap: serviceReportV1Compatibility.ts and attachmentDeletionCoordinatorV2.ts use separate transaction wrappers over the same ServiceReportV2Store and still omit rollback on early return/error paths. Track these as a separate follow-up before claiming Worker-wide rollback closure.
+- The local emulator and focused validation results above are prior recorded runs; tests, typecheck, and emulator were not rerun during this review.
+- Keep worker/test/serviceReportFirestoreEmulator.test.mts untracked and uncommitted. Its GET shim exists only inside this local test harness.
+- RRC-2A local Worker emulator integration passes with the test-only shim; production acceptance remains outstanding.
+- Production modes, deployed Worker/Rules versions, live draft inventory, and real-user behavior remain unverified.
+
+Changes in this checkpoint
+- Updated worker/src/serviceReportV2Operations.ts and worker/src/serviceReportV2Firestore.ts with closed-transaction tracking and REST rollback on uncommitted V2 transaction exits.
+- Updated worker/test/serviceReportV2StoreHarness.mts and worker/test/serviceReportModeBridge.test.mts with rollback regression assertions, including preserving the original 412 when rollback itself fails.
+- Modified the untracked worker/test/serviceReportFirestoreEmulator.test.mts to include the local-only transactional GET shim and assert rollback requests and successful synthetic fixture cleanup.
+- Removed the temporary worker/test/firestoreRestBatchGetTransactionProbe.mjs after its REST protocol check; no synthetic emulator fixture remains.
+- No Rules, dependency manifest, project runtime configuration, production state, or Git commit was changed.
+
+Follow-up update (2026-09-25)
+- Closed the previously recorded Worker-wide rollback scope gap for the two separate wrappers: worker/src/serviceReportV1Compatibility.ts and worker/src/attachmentDeletionCoordinatorV2.ts now use the shared open-transaction rollback helper on uncommitted returns and thrown errors. Successful commits are not rolled back; rollback failure does not replace the original result or error.
+- Added V1 save regressions in worker/test/serviceReportRoutes.test.mts for successful commit, stale 412 with rollback failure, and authorized idempotent replay rollback in disabled and compatibility modes.
+- Added worker/test/serviceReportDeletionRollback.test.mts for completed idempotent replay cleanup and missing-attachment 404 preservation when rollback fails.
+- Local checks passed: node test/serviceReportRoutes.test.mts, node test/serviceReportModeBridge.test.mts, node test/serviceReportDeletionRollback.test.mts (2 checks), Worker npm run typecheck, and scoped git diff --check. The diff check reported existing LF-to-CRLF working-copy warnings.
+- Emulator was not rerun. No independent re-review, deployment, live access, or production acceptance was performed. Independent re-review remains the next checkpoint.
+- The earlier disposition above described these two wrappers as an open scope gap; this follow-up closes that implementation gap, subject to independent re-review.
+
+Emulator follow-up (2026-09-25)
+- The owner's first invocation of the existing harness passed 1/1 tests (exit 0). That original test covered the V2 route flow; it did not yet exercise the new V1 save or manual deletion rollback paths.
+- Extended the untracked worker/test/serviceReportFirestoreEmulator.test.mts with synthetic V1 save, stale 412, and exact idempotent replay checks. V1 save committed once without rollback; stale and replay requests each rolled back without an extra commit.
+- Added a synthetic expired attachment, an admin profile, and an in-memory object store to exercise the manual deletion Worker route. Initial deletion committed its four state transitions and deleted the object once; completed replay rolled back its read-only transaction without another commit or object deletion. Missing attachment returned 404, committed nothing, and rolled back.
+- Node syntax check returned 0. The expanded Firestore Emulator integration test passed 1/1 (exit 0, 0 failures); the test asserted zero rollback failures and successful cleanup of all newly added metadata, claim, operation, and idempotency fixtures. The emulator shut down after the script.
+- After the successful run, the single test title was updated to reflect its expanded scope; assertion logic was unchanged. Worker npm run typecheck passed (exit 0). Firestore Rules were not rerun in this follow-up.
+- The local test still converts transactional document GETs to transactional batchGet because of the emulator BYTE_STRING error. R2 deletion was represented by an in-memory object store. This result does not prove the raw GET endpoint, real R2, deployed Worker/Rules, or production acceptance.
+- The owner accepted the preceding source-only re-review as PASS. Independent source-only re-review of the harness extension completed 2026-09-25 and found no defects in the reviewed assertions, local emulator guard, or fixture cleanup. This review did not execute tests; the emulator run recorded above remains the execution evidence. The batchGet shim and in-memory R2 mock limitations remain.
+
+Source checkpoint (2026-09-25)
+- Repository: C:\service; branch: master; HEAD: 4af7acae1b0588066e62eb26339f38d2b0a7bb43.
+- Scoped Git status contains seven modified tracked files: worker/src/attachmentDeletionCoordinatorV2.ts, worker/src/serviceReportV1Compatibility.ts, worker/src/serviceReportV2Firestore.ts, worker/src/serviceReportV2Operations.ts, worker/test/serviceReportModeBridge.test.mts, worker/test/serviceReportRoutes.test.mts, and worker/test/serviceReportV2StoreHarness.mts.
+- Scoped Git status also contains three untracked files: worker/test/serviceReportDeletionRollback.test.mts, worker/test/serviceReportFirestoreEmulator.test.mts, and this checkpoint report. No scoped staged changes were present.
+- The seven tracked diffs were reviewed. They cover open-transaction rollback in the V1 compatibility and deletion wrappers, Firestore transaction rollback/closed tracking, and focused regression coverage. Their diff stat is 79 insertions and 13 deletions.
+- Scoped git diff --check exited 0. Git emitted LF-to-CRLF working-copy warnings for five tracked files.
+- Existing unit, typecheck, emulator, and independent-review outcomes remain as recorded above; none were rerun for this source checkpoint. The emulator result retains its test-only batchGet shim and in-memory object-store limitations.
+- The overall worktree remains dirty outside this scope. Those paths and unrelated artifact contents were not inspected or changed. No commit, build, test, deployment, live configuration check, production access, or production data operation was performed for this checkpoint.
+- This is a working-tree source checkpoint only. The scoped edits and report remain uncommitted; no production acceptance or deployment readiness is implied.
+
+Validation continuation (2026-09-25)
+- Reran Worker route regressions from worker/: node test/serviceReportRoutes.test.mts passed 54 checks (exit 0); node test/serviceReportModeBridge.test.mts passed 30 checks (exit 0); node test/serviceReportDeletionRollback.test.mts passed 2 checks (exit 0).
+- Worker npm run typecheck passed (exit 0).
+- Firestore Emulator integration using firebase.rules-test.json and local project f5d26-rules passed 1/1 test (exit 0). The emulator stopped cleanly after the script. The first relative executable lookup was rejected before launch; invoking C:\service\node_modules\.bin\firebase.cmd by absolute path succeeded.
+- The emulator test remained local and synthetic. The test-only transactional batchGet shim and in-memory object-store mock remain limitations; no production, staging, live configuration, or real R2 behavior was exercised.
+- Post-run scoped git status is unchanged: seven modified tracked Worker paths, two untracked Worker tests, and this untracked report; no scoped staged changes. Tracked diff stat remains 7 files, 79 insertions, 13 deletions. Scoped git diff --check exited 0; Git emitted LF-to-CRLF working-copy warnings for five tracked files.
+- The tracked source/test diff did not change during this validation, so the prior independent source-only reviews still cover the same code diff; no new independent review was run. The Firestore Rules suite was not rerun because Rules were not changed; its earlier 34/34 result remains prior evidence only.
+- Local validation gate: PASS. This does not establish production acceptance, deployment readiness, or all-Worker-write exclusivity. No commit, tag, push, deployment, or production action was performed.

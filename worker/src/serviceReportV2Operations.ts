@@ -69,6 +69,7 @@ export interface V2StoredDocument {
 
 export interface V2Transaction {
   id: string;
+  closed?: boolean;
 }
 
 export type V2Write =
@@ -102,6 +103,7 @@ export interface ServiceReportV2Store {
     transaction?: V2Transaction
   ): Promise<V2StoredDocument[]>;
   commit(transaction: V2Transaction, writes: readonly V2Write[]): Promise<void>;
+  rollback(transaction: V2Transaction): Promise<void>;
 }
 
 export interface EvidenceObjectHead {
@@ -322,6 +324,18 @@ function idempotencyRecord(input: {
   };
 }
 
+export async function rollbackOpenTransaction(
+  store: ServiceReportV2Store,
+  transaction: V2Transaction
+): Promise<void> {
+  if (transaction.closed) return;
+  try {
+    await store.rollback(transaction);
+  } catch {
+    // Best-effort cleanup must not replace the operation's result or error.
+  }
+}
+
 async function runTransaction<T>(
   store: ServiceReportV2Store,
   operation: (transaction: V2Transaction) => Promise<T>
@@ -329,8 +343,11 @@ async function runTransaction<T>(
   for (let attempt = 0; attempt < MAX_TRANSACTION_RETRIES; attempt += 1) {
     const transaction = await store.beginTransaction();
     try {
-      return await operation(transaction);
+      const result = await operation(transaction);
+      await rollbackOpenTransaction(store, transaction);
+      return result;
     } catch (error) {
+      await rollbackOpenTransaction(store, transaction);
       if (error instanceof V2TransactionConflictError && attempt + 1 < MAX_TRANSACTION_RETRIES) continue;
       if (error instanceof V2TransactionConflictError) {
         throw new ServiceReportV2Error(503, 'transaction_retry_exhausted', 'The transaction could not be committed', 'same-idempotency-key');

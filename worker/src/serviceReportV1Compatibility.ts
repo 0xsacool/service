@@ -23,6 +23,7 @@ import {
 } from './serviceReportV2Contracts.ts';
 import {
   resolveServiceReportEvidence,
+  rollbackOpenTransaction,
   V2TransactionConflictError,
   type EvidenceObjectStore,
   type OperationActor,
@@ -146,8 +147,11 @@ async function runTransaction<T>(
   for (let attempt = 0; attempt < MAX_TRANSACTION_RETRIES; attempt += 1) {
     const transaction = await store.beginTransaction();
     try {
-      return await operation(transaction);
+      const result = await operation(transaction);
+      await rollbackOpenTransaction(store, transaction);
+      return result;
     } catch (error) {
+      await rollbackOpenTransaction(store, transaction);
       if (error instanceof V2TransactionConflictError && attempt + 1 < MAX_TRANSACTION_RETRIES) continue;
       if (error instanceof V2TransactionConflictError) {
         throw new ServiceReportV2Error(503, 'transaction_retry_exhausted', 'The transaction could not be committed', 'same-idempotency-key');

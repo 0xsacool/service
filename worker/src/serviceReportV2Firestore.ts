@@ -213,6 +213,16 @@ export function createServiceReportV2Store(env: Env): ServiceReportV2Store {
       return result;
     },
 
+    async rollback(transaction) {
+      const response = await fetch(`${url}:rollback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authorizationHeaders(env)) },
+        body: JSON.stringify({ transaction: transaction.id }),
+      });
+      if (!response.ok) throw new ServiceReportV2FirestoreError(response.status);
+      transaction.closed = true;
+    },
+
     async commit(transaction, writes) {
       const response = await fetch(`${url}:commit`, {
         method: 'POST',
@@ -237,6 +247,7 @@ export function createServiceReportV2Store(env: Env): ServiceReportV2Store {
         }
         throw new ServiceReportV2FirestoreError(response.status);
       }
+      transaction.closed = true;
     },
   };
 }

@@ -673,18 +673,29 @@ for (const mode of ['disabled', 'compatibility'] as const) {
   const key = mode === 'disabled'
     ? '88888888-8888-4888-8888-888888888888'
     : '99999999-9999-4999-8999-999999999999';
+  const rollbackAttemptsBeforeSave = store.rollbackAttempts.length;
   const first = await handler.fetch(request(key, report.updatedAt, { technicianRemark: 'Saved through Worker' }), env);
   const firstBody = await first.json() as { replayed: boolean; data: { report: ServiceReport } };
-  check(`${mode} mode routes V1 draft-save through the Worker with a revision check`,
-    first.status === 200 && firstBody.data.report.technicianRemark === 'Saved through Worker');
+  check(`${mode} mode routes V1 draft-save through the Worker with a revision check and does not roll back a committed transaction`,
+    first.status === 200 && firstBody.data.report.technicianRemark === 'Saved through Worker' &&
+    store.rollbackAttempts.length === rollbackAttemptsBeforeSave);
   const writesAfterSave = store.committedWrites.length;
 
+  const rollbackAttemptsBeforeStale = store.rollbackAttempts.length;
+  store.rollbackFailure = new Error('synthetic V1 rollback failure');
   const stale = await handler.fetch(request('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', report.updatedAt, { technicianRemark: 'Stale' }), env);
-  check(`${mode} mode rejects a stale V1 draft timestamp without overwriting`, stale.status === 412);
+  store.rollbackFailure = null;
+  check(`${mode} mode rejects a stale V1 draft timestamp and preserves 412 when rollback fails`,
+    stale.status === 412 && store.rollbackAttempts.length === rollbackAttemptsBeforeStale + 1);
 
+  const rollbackAttemptsBeforeReplay = store.rollbackAttempts.length;
+  const successfulRollbacksBeforeReplay = store.rolledBackTransactionIds.length;
   const replay = await handler.fetch(request(key, report.updatedAt, { technicianRemark: 'Saved through Worker' }), env);
   const replayBody = await replay.json() as { replayed: boolean };
-  check(`${mode} mode replays the same V1 save idempotency key`, replay.status === 200 && replayBody.replayed);
+  check(`${mode} mode replays the same V1 save and rolls back the read-only transaction`,
+    replay.status === 200 && replayBody.replayed &&
+    store.rollbackAttempts.length === rollbackAttemptsBeforeReplay + 1 &&
+    store.rolledBackTransactionIds.length === successfulRollbacksBeforeReplay + 1);
 
   const conflict = await handler.fetch(request(key, report.updatedAt, { technicianRemark: 'Conflicting payload' }), env);
   check(`${mode} mode rejects a conflicting V1 save idempotency key`, conflict.status === 409);

@@ -141,10 +141,14 @@ async function runV2Lifecycle(
     save.status === 200 && saved.data.report.contentRevision === 1 &&
     saved.data.report.technicianRemark === 'Saved through Worker');
   const writesAfterSave = store.committedWrites.length;
+  const rollbackAttemptsBeforeReplay = store.rollbackAttempts.length;
+  const successfulRollbacksBeforeReplay = store.rolledBackTransactionIds.length;
   const replay = await handler.fetch(saveRequest(), env);
   const replayBody = await replay.json() as { replayed: boolean };
-  check(`${mode} V2 save replays the same idempotency key without another commit`,
-    replay.status === 200 && replayBody.replayed && store.committedWrites.length === writesAfterSave);
+  check(`${mode} V2 save replays the same idempotency key and closes its read-only transaction`,
+    replay.status === 200 && replayBody.replayed && store.committedWrites.length === writesAfterSave &&
+    store.rollbackAttempts.length === rollbackAttemptsBeforeReplay + 1 &&
+    store.rolledBackTransactionIds.length === successfulRollbacksBeforeReplay + 1);
 
   const deniedReplayHasNoReport = async (label: string) => {
     const response = await handler.fetch(saveRequest(), env);
@@ -175,13 +179,17 @@ async function runV2Lifecycle(
   }), env);
   check(`${mode} rejects a reused V2 save key with a conflicting body`, conflict.status === 409);
 
+  const rollbackAttemptsBeforeStale = store.rollbackAttempts.length;
+  store.rollbackFailure = new Error('synthetic rollback failure');
   const stale = await handler.fetch(new Request(`${reportPath}/draft-save`, {
     method: 'POST',
     headers: { ...auth, 'Idempotency-Key': key('3') },
     body: JSON.stringify({ ...saveBody, patch: { technicianRemark: 'Stale revision' } }),
   }), env);
-  check(`${mode} rejects a stale V2 content revision without a write`,
-    stale.status === 412 && store.committedWrites.length === writesAfterSave);
+  store.rollbackFailure = null;
+  check(`${mode} rejects stale revision, attempts rollback, and preserves the original denial`,
+    stale.status === 412 && store.committedWrites.length === writesAfterSave &&
+    store.rollbackAttempts.length === rollbackAttemptsBeforeStale + 1);
 
   const finalize = await handler.fetch(new Request(`${reportPath}/finalize`, {
     method: 'POST',
