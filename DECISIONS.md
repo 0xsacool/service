@@ -1034,5 +1034,42 @@ what was revoked and when. Against the pre-correction hook its late-resolution
 cases fail with nothing revoked at all. The decision itself is unchanged.
 
 **Status:** Decided and implemented in source (Phase 6R-B, corrected in Phase
-6R-B.2, Phase 6R-B.3 and Phase 6R-B.4); not deployed or activated. Reopens no
-D1-D25 owner decision, route contract, or architecture.
+6R-B.2, Phase 6R-B.3 and Phase 6R-B.4); activated in Production as part of the
+RRC-2A/D24/D25 rollout recorded in `PROJECT_STATE.md`. Reopens no D1-D25 owner
+decision, route contract, or architecture.
+
+---
+
+## 048 - D25 production staff role provisioning uses least privilege
+
+**Reason:** The original staff-profile decision (#023) deliberately introduced
+only a brand allowlist and no role field. Later D25 decisions (#045/#047)
+introduced an explicit authorization requirement: Approval Console reads and UI
+access require a current `approver` or `admin` role, and a roleless profile
+must fail closed. At production activation the sole existing staff profile still
+had the older roleless shape, so D25 could not be accepted live without an
+explicit role provisioning decision.
+
+**Decision:** During D25 production activation, provision the sole approved
+production staff profile with `role: "approver"`, not `admin`. Use a
+privileged write guarded by the document's current `updateTime` so concurrent
+profile changes cannot be silently overwritten, then read the document back and
+verify the result. This is a one-profile migration of the older phase's schema,
+not a browser-write capability. `canImportProducts` remains a separate Product
+Import capability and must never satisfy or broaden the Approval Console role
+gate.
+
+**Impact:** The current production staff member can reach the D25 Approval
+Console authorization boundary with the minimum role required to review and
+decide reports. Browser clients still cannot create/update/delete
+`staffProfiles`. Any future staff account requires an explicit role choice at
+privileged provisioning time; absence or an unrecognized role continues to deny
+D25 access.
+
+**Status:** Applied in Production on 2026-09-26 with an `updateTime` CAS and
+verified by read-back. Credentialed D24/D25 acceptance subsequently passed for
+authenticated history, Approval Queue, browser list denial, and Public Tracking
+rejection. The direct browser PATCH negative control was blocked before dispatch
+by the host safety layer; update denial is closed by deterministic live Rules
+hash equivalence plus the unconditional `allow update: if false` rule and the
+pre-deploy Rules Emulator suite.

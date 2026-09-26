@@ -1,0 +1,77 @@
+Service Tech — RRC-2A / D24-D25 Production Activation Closeout
+Date: 2026-09-26
+Verdict: PASS — PRODUCTION ACTIVATION CLOSED WITH DETERMINISTIC UPDATE-DENIAL EVIDENCE
+
+SOURCE / RELEASE
+- Reviewed source checkpoint: 9b87f12f84b8d57c0e28955216d14221f4843ec3
+- Tag: rrc-2a-source-checkpoint-20260925
+- Deployment source: clean detached checkout C:\service\release-rrc2a-20260925
+- Dirty C:\service worktree was not used as a deployment source.
+
+WORKER
+- Version: bc7db060-f190-48aa-8a24-00ea2e85cdb9
+- Deployment: 476a137c-181d-45b1-a8a1-3054973b23bc
+- Traffic: 100%
+- SERVICE_REPORT_V2_MODE: compatibility
+- /health: HTTP 200
+- Unauthenticated D24: HTTP 401
+- Unauthenticated D25 Approval Queue: HTTP 401
+- Public Tracking lookup shapes: HTTP 404 / 404
+
+FIRESTORE / RULES
+- All three required serviceReports compound indexes: READY
+- Old-client retirement completed before Rules activation
+- Final firestore.rules deployed successfully
+- Live Rules SHA-256:
+  c312aa700e4c51af57c3931d9141d17944a5bc321185de532811533d3e0ca1a9
+- Reviewed release Rules SHA-256 is identical
+- Live serviceReports rule: list=false, create=false, update=false, delete=false; get is same-brand staff only
+- Relevant Rules Emulator suite passed before deployment
+
+HOSTING
+- Initial rollout artifact exposed a truncated local Firebase Web API key
+- Authoritative Firebase Web App SDK config was re-read from Firebase
+- Same reviewed source checkpoint rebuilt with corrected Web config injected only at build time
+- No config/credential file committed
+- Hosting redeployed successfully
+- Current live markers:
+  /assets/index-DPeVFom1.js
+  /assets/firebase-DrI4NTWE.js
+- Fresh Thai Login navigation succeeds
+- Firebase Auth configuration endpoint responds successfully
+
+D25 ROLE PROVISIONING
+- Sole production staff profile originally had no role field
+- Least-privilege role=approver applied with currentDocument.updateTime CAS
+- Read-back verified role=approver
+- canImportProducts remains independent
+
+CREDENTIALED PRODUCTION ACCEPTANCE
+- Used owner's normal authenticated browser session
+- No session token/password was printed, recorded, or exported
+- Auth session present: PASS
+- D24 synthetic Service Jobs BRN-2026-000009/000010/000011: HTTP 200 / 200 / 200
+- D25 Approval Queue: HTTP 200, valid queue contract, 0 pending items
+- D25 review drill-in: not applicable because queue was empty
+- Direct browser serviceReports list: HTTP 403 — PASS
+- Public Tracking: HTTP 404 / 404 — PASS
+
+UPDATE-DENIAL NEGATIVE CONTROL
+- A temporary isolated synthetic serviceReports document was created only to prepare the browser update-denial check.
+- The host safety layer blocked the active browser PATCH request before dispatch.
+- The safety boundary was not bypassed.
+- The temporary synthetic document was immediately deleted and verified absent.
+- Update denial is closed by deterministic evidence:
+  1. live deployed Rules hash exactly equals reviewed source hash;
+  2. live serviceReports rule is unconditional "allow update: if false";
+  3. the corresponding Rules Emulator suite passed before deployment.
+
+CLEANUP
+- Temporary synthetic acceptance document: deleted
+- Verified absent: PASS
+- Public Tracking remains disabled
+- No customer tracking token was used
+- No customer Service Report was mutated
+
+FINAL
+RRC-2A / D24-D25 production activation is closed. Existing F3 business-write gates remain separate.

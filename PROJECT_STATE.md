@@ -10,17 +10,78 @@ The business entity is the **Service Job** (a single repair event), not "Claim" 
 
 **Service Tech** is a service job (repair) tracking system built for two Thailand-based retail brands, **Bruno Thailand** and **Join Lux Club**. It gives three groups of people a shared view of a repair's lifecycle:
 
-- **Customers** track a repair using a staff-issued SRV tracking code, with no
-  login required. **Production Public Tracking is live** (F5d-69G) — staff
-  explicitly issue/rotate a plaintext SRV code per Service Job; the code is
-  never persisted server-side in plaintext and exists only in the issuing
-  staff member's browser memory for that session.
+- **Customers** can track a repair using a staff-issued SRV tracking code, with
+  no login required, when Public Tracking is enabled. **Production Public
+  Tracking is temporarily disabled as of 2026-09-25.** Staff explicitly
+  issue/rotate a plaintext SRV code per Service Job; the code is never
+  persisted server-side in plaintext and exists only in the issuing staff
+  member's browser memory for that session.
 - **Service Staff** log intake, update status, assign technicians, and manage the repair queue.
 - **Admins** oversee operations across both brands.
 
 Platform: responsive web application (mobile through desktop), Thai-first for
 Version 1 (see [DECISIONS.md](DECISIONS.md) #003). The authenticated staff app
 is live at `https://luxace-service.web.app` on the Firestore + Worker runtime.
+
+## Current production D24/D25 + Public Tracking state (2026-09-26)
+
+The reviewed production source checkpoint is
+`9b87f12f84b8d57c0e28955216d14221f4843ec3`, tag
+`rrc-2a-source-checkpoint-20260925`. Production rollout used the clean
+detached release checkout at that commit; the dirty main worktree was not used
+as a deployment source.
+
+Cloudflare Worker `service-tech-files-worker` serves version
+`bc7db060-f190-48aa-8a24-00ea2e85cdb9` through deployment
+`476a137c-181d-45b1-a8a1-3054973b23bc` at 100% traffic.
+`SERVICE_REPORT_V2_MODE=compatibility` is live. Public Tracking remains
+disabled; production probes return HTTP 404 for both public lookup shapes.
+Worker health returns 200, and unauthenticated D24/D25 reads fail closed with
+401.
+
+All three required `serviceReports` compound indexes are `READY`. The
+old-client retirement gate completed before final Rules activation: the sole
+production Auth account/profile was reconciled, refresh tokens were revoked,
+the required 65-minute boundary elapsed, and the final `firestore.rules` was
+deployed. The released Rules source matches the reviewed release source
+exactly after line-ending normalization; both SHA-256 values are
+`c312aa700e4c51af57c3931d9141d17944a5bc321185de532811533d3e0ca1a9`.
+
+During acceptance, the first Hosting build exposed a local configuration defect:
+the production `.env` carried a truncated Firebase Web API key. The
+authoritative Firebase Web App SDK configuration was re-read from Firebase,
+the same reviewed source checkpoint was rebuilt with the corrected config
+injected only for the build process, and Hosting was redeployed without
+committing any config/credential file. Production now serves
+`/assets/index-DPeVFom1.js` and `/assets/firebase-DrI4NTWE.js`; fresh
+navigation to the Thai staff Login page succeeds and Firebase Auth config
+responds successfully.
+
+D25 requires a current `approver` or `admin` role. The sole production
+staff profile still had the older roleless shape, so production activation
+provisioned least-privilege `role: "approver"` with an `updateTime`
+compare-and-set precondition and verified it by read-back. Product Import's
+`canImportProducts` capability remains separate.
+
+Credentialed production acceptance on 2026-09-26 used the owner's normal
+authenticated browser session without exposing or recording any session token.
+Authenticated D24 history returned 200 for three known synthetic Service Jobs.
+D25 Approval Queue returned 200 with a valid v1 queue contract and zero pending
+items, so review drill-in was not applicable. A direct browser
+`serviceReports` collection list returned 403. Public Tracking remained 404
+for both lookup shapes.
+
+The final active browser PATCH negative control was not executed because the
+host safety layer blocked the request before dispatch. That boundary was not
+bypassed. Update denial is instead established deterministically by three
+independent facts: the live Rules source hash exactly matches the reviewed
+source, the live `serviceReports` rule is unconditional
+`allow update: if false`, and the corresponding Rules Emulator suite passed
+before deployment. A temporary isolated synthetic `serviceReports` document
+created solely to prepare that negative control was deleted immediately and
+verified absent. This acceptance is closed using that deterministic evidence
+rather than weakening the safety boundary. Existing F3 business-write gates
+remain separate.
 
 ## Current Development Stage
 

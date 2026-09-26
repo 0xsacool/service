@@ -8,6 +8,47 @@
 
 ---
 
+## Current production override (2026-09-26)
+
+RRC-2A/D24/D25 source checkpoint
+`9b87f12f84b8d57c0e28955216d14221f4843ec3` (tag
+`rrc-2a-source-checkpoint-20260925`) is live from the clean detached release
+checkout. Cloudflare Worker version
+`bc7db060-f190-48aa-8a24-00ea2e85cdb9` is routed by deployment
+`476a137c-181d-45b1-a8a1-3054973b23bc` at 100% traffic with
+`SERVICE_REPORT_V2_MODE=compatibility`; Public Tracking remains disabled and
+returns 404 for both lookup shapes.
+
+The final Firestore Rules are deployed and match the reviewed release source
+exactly (SHA-256
+`c312aa700e4c51af57c3931d9141d17944a5bc321185de532811533d3e0ca1a9`).
+The old-client retirement gate completed before activation, including refresh
+token revocation and the 65-minute boundary. The sole production staff profile
+was migrated from roleless to least-privilege `role: "approver"` under an
+`updateTime` compare-and-set precondition; `canImportProducts` remains an
+independent capability.
+
+During rollout acceptance, a truncated local Firebase Web API key was found in
+the first Hosting build. The authoritative Firebase Web App SDK config was
+re-read from Firebase, the same reviewed source was rebuilt with the corrected
+config injected only at build time, and Hosting was redeployed without
+committing any config/credential file. Current live frontend markers are
+`index-DPeVFom1.js` and `firebase-DrI4NTWE.js`.
+
+Credentialed acceptance on 2026-09-26 used the owner's normal authenticated
+browser session without exposing the session token. Authenticated D24 history
+returned 200 for three synthetic Service Jobs; D25 Approval Queue returned 200
+with a valid queue contract and zero pending items; direct browser
+`serviceReports` list returned 403; Public Tracking remained 404. The active
+browser PATCH negative control was blocked before dispatch by the host safety
+layer and was not bypassed. Update denial is accepted by deterministic
+evidence instead: the live Rules hash matches the reviewed source, the live
+rule says unconditional `allow update: if false`, and the corresponding Rules
+Emulator suite passed before deployment. A temporary synthetic report document
+created only to prepare the negative control was deleted and verified absent.
+See `PROJECT_STATE.md` for the full rollout record. Existing F3 business-write
+gates remain separate.
+
 ## 1. Project Overview
 
 **Service Tech** is a repair/service-job tracking system for two
