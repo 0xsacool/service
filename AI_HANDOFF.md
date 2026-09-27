@@ -530,11 +530,19 @@ N7.3 adds a separate test-only browser-like interaction layer:
 covers Modal portal/inert/focus/preventClose behavior, StaffShell mobile-drawer
 focus/modal-boundary behavior, and RouteAccessibility focus policy. The
 dependency-free custom hook/component runtimes remain intentionally DOM-free
-for deterministic lifecycle/race tests. N7.3 validation passes app
-build/lint/format, the DOM suite 6/6 (including a passive-effect negative
-control), the F5d-64 accessibility suite 19/19, and all documented root
-deterministic groups including DOM (261 tests total).
-jsdom is not real-browser layout/device/print-pagination evidence.
+for deterministic lifecycle/race tests. jsdom is not real-browser
+layout/device/print-pagination evidence.
+
+N7.4 integrates the Worker-backed trusted-print contract into the Service
+Report preview path. Normal verification runs before preview; diagnostic mode
+is reachable only for the specific approved-evidence integrity incident, and
+that state blocks the actual print action. V1/draft/pending/approved/rejected/
+integrity states remain visibly distinct, and V2 business-facing
+warranty/approval/evidence verification data comes from the trusted server
+result rather than the ordinary history cache. N7.4 validation passes app
+build/lint/format, Service Report print 15/15, Service Report UI 9/9,
+trusted-print contract/UI 19/19, all documented root deterministic groups
+280/280, Worker TypeScript, and the full Worker regression suite.
 
 ---
 
@@ -578,12 +586,12 @@ Use [BACKLOG.md](BACKLOG.md) as the authoritative active-work index. The
 F5d-23 Worker authorization foundation and later attachment/auth milestones in
 older handoff text are historical and already superseded by production work.
 
-Current recommended source sequence starts with V2 trusted-print UI
-integration, followed by Product Return Form and the remaining P2/P3
-accessibility/content work according to owner priority. Public Tracking
-activation, legacy opaque flag cleanup, automatic deletion/Cron, staff role
-administration, automatic notifications, durable Product Instance identity,
-and the other deferred items stay gated as listed in `BACKLOG.md`.
+Current recommended source sequence starts with Product Return Form,
+followed by the remaining P2/P3 accessibility/content work according to owner
+priority. Public Tracking activation, legacy opaque flag cleanup, automatic
+deletion/Cron, staff role administration, automatic notifications, durable
+Product Instance identity, and the other deferred items stay gated as listed
+in `BACKLOG.md`.
 
 ---
 

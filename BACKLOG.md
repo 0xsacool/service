@@ -4,7 +4,7 @@
 
 ## Baseline
 
-- Source baseline entering N7.3: `2dd0242cef3e6731ce533c545c3dc7cd89ddd34a` (`n7-2-source-truth-reconciled-20260927`). N6 remains the underlying full clean-baseline certification.
+- Source baseline entering N7.4: `30d39ae3a7d4da5f56813412a09f961bdd793ba1` (`n7-3-dom-test-foundation-20260927`). N6 remains the underlying full clean-baseline certification.
 - Accepted production Worker: D24 V1-history hotfix source `cff31a0`, version `b2534996-977d-45d3-96f7-641599d66f1c`.
 - Production `SERVICE_REPORT_V2_MODE=compatibility`.
 - Production Public Tracking is disabled and must remain disabled until a separately approved activation phase.
@@ -22,28 +22,11 @@
 - **Thai-capable font fallback.** `src/index.css` includes `Noto Sans Thai` and Tahoma fallbacks. Full brand typography is still open.
 - **N7.2 source-of-truth documentation reconciliation.** Current-state documentation and the authoritative backlog were reconciled against source, deterministic evidence, and accepted production state; historical decisions were preserved with supersession notes rather than rewritten.
 - **N7.3 browser-like DOM test foundation.** A test-only jsdom environment now mounts real React/ReactDOM components for behaviors the custom renderer cannot prove. Focused coverage verifies Modal portal/background inert/focus trap/restoration/preventClose timing, StaffShell mobile-drawer inert/focus trap/Escape/current-route/desktop-transition focus, and RouteAccessibility detail-vs-New-Service-Job focus policy. The older custom hook/component runtimes remain for deterministic lifecycle/race coverage. This is browser-like DOM coverage, not real-browser layout/print proof.
+- **N7.4 V2 trusted-print UI integration.** Service Report preview now calls the existing Worker-backed trusted-print contract before opening the printable view. All six states remain distinct (legacy V1, V2 draft, pending, approved, rejected, integrity incident); approval/warranty/evidence verification is displayed from the trusted server result, normal mode is always attempted first, diagnostic mode is used only after the fail-closed evidence-integrity error, and integrity incidents cannot invoke `window.print()`. The browser now validates trusted-print report/event/evidence/verification-time coherence at runtime instead of trusting a TypeScript cast, and UI error mapping never renders raw provider/internal error text. The printable UI exposes display-name/business decision data only, not raw UIDs or digests.
 
 ## ACTIVE
 
-### A1 — V2 trusted-print UI integration
-
-**What remains:** connect the existing `trustedPrint` repository/hook contract to the Service Report print UI and render verified approval/warranty/integrity states without collapsing V1, draft, pending, approved, rejected, or integrity-incident states.
-
-**Why active:** Worker and repository support exist, but `ServiceReportPrintPreview.tsx` / `ServiceReportsSection.tsx` do not consume the trusted-print result.
-
-**Evidence:** `worker/src/serviceReportV2Operations.ts`, `src/hooks/useServiceReports.ts`, `src/features/service-jobs/components/ServiceReportsSection.tsx`, `src/features/service-jobs/components/ServiceReportPrintPreview.tsx`.
-
-**Dependencies:** current D24/D25 compatibility contracts and focused UI/contract tests.
-
-**Risk:** high; an ordinary finalized report must not be presented as approval-verified when it is not.
-
-**Recommended order:** first active implementation item.
-
-**Production mutation required:** source implementation no; any deployment is a separate phase.
-
-**Independent review:** required, including integrity/auth/compatibility review.
-
-### A2 — Product Return Form implementation
+### A1 — Product Return Form implementation
 
 **What remains:** implement the distinct Product Return Form from `PRINT_SPECIFICATIONS.md`, including the accepted numbering/data contract and customer acceptance/signature semantics.
 
@@ -53,13 +36,13 @@
 
 **Risk:** medium; document identity and customer acceptance must not be conflated with the Delivery Note.
 
-**Recommended order:** after trusted-print work unless owner reprioritizes.
+**Recommended order:** first active implementation item unless owner reprioritizes.
 
 **Production mutation required:** source implementation no; deployment separate.
 
 **Independent review:** yes because customer-facing document semantics are involved.
 
-### A3 — Accessibility P2/P3
+### A2 — Accessibility P2/P3
 
 **What remains:** timeline/progress semantics, PhotoGallery and DownloadMenu improvements, import chooser keyboard/label behavior, broader ProductFieldsForm semantics, measured contrast, reduced-motion behavior, and remaining bounded Thai/content QA.
 
@@ -113,7 +96,7 @@ The following statements may remain in historical context but must not be used a
 
 ## Recommended sequence
 
-1. Integrate V2 trusted-print state into the Service Report print UI.
-2. Implement Product Return Form and accessibility work according to owner priority.
+1. Implement Product Return Form.
+2. Continue the remaining P2/P3 accessibility/content work according to owner priority.
 3. Keep this backlog/source-of-truth documentation current as each phase closes.
 4. Revisit deferred operational/product work only after its dependency or owner decision is resolved.

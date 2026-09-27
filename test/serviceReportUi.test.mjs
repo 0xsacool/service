@@ -145,7 +145,7 @@ test('finalization confirmation summarizes identity, immutability, and new-repor
   assert.doesNotMatch(source, /Unfinalize/);
 });
 
-test('SR-4.1.1 Preview / Print wiring opens and closes the preview state', async () => {
+test('N7.4 Preview / Print wiring gates preview through trusted-print verification', async () => {
   const source = await readFile(
     new URL(
       '../src/features/service-jobs/components/ServiceReportsSection.tsx',
@@ -155,11 +155,13 @@ test('SR-4.1.1 Preview / Print wiring opens and closes the preview state', async
   );
   assert.match(
     source,
-    /const \[showPrintPreview, setShowPrintPreview\] = useState\(false\)/
+    /const \[trustedPrintResult, setTrustedPrintResult\] = useState<TrustedPrintResult \| null>/
   );
-  assert.match(source, /if \(showPrintPreview\)/);
-  assert.match(source, /onClick=\{\(\) => setShowPrintPreview\(true\)\}/);
-  assert.match(source, /onClose=\{\(\) => setShowPrintPreview\(false\)\}/);
+  assert.match(source, /await loadTrustedPrintForPreview\(report\.id, onTrustedPrint\)/);
+  assert.match(source, /if \(showPrintPreview && trustedPrintResult\)/);
+  assert.match(source, /trustedPrint=\{trustedPrintResult\}/);
+  assert.match(source, /disabled=\{isPreparingPrint\}/);
+  assert.match(source, /setTrustedPrintResult\(null\)/);
 });
 
 test('Service Job details includes the Service Reports section inside the staff experience', async () => {

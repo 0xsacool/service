@@ -422,6 +422,7 @@ async function draftSaveHarness(
     '../services/serviceReport',
     '../services/serviceReportV2',
     './types',
+    './trustedPrintContract',
     './firestore/serviceReportMapping',
   ]) {
     modules[path] = await vite.ssrLoadModule(`/src/repositories/${path}.ts`);

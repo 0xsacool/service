@@ -115,6 +115,17 @@ No open schema gaps remain for this document.
 
 **Layout notes:** Header → Product/problem summary → Diagnosis → Repair action → Parts replaced table → Cost & warranty decision → Photo grid → Technician/Approval signature block.
 
+**Current implementation note (N7.4, 2026-09-27):** the current
+`ServiceReportPrintPreview` is backed by the Firestore/Worker Service Report
+model rather than the historical relational field names above. Before the
+preview opens, the staff UI calls the trusted-print contract. V2 draft,
+pending, approved, rejected, and integrity-incident states are rendered
+separately, as is legacy V1. Warranty outcome and any terminal approval
+decision shown in the printable document come from the trusted server result.
+An approved report with missing required evidence is available only in
+diagnostic view and the print/PDF action is disabled. This source integration
+does not constitute a production deployment.
+
 ---
 
 ### 3. Product Return Form

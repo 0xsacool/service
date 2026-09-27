@@ -31,7 +31,10 @@ import type {
 import { RESULT_STATUSES, SERVICE_ACTIONS } from '../../../types';
 import { useServiceReports } from '../../../hooks/useServiceReports';
 import { getServiceReportV2ClientMode } from '../../../config/serviceReportV2';
-import { WorkerServiceReportError } from '../../../repositories/types';
+import {
+  WorkerServiceReportError,
+  type TrustedPrintResult,
+} from '../../../repositories/types';
 import {
   useServiceJobAttachments,
   type ServiceJobAttachmentOption,
@@ -58,6 +61,7 @@ import {
   toDraftPatch,
 } from './serviceReportUi';
 import { ServiceReportPrintPreview } from './ServiceReportPrintPreview';
+import { loadTrustedPrintForPreview, trustedPrintErrorMessage } from './trustedPrintUi';
 
 interface DisplayedServiceReportVersion {
   sourceSchemaVersion: 1 | 2;
@@ -150,11 +154,10 @@ function reportStatusClass(status: ServiceReport['status']): string {
     : 'bg-warning-50 text-warning-700 ring-warning-200';
 }
 
-// F5d-66: Service Report Firestore persistence is live (Worker-mediated
-// create/finalize, Rules-protected reads/draft edits — see DECISIONS.md
-// #036/#040). The F5d-33/F5d-34 B-6 unavailable gate that used to render
-// here is removed now that the durable backend actually supports this
-// section end to end, in every backend mode.
+// Service Report persistence is live. Current create/save/finalize/V2
+// successor and approval mutations are Worker-mediated; ordinary history is
+// Worker-backed and direct browser Rules remain fail-closed for report lists
+// and mutations. See DECISIONS.md #036/#040 and the D24/D25 closeout state.
 export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }) {
   const {
     reports,
@@ -165,6 +168,7 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
     isHistoryStale,
     historyError,
     refresh,
+    trustedPrint,
   } = useServiceReports(serviceJob.id);
   const { attachments } = useServiceJobAttachments(serviceJob.id);
   const latestReport = getLatestServiceReport(reports);
@@ -300,6 +304,7 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
             ? () => openReport(selectedReport.id, 'edit')
             : undefined
         }
+        onTrustedPrint={trustedPrint}
       />
     );
   }
@@ -1173,6 +1178,7 @@ function ServiceReportReadOnly({
   readOnlyNotice,
   onBack,
   onEdit,
+  onTrustedPrint,
 }: {
   report: ServiceReport;
   serviceJob: ServiceJob;
@@ -1180,19 +1186,46 @@ function ServiceReportReadOnly({
   readOnlyNotice?: string;
   onBack: () => void;
   onEdit?: () => void;
+  onTrustedPrint: (
+    reportId: string,
+    mode?: 'normal' | 'diagnostic'
+  ) => Promise<TrustedPrintResult>;
 }) {
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [trustedPrintResult, setTrustedPrintResult] = useState<TrustedPrintResult | null>(
+    null
+  );
+  const [isPreparingPrint, setIsPreparingPrint] = useState(false);
+  const [printError, setPrintError] = useState<string | null>(null);
   const context = getReportDisplayContext(report, serviceJob);
   const attachmentNames = new Map(
     attachments.map((attachment) => [attachment.id, attachment.name])
   );
-  if (showPrintPreview) {
+
+  const handleOpenTrustedPrint = async () => {
+    setIsPreparingPrint(true);
+    setPrintError(null);
+    try {
+      const result = await loadTrustedPrintForPreview(report.id, onTrustedPrint);
+      setTrustedPrintResult(result);
+      setShowPrintPreview(true);
+    } catch (error) {
+      setPrintError(trustedPrintErrorMessage(error));
+    } finally {
+      setIsPreparingPrint(false);
+    }
+  };
+
+  if (showPrintPreview && trustedPrintResult) {
     return (
       <ServiceReportPrintPreview
-        report={report}
+        trustedPrint={trustedPrintResult}
         serviceJob={serviceJob}
         attachments={attachments}
-        onClose={() => setShowPrintPreview(false)}
+        onClose={() => {
+          setShowPrintPreview(false);
+          setTrustedPrintResult(null);
+        }}
       />
     );
   }
@@ -1237,14 +1270,33 @@ function ServiceReportReadOnly({
             </div>
           )}
           <PrimaryButton
-            onClick={() => setShowPrintPreview(true)}
+            onClick={() => void handleOpenTrustedPrint()}
+            disabled={isPreparingPrint}
             className="px-4 py-2.5 text-sm"
           >
             <Printer className="h-4 w-4" />
-            ดูตัวอย่าง / พิมพ์
+            {isPreparingPrint ? 'กำลังตรวจสอบก่อนพิมพ์…' : 'ดูตัวอย่าง / พิมพ์'}
           </PrimaryButton>
         </div>
       </div>
+
+      {printError ? (
+        <ErrorState
+          title="ตรวจสอบข้อมูลก่อนพิมพ์ไม่สำเร็จ"
+          description={printError}
+          action={
+            <SecondaryButton
+              onClick={() => void handleOpenTrustedPrint()}
+              disabled={isPreparingPrint}
+            >
+              <RefreshCw
+                className={isPreparingPrint ? 'h-4 w-4 animate-spin' : 'h-4 w-4'}
+              />
+              ลองตรวจสอบอีกครั้ง
+            </SecondaryButton>
+          }
+        />
+      ) : null}
 
       <GlassCard className="p-6">
         <div className="mb-5 flex items-center gap-3">

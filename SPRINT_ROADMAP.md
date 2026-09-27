@@ -481,17 +481,19 @@ and delivery auditing need separate decisions.
 
 ---
 
-### Repair Reports, Approvals & Approval Console _(core delivered; trusted print remains)_
+### Repair Reports, Approvals & Approval Console _(core + trusted-print UI delivered)_
 
 Service Report persistence, V2 compatibility infrastructure, append-only
 approval decisions, D24 per-job history, and the D25 Approval Console are
-implemented and activated in production. Basic Repair Report printing also
-exists. Remaining report work is the UI integration with the existing
-trusted-print contract so printed V2 output reflects verified
-approval/warranty/integrity state. Brand/user/settings administration is a
-separate future scope and is not implied by Approval Console access.
+implemented and activated in production. N7.4 also integrates the existing
+trusted-print contract into the source UI: preview is server-verified before
+printing, approval/warranty/integrity states remain distinct, and an approved
+evidence-integrity incident blocks the print action. This N7.4 source work is
+not itself deployed; production rollout remains a separate phase.
+Brand/user/settings administration is a separate future scope and is not
+implied by Approval Console access.
 
-**Estimated Scope:** M for trusted-print UI; Admin lifecycle remains separately deferred
+**Estimated Scope:** core report/approval work delivered; Admin lifecycle remains separately deferred
 
 ---
 
@@ -502,9 +504,11 @@ The distinct Product Return Form does not. N7.3 adds a jsdom-based real
 React/ReactDOM interaction harness covering Modal portal/inert/focus behavior,
 StaffShell mobile-drawer focus/modal-boundary behavior, and route-focus policy,
 while retaining the custom mounted hook/component runtimes for deterministic
-lifecycle/race tests. Remaining QA work therefore centers on trusted-print UI
-coverage, Return Form verification, cross-device/real-browser layout and print
-checks, and the explicitly deferred P2/P3 accessibility/content pass. jsdom is
-not treated as proof of real browser layout or print pagination.
+lifecycle/race tests. N7.4 adds trusted-print contract/UI regression coverage,
+including runtime payload validation and fail-closed integrity printing, on top
+of that foundation. Remaining QA work therefore centers on Product Return Form
+verification, cross-device/real-browser layout and print checks, and the
+explicitly deferred P2/P3 accessibility/content pass. jsdom is not treated as
+proof of real browser layout or print pagination.
 
 **Estimated Scope:** M

@@ -196,6 +196,37 @@ those remain separate verification concerns. No Worker upload/deploy, traffic
 change, Firebase/Cloudflare/IAM/Rules/index mutation, production business-data
 write, Public Tracking change, or N3 business-write replay is part of N7.3.
 
+## N7.4 V2 trusted-print UI integration (2026-09-27)
+
+N7.4 connects the already-existing trusted-print repository/hook contract to
+the staff Service Report preview flow without changing Worker routes or
+production configuration. The read-only Service Report view now performs a
+normal trusted-print request before opening the printable document and renders
+the returned server-verified report rather than printing directly from the
+history cache.
+
+The printable UI preserves all six contract states distinctly:
+`legacy-v1`, `v2-draft`, `v2-pending`, `v2-approved`,
+`v2-rejected`, and `integrity-incident`. V2 warranty outcome, approval
+decision, approver display-name snapshot, decision time, trusted evidence
+summary, and trusted verification time are shown without exposing raw UIDs or
+content/submission digests. A normal request remains fail-closed for approved
+evidence loss; only the specific `evidence_integrity_incident` error triggers
+a diagnostic trusted-print request. Diagnostic integrity incidents can be
+viewed for operator diagnosis but the print/PDF action is disabled and does
+not call `window.print()`.
+
+Validation for this phase: app build PASS, ESLint PASS, Prettier PASS,
+`git diff --check` PASS, existing Service Report print tests 15/15 PASS,
+Service Report UI tests 9/9 PASS, focused trusted-print contract/UI tests
+19/19 PASS, and all documented root deterministic groups including N7.3 DOM
+plus N7.4 trusted-print coverage PASS (280 tests total). Worker TypeScript `--noEmit`
+PASS and the full Worker regression suite PASS after isolated Worker
+dependencies were installed. The non-failing Vite WebSocket port 24678 warning
+remains unchanged. No Worker upload/deploy, traffic change,
+Firebase/Cloudflare/IAM/Rules/index mutation, production business-data write,
+Public Tracking change, or N3 business-write replay is part of N7.4.
+
 ## Historical production D24/D25 + Public Tracking state (2026-09-26)
 
 The reviewed production source checkpoint is

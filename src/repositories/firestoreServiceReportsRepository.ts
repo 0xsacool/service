@@ -34,6 +34,7 @@ import { fetchWithWorkerToken } from '../auth/workerTokenProvider';
 import { getFilesWorkerBaseUrl } from '../config/workerUrl';
 import { WorkerServiceReportError } from './types';
 import { createWorkerServiceReportHistoryRepository } from './workerServiceReportReadRepository';
+import { parseTrustedPrintResult } from './trustedPrintContract';
 
 function reportReference(reportId: string) {
   return doc(getFirestoreDb(), SERVICE_REPORTS_COLLECTION, reportId);
@@ -517,23 +518,12 @@ export async function createFirestoreServiceReportsRepository(
         `/service-jobs/${encodeURIComponent(report.serviceJobId)}/service-reports/${encodeURIComponent(reportId)}/trusted-print`,
         { contractVersion, mode }
       );
-      const result = await readWorkerV2Data(response, (value) => {
-        if (
-          !value ||
-          typeof value !== 'object' ||
-          !('report' in value) ||
-          !('printState' in value)
-        )
-          return null;
-        const payload = value as Record<string, unknown>;
-        const parsedReport =
-          contractVersion === 2
-            ? parseReturnedV2Report(payload.report)
-            : (payload.report as ServiceReport);
-        return parsedReport
-          ? ({ ...payload, report: parsedReport } as import('./types').TrustedPrintResult)
-          : null;
-      });
+      const result = await readWorkerV2Data(response, (value) =>
+        parseTrustedPrintResult(value, contractVersion, {
+          reportId,
+          serviceJobId: report.serviceJobId,
+        })
+      );
       return result.data;
     },
   };

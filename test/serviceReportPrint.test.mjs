@@ -85,12 +85,15 @@ test('SR-3 print view source contains the required A4 document sections and prin
     'อะไหล่ / ส่วนประกอบ',
     'หมายเหตุจากช่าง',
     'ผลลัพธ์',
+    'การตรวจสอบก่อนพิมพ์',
     'หลักฐาน',
-    'โรงงาน / ผู้อนุมัติ',
   ]) {
     assert.match(source, new RegExp(label.replace(/[ /]/g, '[ /]')));
   }
   assert.match(source, /window\.print\(\)/);
+  assert.match(source, /'ผู้อนุมัติ'/);
+  assert.match(source, /'ผู้พิจารณา \(ไม่อนุมัติ\)'/);
+  assert.match(source, /'ผู้ตรวจทาน \/ โรงงาน'/);
   assert.match(source, /ฉบับร่าง/);
   assert.match(source, /evidenceAttachmentIds/);
 });
@@ -196,7 +199,8 @@ test('SR-4.1.1 preview lifecycle renders one article and keeps print action expl
     'utf8'
   );
   assert.equal((preview.match(/<article className="print-area/g) ?? []).length, 1);
-  assert.match(preview, /onClick=\{\(\) => window\.print\(\)\}/);
+  assert.match(preview, /if \(presentation\.canPrint\) window\.print\(\);/);
+  assert.match(preview, /disabled=\{!presentation\.canPrint\}/);
   assert.match(preview, /document\.body\.classList\.add\('service-report-print-mode'\)/);
   assert.match(
     preview,
@@ -216,7 +220,7 @@ test('SR-4.1 final print footer keeps identity without a page counter', async ()
   const css = await readFile(new URL('../src/index.css', import.meta.url), 'utf8');
   assert.match(preview, /<span>\{report\.reportNo\}<\/span>/);
   assert.match(preview, /<span>\{context\.trackingReference\}<\/span>/);
-  assert.match(preview, /สร้างเอกสารเมื่อ \{formatDate\(generatedAt\)\}/);
+  assert.match(preview, /ตรวจสอบเมื่อ \{formatDate\(trustedPrint\.verifiedAt\)\}/);
   assert.doesNotMatch(preview, /page-number|Page /);
   assert.doesNotMatch(css, /service-report-print__page-number|counter\(page\)/);
 });

@@ -19,6 +19,7 @@ import type {
   ServiceReportV2DraftPatch,
   FinalContentDigest,
   ServiceReportHistoryItem,
+  ServiceReportApprovalEvent,
 } from '../types';
 import type { BrandId } from '../types';
 import type {
@@ -361,7 +362,7 @@ export interface TrustedPrintResult {
     | 'v2-rejected'
     | 'integrity-incident';
   report: ServiceReportDocument;
-  event: Record<string, unknown> | null;
+  event: ServiceReportApprovalEvent | null;
   evidence: { canonicalAttachmentKey: string; status: 'available' | 'missing' }[];
   verifiedAt: string;
 }

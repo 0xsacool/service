@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { AlertTriangle, ArrowLeft, ImageOff, Printer } from 'lucide-react';
-import type { ServiceJob, ServiceReport } from '../../../types';
+import type { ServiceJob } from '../../../types';
+import type { TrustedPrintResult } from '../../../repositories/types';
 import { formatDate, formatTime } from '../../../utils/formatDate';
+import { warrantyOutcomeLabel } from '../../../services/serviceJobPresentation';
 import { PrimaryButton, SecondaryButton } from '../../../shared/components';
 import { useServiceReportEvidence } from '../../../hooks/useServiceReportEvidence';
 import type { ServiceJobAttachmentOption } from '../../../hooks/useServiceJobAttachments';
@@ -11,25 +13,34 @@ import {
   RESULT_STATUS_LABELS,
   SERVICE_ACTION_LABELS,
 } from './serviceReportUi';
+import {
+  getTrustedPrintPresentation,
+  trustedPrintStateLabel,
+  trustedPrintToneClass,
+} from './trustedPrintUi';
 
 export function ServiceReportPrintPreview({
-  report,
+  trustedPrint,
   serviceJob,
   attachments,
   onClose,
 }: {
-  report: ServiceReport;
+  trustedPrint: TrustedPrintResult;
   serviceJob: ServiceJob;
   attachments: ServiceJobAttachmentOption[];
   onClose: () => void;
 }) {
+  const report = trustedPrint.report;
+  const presentation = getTrustedPrintPresentation(trustedPrint);
   const context = getReportDisplayContext(report, serviceJob);
   const { evidence, isLoading } = useServiceReportEvidence(
     report.evidenceAttachmentIds,
     attachments
   );
-  const [generatedAt] = useState(() => new Date().toISOString());
   const isDraft = report.status === 'draft';
+  const missingTrustedEvidence = trustedPrint.evidence.filter(
+    (item) => item.status === 'missing'
+  ).length;
 
   useEffect(() => {
     document.body.classList.add('service-report-print-mode');
@@ -56,9 +67,15 @@ export function ServiceReportPrintPreview({
           <SecondaryButton onClick={onClose} className="px-4 py-2.5 text-sm">
             กลับ
           </SecondaryButton>
-          <PrimaryButton onClick={() => window.print()} className="px-4 py-2.5 text-sm">
+          <PrimaryButton
+            onClick={() => {
+              if (presentation.canPrint) window.print();
+            }}
+            disabled={!presentation.canPrint}
+            className="px-4 py-2.5 text-sm"
+          >
             <Printer className="h-4 w-4" />
-            พิมพ์ / บันทึก PDF
+            {presentation.canPrint ? 'พิมพ์ / บันทึก PDF' : 'ปิดการพิมพ์ชั่วคราว'}
           </PrimaryButton>
         </div>
       </div>
@@ -84,6 +101,25 @@ export function ServiceReportPrintPreview({
             ) : null}
           </div>
         </header>
+
+        <section
+          className={`service-report-print__verification rounded-xl border px-4 py-3 ${trustedPrintToneClass(presentation.tone)}`}
+          aria-label="สถานะการตรวจสอบก่อนพิมพ์"
+        >
+          <div className="flex items-start gap-3">
+            {presentation.tone === 'danger' || presentation.tone === 'warning' ? (
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            ) : null}
+            <div>
+              <p className="font-semibold">{trustedPrintStateLabel(trustedPrint)}</p>
+              <p className="mt-1 text-sm leading-5">{presentation.description}</p>
+              <p className="mt-1 text-xs opacity-80">
+                ตรวจสอบกับเซิร์ฟเวอร์เมื่อ {formatDate(trustedPrint.verifiedAt)}{' '}
+                {formatTime(new Date(trustedPrint.verifiedAt))}
+              </p>
+            </div>
+          </div>
+        </section>
 
         {isDraft ? (
           <div className="service-report-print__draft-banner" role="status">
@@ -183,6 +219,56 @@ export function ServiceReportPrintPreview({
           <PrintParagraph value={report.resultDetail} />
         </PrintSection>
 
+        <PrintSection title="การตรวจสอบก่อนพิมพ์">
+          <PrintGrid>
+            <PrintField
+              label="สถานะที่ตรวจสอบได้"
+              value={trustedPrintStateLabel(trustedPrint)}
+            />
+            {'schemaVersion' in report && report.schemaVersion === 2 ? (
+              <PrintField
+                label="ผลการรับประกัน"
+                value={warrantyOutcomeLabel(report.warrantyOutcome)}
+              />
+            ) : null}
+            {trustedPrint.event ? (
+              <>
+                <PrintField
+                  label="ผลการพิจารณา"
+                  value={
+                    trustedPrint.event.decision === 'approved' ? 'อนุมัติ' : 'ไม่อนุมัติ'
+                  }
+                />
+                <PrintField
+                  label="ผู้พิจารณาในระบบ"
+                  value={trustedPrint.event.approverDisplayNameSnapshot ?? 'ไม่ระบุชื่อ'}
+                />
+                <PrintField
+                  label="พิจารณาเมื่อ"
+                  value={formatDate(trustedPrint.event.decidedAt)}
+                />
+              </>
+            ) : null}
+            {trustedPrint.evidence.length > 0 ? (
+              <PrintField
+                label="หลักฐานที่ตรวจสอบ"
+                value={
+                  missingTrustedEvidence === 0
+                    ? `${trustedPrint.evidence.length} รายการ · พร้อมใช้งานทั้งหมด`
+                    : `${trustedPrint.evidence.length} รายการ · ไม่พร้อมใช้งาน ${missingTrustedEvidence} รายการ`
+                }
+              />
+            ) : null}
+          </PrintGrid>
+          {trustedPrint.event?.decision === 'rejected' &&
+          trustedPrint.event.rejectionReason ? (
+            <div className="mt-3">
+              <p className="service-report-print__field-label">เหตุผลที่ไม่อนุมัติ</p>
+              <PrintParagraph value={trustedPrint.event.rejectionReason} />
+            </div>
+          ) : null}
+        </PrintSection>
+
         {report.claimNo || report.factoryReference ? (
           <PrintSection title="เลขเคลม / โรงงาน">
             <PrintGrid>
@@ -233,8 +319,18 @@ export function ServiceReportPrintPreview({
           </div>
           <div>
             <div className="service-report-print__signature-line" />
-            <p>โรงงาน / ผู้อนุมัติ</p>
-            <span>ชื่อ / ลายเซ็น / วันที่</span>
+            <p>
+              {trustedPrint.event?.decision === 'approved'
+                ? 'ผู้อนุมัติ'
+                : trustedPrint.event?.decision === 'rejected'
+                  ? 'ผู้พิจารณา (ไม่อนุมัติ)'
+                  : 'ผู้ตรวจทาน / โรงงาน'}
+            </p>
+            <span>
+              {trustedPrint.event
+                ? `${trustedPrint.event.approverDisplayNameSnapshot ?? 'ไม่ระบุชื่อ'} · ${formatDate(trustedPrint.event.decidedAt)}`
+                : 'ชื่อ / ลายเซ็น / วันที่'}
+            </span>
           </div>
         </section>
 
@@ -242,7 +338,8 @@ export function ServiceReportPrintPreview({
           <span>{report.reportNo}</span>
           <span>{context.trackingReference}</span>
           <span>
-            สร้างเอกสารเมื่อ {formatDate(generatedAt)} {formatTime(new Date(generatedAt))}
+            ตรวจสอบเมื่อ {formatDate(trustedPrint.verifiedAt)}{' '}
+            {formatTime(new Date(trustedPrint.verifiedAt))}
           </span>
         </footer>
       </article>
