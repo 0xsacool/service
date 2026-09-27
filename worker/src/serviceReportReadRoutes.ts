@@ -122,6 +122,7 @@ const V1_KEYS = [
   'parts', 'technicianRemark', 'resultStatus', 'resultDetail',
   'evidenceAttachmentIds', 'claimNo', 'factoryReference', 'snapshot',
 ] as const;
+const V1_KEYS_WITH_PERSISTED_ID = [...V1_KEYS, 'id'] as const;
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -515,7 +516,12 @@ function approvalIntegrity(): never {
 }
 
 function parseLegacyReport(document: ReadStoredDocument): ServiceReport | null {
-  if (document.collection !== 'serviceReports' || !exactKeys(document.data, V1_KEYS)) return null;
+  if (document.collection !== 'serviceReports') return null;
+  const hasLegacyShape = exactKeys(document.data, V1_KEYS);
+  const hasPersistedIdShape =
+    exactKeys(document.data, V1_KEYS_WITH_PERSISTED_ID) &&
+    document.data.id === document.id;
+  if (!hasLegacyShape && !hasPersistedIdShape) return null;
   const candidate = { ...document.data, id: document.id };
   return isValidServiceReport(candidate) ? candidate : null;
 }

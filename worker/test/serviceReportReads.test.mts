@@ -1491,6 +1491,18 @@ async function expectNoSideEffects(
   assert.equal(control.status, 200, 'D24 the baseline V1 fixture is accepted');
 }
 
+{
+  const store = new ReadMemoryStore();
+  seedAccess(store, 'technician');
+  store.set('serviceReports', 'report-ok', legacyReport({ id: 'report-ok' }));
+  const control = await handler(store).fetch(request(HISTORY_PATH), env());
+  assert.equal(
+    control.status,
+    200,
+    'D24 accepts the inventoried production V1 shape with a matching persisted id'
+  );
+}
+
 for (const [label, document] of [
   ['malformed V1', legacyReport({ serviceActions: 'repair' })],
   ['partial V1', (() => {
@@ -1499,6 +1511,7 @@ for (const [label, document] of [
     return row;
   })()],
   ['V1 with an unexpected extra field', legacyReport({ unexpected: true })],
+  ['V1 with a mismatched persisted id', legacyReport({ id: 'different-report-id' })],
   ['an unsupported schemaVersion', legacyReport({ schemaVersion: 3 })],
 ] as const) {
   const store = new ReadMemoryStore();
