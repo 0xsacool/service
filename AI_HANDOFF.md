@@ -38,6 +38,27 @@ the mode and was never promoted. The final candidate was uploaded with
 candidate unless the exact candidate shows `SERVICE_REPORT_V2_MODE=compatibility`.
 See the 2026-09-27 closeout report in `reports/`.
 
+## N5 deployment guardrail (source complete, not deployed)
+
+Before any future Worker traffic promotion, use
+`worker/scripts/productionVersionGuard.mjs` through
+`npm run guard:production-version -- <version-id>` on the fresh uploaded
+candidate. The guard fails closed unless the exact candidate has
+`SERVICE_REPORT_V2_MODE=compatibility`, Public Tracking is verifiably absent
+or visible plain-text `false`, health is `200`, D24/D25 unauthenticated probes
+are `401`, and both Public Tracking routes are `404`. Add `--promote` only
+after preflight succeeds; the script itself will not dispatch deployment before
+all checks pass.
+
+Important: current production still carries the legacy
+`PUBLIC_TRACKING_ENABLED` binding as opaque `secret_text`, although live
+tracking is verified disabled. The N5 guard intentionally rejects opaque
+secrets. A future Worker rollout therefore requires a separately approved
+Cloudflare configuration gate to remove that legacy secret or replace it with
+visible plain-text `false` before candidate promotion. N5 itself made no live
+Cloudflare/Firebase mutation or traffic change. Full Worker tests, typecheck,
+and independent GPT-6 Astra review passed with no required fixes.
+
 ## Historical production override (2026-09-26)
 
 RRC-2A/D24/D25 source checkpoint

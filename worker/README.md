@@ -372,6 +372,49 @@ Cloudflare Worker secrets; their values are not stored in this repository
   Rate limiting is explicitly not implemented this sprint (see the F5
   proposal's Risks section) — flagged, not solved.
 
+## Production Worker version promotion guard (N5)
+
+For production Worker code changes, upload a candidate version first and run the
+guard **immediately after upload, before any traffic promotion**, while the
+candidate preview URL is available:
+
+```bash
+npm run guard:production-version -- <version-id>
+```
+
+The guard reads that exact version with `wrangler versions view --json`,
+requires `SERVICE_REPORT_V2_MODE=compatibility`, and requires
+`PUBLIC_TRACKING_ENABLED` to be either absent or the visible plain-text value
+`false`. An opaque `secret_text` binding is rejected because its value cannot
+be proven from version metadata. The candidate preview must then return health
+`200`, unauthenticated D24/D25 `401`, and `404` for both Public Tracking
+shapes. Those public-route probes are defense in depth; their generic 404 alone
+is not evidence that tracking is disabled. Any unverifiable binding, parse
+error, unavailable preview, fetch failure, or status mismatch fails closed and
+no promotion command runs.
+
+Only after the preflight passes, the same guard may perform the 100% promotion:
+
+```bash
+npm run guard:production-version -- <version-id> --promote
+```
+
+Do not replace this with a direct `wrangler versions deploy` during the normal
+production procedure. The guard exists because Wrangler 4.120.0 can drop
+undeclared plain vars during `versions upload`; N5 makes the exact candidate
+binding and Public Tracking state a mandatory pre-promotion check. A version
+that has already been promoted is not a substitute for a fresh candidate
+preview; upload/inspect/probe the new candidate before its promotion.
+
+The currently deployed 2026-09-27 Worker still carries the historical
+`PUBLIC_TRACKING_ENABLED` binding as `secret_text` even though live tracking is
+disabled. N5 intentionally does **not** treat that opaque binding as proof of
+a disabled candidate. Before the next Worker promotion can use this guard, a
+separately approved Cloudflare configuration step must make the candidate
+state verifiable by removing that legacy secret binding or replacing it with
+a visible plain-text `false`, then the exact candidate must pass the guard.
+N5 itself performs no secret/config mutation and no production deployment.
+
 ## Current production status — F5d-63/F5d-63C (2026-08-14)
 
 The real R2 bucket (`service-tech-attachments-prod`) and the GCP service

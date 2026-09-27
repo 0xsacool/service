@@ -10,6 +10,44 @@ below); it is no longer excluded. Before every future mutation, capture the
 named evidence read-only, stop on a mismatch, and retain the capture with the
 gate record.
 
+## Current Worker promotion guard (N5, 2026-09-27)
+
+A production Worker candidate must now pass
+`worker/scripts/productionVersionGuard.mjs` before traffic promotion. Run it
+immediately after `wrangler versions upload` while the candidate preview is
+available. It inspects the exact candidate with `wrangler versions view
+--json`, requires `SERVICE_REPORT_V2_MODE=compatibility`, and requires
+`PUBLIC_TRACKING_ENABLED` to be absent or visible as plain-text `false`.
+Opaque `secret_text` is a stop condition because its value is unverifiable.
+The guard also probes health `200`, D24/D25 unauthenticated `401`, and both
+Public Tracking routes `404`; those generic 404 probes are defense in depth,
+not standalone proof of the feature flag state.
+
+The normal production command is:
+
+```text
+cd worker
+npm run guard:production-version -- <version-id> --promote
+```
+
+The script performs no promotion until every candidate check passes. A missing
+mode binding, malformed metadata, unavailable candidate preview, fetch failure,
+unverifiable/enabled Public Tracking binding, or unexpected HTTP result is a
+stop condition. This guardrail was added after the 2026-09-27 D24 hotfix
+rollout caught a candidate whose undeclared `SERVICE_REPORT_V2_MODE` had been
+dropped by Wrangler upload and required immediate rollback. Direct `wrangler
+versions deploy` is retained only as an emergency/manual recovery primitive,
+not the normal promotion path.
+
+The current production Worker still has the historical
+`PUBLIC_TRACKING_ENABLED` secret binding, with tracking verified disabled by
+the completed production acceptance. Because a future candidate's inherited
+`secret_text` value cannot be inspected, the next Worker rollout must first
+use a separately approved Cloudflare configuration gate to remove the legacy
+secret or replace it with visible plain-text `false`. N5 makes no such live
+configuration change; it only makes future promotion fail closed until that
+state is verifiable.
+
 ## Historical F5d-35 source rollback baseline
 
 - Local Git tag: `f5d35-baseline`.

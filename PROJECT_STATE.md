@@ -64,6 +64,35 @@ must not promote unless `SERVICE_REPORT_V2_MODE=compatibility` is present.
 See `reports/Service-Tech-D24-V1-History-Hotfix-Production-Closeout-20260927.txt`
 for the full evidence record.
 
+## N5 Worker deployment guardrail hardening (source/tooling only, 2026-09-27)
+
+The repository now includes a fail-closed production-version promotion guard at
+`worker/scripts/productionVersionGuard.mjs`. It inspects the exact uploaded
+candidate before any traffic promotion, requires
+`SERVICE_REPORT_V2_MODE=compatibility`, requires
+`PUBLIC_TRACKING_ENABLED` to be absent or visibly plain-text `false`, and
+requires the fresh preview to return health `200`, unauthenticated D24/D25
+`401`, and both Public Tracking shapes `404`. Opaque `secret_text` Public
+Tracking state is deliberately rejected because a generic 404 is not proof the
+feature is disabled. The normal documented promotion path is now
+`npm run guard:production-version -- <version-id> --promote` after a separate
+preflight run against the fresh candidate.
+
+Focused guard/containment tests, the full Worker test suite, Worker TypeScript
+typecheck, and independent GPT-6 Astra read-only review all pass; the final
+review returned `VERDICT: PASS` / `REQUIRED_FIXES: NONE`. N5 performed no
+production upload, deploy, traffic change, IAM/Rules mutation, or business-data
+write. Production therefore remains on Worker
+`b2534996-977d-45d3-96f7-641599d66f1c` at 100% with the already-accepted
+runtime state.
+
+That current production version still carries the historical
+`PUBLIC_TRACKING_ENABLED` binding as opaque `secret_text`. Before a future
+Worker candidate can pass the N5 guard, a separately approved Cloudflare
+configuration gate must make that candidate state verifiable by removing the
+legacy secret binding or replacing it with visible plain-text `false`. Do not
+weaken or bypass the guard to work around this prerequisite.
+
 ## Historical production D24/D25 + Public Tracking state (2026-09-26)
 
 The reviewed production source checkpoint is
