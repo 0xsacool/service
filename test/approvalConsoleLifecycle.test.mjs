@@ -16,7 +16,9 @@ const {
   evaluateApprovalDecisionGuard,
 } = await vite.ssrLoadModule('/src/hooks/useApprovalConsoleReads.ts');
 
-const { projectHistoryState } = await vite.ssrLoadModule('/src/hooks/useServiceReports.ts');
+const { projectHistoryState } = await vite.ssrLoadModule(
+  '/src/hooks/useServiceReports.ts'
+);
 
 test('report-number queue identity is normalized before caching', () => {
   const first = { mode: 'report-number', reportNo: ' fr-2026-000001 ', pageSize: 25 };
@@ -106,14 +108,37 @@ test('D25 guard refuses every unbound or superseded review state', () => {
     ['review-stale', { isStale: true }],
     ['review-superseded', { loadedGeneration: 3, currentGeneration: 4 }],
     ['decision-in-flight', { isDeciding: true }],
-    ['review-not-pending', { review: { serviceJobId: JOB, reportId: REPORT, approvalState: 'approved', finalContentDigest: DIGEST } }],
-    ['review-not-pending', { review: { serviceJobId: JOB, reportId: REPORT, approvalState: 'rejected', finalContentDigest: DIGEST } }],
+    [
+      'review-not-pending',
+      {
+        review: {
+          serviceJobId: JOB,
+          reportId: REPORT,
+          approvalState: 'approved',
+          finalContentDigest: DIGEST,
+        },
+      },
+    ],
+    [
+      'review-not-pending',
+      {
+        review: {
+          serviceJobId: JOB,
+          reportId: REPORT,
+          approvalState: 'rejected',
+          finalContentDigest: DIGEST,
+        },
+      },
+    ],
     ['review-identity-mismatch', { requestedReportId: 'report-other' }],
     ['review-identity-mismatch', { requestedServiceJobId: 'BRN-2026-000999' }],
     ['decision-invalid', { decision: 'maybe' }],
     ['rejection-reason-required', { decision: 'rejected', rejectionReason: null }],
     ['rejection-reason-required', { decision: 'rejected', rejectionReason: '   ' }],
-    ['rejection-reason-not-allowed', { decision: 'approved', rejectionReason: 'unexpected' }],
+    [
+      'rejection-reason-not-allowed',
+      { decision: 'approved', rejectionReason: 'unexpected' },
+    ],
   ];
   for (const [expected, overrides] of cases) {
     assert.equal(
@@ -128,7 +153,9 @@ test('D25 guard refusal precedes identity and decision checks when the review is
   // A stale review for the WRONG report must refuse on staleness, never fall
   // through to a check that could pass.
   assert.equal(
-    evaluateApprovalDecisionGuard(guardInput({ isStale: true, requestedReportId: 'other' })),
+    evaluateApprovalDecisionGuard(
+      guardInput({ isStale: true, requestedReportId: 'other' })
+    ),
     'review-stale'
   );
   assert.equal(

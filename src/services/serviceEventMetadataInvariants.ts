@@ -20,9 +20,9 @@ export interface ServiceEventMetadataDraft {
 // one function so a client-side bug can never persist a state the
 // server-side boundaries would have refused anyway — this is UX-only
 // defense-in-depth, never the actual security boundary.
-export function resolveServiceEventMetadataInvariants<T extends ServiceEventMetadataDraft>(
-  draft: T
-): T {
+export function resolveServiceEventMetadataInvariants<
+  T extends ServiceEventMetadataDraft,
+>(draft: T): T {
   const contactChannelIdentity =
     draft.contactChannel === null || draft.contactChannel === 'phone'
       ? null

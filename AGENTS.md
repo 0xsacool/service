@@ -15,7 +15,7 @@
 - TypeScript strict mode — no `any`, no unchecked casts. Prefer narrowing/discriminated unions over type assertions.
 - Functional components with hooks only — no class components.
 - No business logic embedded in components — a component reads data via a hook/data-access seam ([DECISIONS.md](DECISIONS.md) #006) and renders it; it doesn't compute domain rules inline (e.g. status-transition legality belongs in a shared function, not scattered across `onClick` handlers).
-- No comments explaining *what* code does — code should read clearly from naming. Only comment a genuinely non-obvious *why* (a workaround, a business-rule constraint that isn't visible from the code itself).
+- No comments explaining _what_ code does — code should read clearly from naming. Only comment a genuinely non-obvious _why_ (a workaround, a business-rule constraint that isn't visible from the code itself).
 - No premature abstraction — extract a shared component/hook when duplication actually exists (see current known duplication in `PROJECT_STATE.md`), not speculatively for hypothetical future reuse.
 
 ## Architecture Rules
@@ -64,7 +64,7 @@ This is the target from the architectural review — not yet in place. Until Spr
 
 ## Commit Style
 
-Conventional Commits: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, `test:`. Scope the subject to what changed, explain *why* in the body when it's not obvious from the diff alone (matches this project's existing preference for reasoning over restating).
+Conventional Commits: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, `test:`. Scope the subject to what changed, explain _why_ in the body when it's not obvious from the diff alone (matches this project's existing preference for reasoning over restating).
 
 ## Development Workflow
 
@@ -84,7 +84,6 @@ Conventional Commits: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, `test:`. 
 - **No skipped hooks or bypassed checks** (`--no-verify` or equivalent) without explicit user instruction.
 - **No package installs or dependency changes** without the user's go-ahead — this project has explicitly gated even documentation work behind "do not install packages" instructions; treat that caution as the default posture, not just a one-off restriction for Phase 1.
 - **No cross-brand data leakage** — any new query or view must respect brand scoping ([DECISIONS.md](DECISIONS.md) #002); this is a correctness requirement, not a nice-to-have.
-
 
 # Codex project instructions
 

@@ -19,11 +19,12 @@ export function normalizeApprovalQueueRequest(
 
 export function approvalQueueCacheKey(request: ApprovalQueueRequest): string {
   const normalized = normalizeApprovalQueueRequest(request);
-  const search = normalized.mode === 'queue'
-    ? null
-    : normalized.mode === 'report-number'
-      ? normalized.reportNo
-      : normalized.trackingReference;
+  const search =
+    normalized.mode === 'queue'
+      ? null
+      : normalized.mode === 'report-number'
+        ? normalized.reportNo
+        : normalized.trackingReference;
   return JSON.stringify([
     normalized.mode,
     search,
@@ -106,57 +107,64 @@ export function useApprovalQueue(request: ApprovalQueueRequest): ApprovalQueueSt
   const activeRequest = useRef<AbortController | null>(null);
   const visible = snapshot.key === requestKey ? snapshot : emptyQueue(requestKey);
 
-  const fetchPage = useCallback(async (
-    currentRequest: ApprovalQueueRequest,
-    key: string,
-    append: boolean,
-    cursor: string | null
-  ): Promise<void> => {
-    activeRequest.current?.abort();
-    const abort = new AbortController();
-    activeRequest.current = abort;
-    const run = ++generation.current;
-    setSnapshot((current) => ({
-      ...(current.key === key ? current : emptyQueue(key)),
-      isLoading: !append,
-      isLoadingMore: append,
-    }));
-    try {
-      const nextRequest = cursor
-        ? { ...currentRequest, cursor } as ApprovalQueueRequest
-        : { ...currentRequest, cursor: undefined } as ApprovalQueueRequest;
-      const result = await repositories.approvalConsole.fetchPendingApprovalQueue(
-        nextRequest,
-        abort.signal
-      );
-      if (run !== generation.current) return;
-      setSnapshot((current) => ({
-        key,
-        page: append && current.key === key && current.page
-          ? {
-              ...result,
-              items: appendUniqueApprovalItems(current.page.items, result.items),
-            }
-          : result,
-        error: null,
-        isLoading: false,
-        isLoadingMore: false,
-        isStale: false,
-      }));
-    } catch (caught) {
-      if (abort.signal.aborted || run !== generation.current) return;
+  const fetchPage = useCallback(
+    async (
+      currentRequest: ApprovalQueueRequest,
+      key: string,
+      append: boolean,
+      cursor: string | null
+    ): Promise<void> => {
+      activeRequest.current?.abort();
+      const abort = new AbortController();
+      activeRequest.current = abort;
+      const run = ++generation.current;
       setSnapshot((current) => ({
         ...(current.key === key ? current : emptyQueue(key)),
-        error: caught instanceof Error ? caught : new Error('Approval queue refresh failed'),
-        isLoading: false,
-        isLoadingMore: false,
-        isStale: current.key === key && current.page !== null,
+        isLoading: !append,
+        isLoadingMore: append,
       }));
-    }
-  }, []);
+      try {
+        const nextRequest = cursor
+          ? ({ ...currentRequest, cursor } as ApprovalQueueRequest)
+          : ({ ...currentRequest, cursor: undefined } as ApprovalQueueRequest);
+        const result = await repositories.approvalConsole.fetchPendingApprovalQueue(
+          nextRequest,
+          abort.signal
+        );
+        if (run !== generation.current) return;
+        setSnapshot((current) => ({
+          key,
+          page:
+            append && current.key === key && current.page
+              ? {
+                  ...result,
+                  items: appendUniqueApprovalItems(current.page.items, result.items),
+                }
+              : result,
+          error: null,
+          isLoading: false,
+          isLoadingMore: false,
+          isStale: false,
+        }));
+      } catch (caught) {
+        if (abort.signal.aborted || run !== generation.current) return;
+        setSnapshot((current) => ({
+          ...(current.key === key ? current : emptyQueue(key)),
+          error:
+            caught instanceof Error ? caught : new Error('Approval queue refresh failed'),
+          isLoading: false,
+          isLoadingMore: false,
+          isStale: current.key === key && current.page !== null,
+        }));
+      }
+    },
+    []
+  );
 
   useEffect(() => {
-    const scheduled = queueMicrotask(() => void fetchPage(normalized, requestKey, false, normalized.cursor ?? null));
+    const scheduled = queueMicrotask(
+      () => void fetchPage(normalized, requestKey, false, normalized.cursor ?? null)
+    );
     return () => {
       void scheduled;
       generation.current += 1;
@@ -165,7 +173,8 @@ export function useApprovalQueue(request: ApprovalQueueRequest): ApprovalQueueSt
   }, [fetchPage, normalized, requestKey]);
 
   useEffect(() => {
-    const refresh = () => void fetchPage(normalized, requestKey, false, normalized.cursor ?? null);
+    const refresh = () =>
+      void fetchPage(normalized, requestKey, false, normalized.cursor ?? null);
     const refreshWhenVisible = () => {
       if (document.visibilityState === 'visible') refresh();
     };
@@ -185,7 +194,8 @@ export function useApprovalQueue(request: ApprovalQueueRequest): ApprovalQueueSt
     isStale: visible.isStale,
     error: visible.error,
     hasAuthoritativeData: visible.page !== null,
-    refresh: () => void fetchPage(normalized, requestKey, false, normalized.cursor ?? null),
+    refresh: () =>
+      void fetchPage(normalized, requestKey, false, normalized.cursor ?? null),
     loadMore: () => {
       if (visible.page?.nextCursor && !visible.isLoadingMore) {
         void fetchPage(normalized, requestKey, true, visible.page.nextCursor);
@@ -257,7 +267,10 @@ export function evaluateApprovalDecisionGuard(
   if (input.decision !== 'approved' && input.decision !== 'rejected') {
     return 'decision-invalid';
   }
-  if (input.decision === 'rejected' && (input.rejectionReason ?? '').trim().length === 0) {
+  if (
+    input.decision === 'rejected' &&
+    (input.rejectionReason ?? '').trim().length === 0
+  ) {
     return 'rejection-reason-required';
   }
   if (input.decision === 'approved' && input.rejectionReason !== null) {
@@ -294,7 +307,10 @@ export interface ApprovalReviewState {
   isStale: boolean;
   error: Error | null;
   refresh(): void;
-  decide(decision: 'approved' | 'rejected', rejectionReason: string | null): Promise<void>;
+  decide(
+    decision: 'approved' | 'rejected',
+    rejectionReason: string | null
+  ): Promise<void>;
 }
 
 export function useApprovalReview(
@@ -315,44 +331,54 @@ export function useApprovalReview(
   const visible = snapshot.identity === identity ? snapshot : emptyReview(identity);
   const isDeciding = decidingIdentity === identity;
 
-  const fetchReview = useCallback(async (
-    jobId: string,
-    currentReportId: string,
-    currentIdentity: string
-  ): Promise<void> => {
-    activeRequest.current?.abort();
-    const abort = new AbortController();
-    activeRequest.current = abort;
-    const run = ++generation.current;
-    setSnapshot((current) => ({
-      ...(current.identity === currentIdentity ? current : emptyReview(currentIdentity)),
-      isLoading: true,
-    }));
-    try {
-      const result = await repositories.approvalConsole.fetchApprovalReview(
-        jobId,
-        currentReportId,
-        abort.signal
-      );
-      if (run !== generation.current) return;
-      setSnapshot({
-        identity: currentIdentity,
-        review: result,
-        error: null,
-        isLoading: false,
-        isStale: false,
-        loadedGeneration: run,
-      });
-    } catch (caught) {
-      if (abort.signal.aborted || run !== generation.current) return;
+  const fetchReview = useCallback(
+    async (
+      jobId: string,
+      currentReportId: string,
+      currentIdentity: string
+    ): Promise<void> => {
+      activeRequest.current?.abort();
+      const abort = new AbortController();
+      activeRequest.current = abort;
+      const run = ++generation.current;
       setSnapshot((current) => ({
-        ...(current.identity === currentIdentity ? current : emptyReview(currentIdentity)),
-        error: caught instanceof Error ? caught : new Error('Approval review refresh failed'),
-        isLoading: false,
-        isStale: current.identity === currentIdentity && current.review !== null,
+        ...(current.identity === currentIdentity
+          ? current
+          : emptyReview(currentIdentity)),
+        isLoading: true,
       }));
-    }
-  }, []);
+      try {
+        const result = await repositories.approvalConsole.fetchApprovalReview(
+          jobId,
+          currentReportId,
+          abort.signal
+        );
+        if (run !== generation.current) return;
+        setSnapshot({
+          identity: currentIdentity,
+          review: result,
+          error: null,
+          isLoading: false,
+          isStale: false,
+          loadedGeneration: run,
+        });
+      } catch (caught) {
+        if (abort.signal.aborted || run !== generation.current) return;
+        setSnapshot((current) => ({
+          ...(current.identity === currentIdentity
+            ? current
+            : emptyReview(currentIdentity)),
+          error:
+            caught instanceof Error
+              ? caught
+              : new Error('Approval review refresh failed'),
+          isLoading: false,
+          isStale: current.identity === currentIdentity && current.review !== null,
+        }));
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     const scheduled = queueMicrotask(
@@ -416,29 +442,28 @@ export function useApprovalReview(
       // the review on screen is still the one it was dispatched for. Once the
       // reviewer has moved to another report, this completion must leave that
       // report's loaded state exactly as it found it.
-      setSnapshot((current) => (
+      setSnapshot((current) =>
         current.identity === identity
           ? { ...current, error: null, isLoading: false, isStale: true }
           : current
-      ));
+      );
       // Queue invalidation follows the committed mutation, not the selection,
       // so it still fires when the reviewer has moved on.
       onDecisionCommitted();
     } catch (caught) {
-      const failure = caught instanceof Error
-        ? caught
-        : new Error('Approval decision failed');
-      setSnapshot((current) => (
+      const failure =
+        caught instanceof Error ? caught : new Error('Approval decision failed');
+      setSnapshot((current) =>
         current.identity === identity
           ? { ...current, error: failure, isStale: true }
           : current
-      ));
+      );
       throw caught;
     } finally {
       // Ownership-checked so a release can never clear a latch a later identity
       // has since claimed.
       if (decisionInFlight.current === identity) decisionInFlight.current = null;
-      setDecidingIdentity((current) => current === identity ? null : current);
+      setDecidingIdentity((current) => (current === identity ? null : current));
     }
   };
 
@@ -447,18 +472,19 @@ export function useApprovalReview(
     // Derived from the same guard decide() enforces, so a control can never be
     // enabled for a decision the boundary would refuse. Probed with a valid
     // approve shape so only the non-decision-specific rules apply.
-    decisionEnabled: evaluateApprovalDecisionGuard({
-      review: visible.review,
-      requestedServiceJobId: serviceJobId,
-      requestedReportId: reportId,
-      isLoading: visible.isLoading,
-      isStale: visible.isStale,
-      isDeciding,
-      loadedGeneration: visible.loadedGeneration,
-      currentGeneration: generation.current,
-      decision: 'approved',
-      rejectionReason: null,
-    }) === null,
+    decisionEnabled:
+      evaluateApprovalDecisionGuard({
+        review: visible.review,
+        requestedServiceJobId: serviceJobId,
+        requestedReportId: reportId,
+        isLoading: visible.isLoading,
+        isStale: visible.isStale,
+        isDeciding,
+        loadedGeneration: visible.loadedGeneration,
+        currentGeneration: generation.current,
+        decision: 'approved',
+        rejectionReason: null,
+      }) === null,
     isLoading: visible.isLoading,
     isDeciding,
     isStale: visible.isStale,

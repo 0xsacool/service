@@ -41,10 +41,15 @@ const EXPECTED_URL = `${FIXTURE_ORIGIN}/track/${FIXTURE_JOB_ID}#${FIXTURE_CODE}`
 // --- H: dependency pinned at the exact approved version ---------------------
 
 test('react-qr-code is installed at exactly the approved pinned version', async () => {
-  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  const pkg = JSON.parse(
+    await readFile(new URL('../package.json', import.meta.url), 'utf8')
+  );
   assert.equal(pkg.dependencies['react-qr-code'], '2.2.0');
   const installed = JSON.parse(
-    await readFile(new URL('../node_modules/react-qr-code/package.json', import.meta.url), 'utf8')
+    await readFile(
+      new URL('../node_modules/react-qr-code/package.json', import.meta.url),
+      'utf8'
+    )
   );
   assert.equal(installed.version, '2.2.0');
 });
@@ -67,7 +72,10 @@ test('the QR component is rendered with value bound to the same trackingUrl vari
 
 test('trackingUrl is derived via the canonical buildPublicTrackingUrl helper, never a hand-built string', async () => {
   const source = await printSourcePromise;
-  assert.match(source, /import \{ buildPublicTrackingUrl \} from '\.\.\/\.\.\/\.\.\/services\/publicTrackingLink';/);
+  assert.match(
+    source,
+    /import \{ buildPublicTrackingUrl \} from '\.\.\/\.\.\/\.\.\/services\/publicTrackingLink';/
+  );
   assert.match(
     source,
     /buildPublicTrackingUrl\(window\.location\.origin, job\.id, publicTrackingCode\)/
@@ -102,7 +110,9 @@ test('PublicTrackingSection (copy-link) and ServiceRequestPrintPreview (QR) both
 
 test('STATE active-unavailable renders no QR component and no actionable link', async () => {
   const source = await printSourcePromise;
-  const block = source.match(/publicTrackingState === 'active-unavailable' &&[\s\S]*?\)\}/);
+  const block = source.match(
+    /publicTrackingState === 'active-unavailable' &&[\s\S]*?\)\}/
+  );
   assert.notEqual(block, null);
   assert.doesNotMatch(block[0], /<QRCode/);
   assert.doesNotMatch(block[0], /trackingUrl/);
@@ -132,7 +142,9 @@ test('trackingUrl (and therefore the QR value) is null whenever no plaintext cod
 // --- F: no query-string credential architecture ----------------------------
 
 test('the canonical link never places the credential in a query string', () => {
-  const url = new URL(buildPublicTrackingUrl(FIXTURE_ORIGIN, FIXTURE_JOB_ID, FIXTURE_CODE));
+  const url = new URL(
+    buildPublicTrackingUrl(FIXTURE_ORIGIN, FIXTURE_JOB_ID, FIXTURE_CODE)
+  );
   assert.equal(url.search, '');
   assert.equal(url.hash, `#${FIXTURE_CODE}`);
 });
@@ -148,7 +160,11 @@ test('the three Thai print-state messages are byte-unchanged from the audited Ph
 // --- I: no plaintext persistence mechanism was added ------------------------
 
 test('no localStorage/sessionStorage/IndexedDB persistence was introduced anywhere in the QR change', async () => {
-  for (const source of [await printSourcePromise, await sectionSourcePromise, await linkSourcePromise]) {
+  for (const source of [
+    await printSourcePromise,
+    await sectionSourcePromise,
+    await linkSourcePromise,
+  ]) {
     assert.doesNotMatch(source, /localStorage|sessionStorage|indexedDB/);
   }
 });

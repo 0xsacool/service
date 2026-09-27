@@ -91,7 +91,9 @@ export function ContactOrderMetadataSection({
         <Field label={IDENTITY_LABEL[value.contactChannel] ?? 'รายละเอียดช่องทางติดต่อ'}>
           <input
             value={value.contactChannelIdentity}
-            onChange={(e) => onChange({ ...value, contactChannelIdentity: e.target.value })}
+            onChange={(e) =>
+              onChange({ ...value, contactChannelIdentity: e.target.value })
+            }
             maxLength={120}
             placeholder="เช่น @username"
             className={inputClass()}

@@ -41,7 +41,11 @@ test('the print-mode effect has an empty dependency array (runs once per mount, 
   const effectBlock = source.match(
     /useEffect\(\(\) => \{\s*document\.body\.classList\.add\('service-request-print-mode'\);[\s\S]*?\}, \[\]\);/
   );
-  assert.notEqual(effectBlock, null, 'expected a useEffect with an empty dependency array');
+  assert.notEqual(
+    effectBlock,
+    null,
+    'expected a useEffect with an empty dependency array'
+  );
 });
 
 // --- F5d-68 Phase 3A: deterministic automatic-print timing -----------------
@@ -55,16 +59,22 @@ test('the print-mode effect has an empty dependency array (runs once per mount, 
 // runtime effect scheduling across two different components, which this
 // Node/no-jsdom environment cannot execute.
 
-test('REGRESSION: NewServiceJob\'s automatic-print effect adds service-request-print-mode itself, before calling window.print()', async () => {
+test("REGRESSION: NewServiceJob's automatic-print effect adds service-request-print-mode itself, before calling window.print()", async () => {
   const source = await pageSourcePromise;
   const effectMatch = source.match(
     /useEffect\(\(\) => \{\s*if \(savedJob\) \{([\s\S]*?)\}\s*\}, \[savedJob\]\);/
   );
   assert.notEqual(effectMatch, null, 'expected the savedJob automatic-print effect');
   const body = effectMatch[1];
-  const addIndex = body.indexOf("document.body.classList.add('service-request-print-mode')");
+  const addIndex = body.indexOf(
+    "document.body.classList.add('service-request-print-mode')"
+  );
   const printIndex = body.indexOf('window.print()');
-  assert.equal(addIndex >= 0, true, 'expected the effect to add service-request-print-mode');
+  assert.equal(
+    addIndex >= 0,
+    true,
+    'expected the effect to add service-request-print-mode'
+  );
   assert.equal(printIndex >= 0, true, 'expected the effect to call window.print()');
   assert.equal(
     addIndex < printIndex,
@@ -73,14 +83,17 @@ test('REGRESSION: NewServiceJob\'s automatic-print effect adds service-request-p
   );
 });
 
-test('the parent-side class add does not replace ServiceRequestPrintPreview\'s own lifecycle effect', async () => {
+test("the parent-side class add does not replace ServiceRequestPrintPreview's own lifecycle effect", async () => {
   const pageSource = await pageSourcePromise;
   const previewSource = await previewSourcePromise;
   // The parent's add is a defensive duplicate (idempotent) — the preview
   // component must still own add-on-mount/remove-on-cleanup for as long as
   // it exists, so navigating away or finishing "Print Again" state still
   // cleans up correctly.
-  assert.match(previewSource, /document\.body\.classList\.add\('service-request-print-mode'\)/);
+  assert.match(
+    previewSource,
+    /document\.body\.classList\.add\('service-request-print-mode'\)/
+  );
   assert.match(
     previewSource,
     /return \(\) => document\.body\.classList\.remove\('service-request-print-mode'\)/
@@ -112,7 +125,10 @@ test('service-request-print-mode resets staff-shell min-height so no blank space
 
 test('service-request-print-mode hides every New Service Job page sibling except the print host', async () => {
   const css = await cssSourcePromise;
-  assert.match(css, /\.service-request-print-mode \.new-service-job-page > \* \{\s*display: none !important;\s*\}/);
+  assert.match(
+    css,
+    /\.service-request-print-mode \.new-service-job-page > \* \{\s*display: none !important;\s*\}/
+  );
   assert.match(
     css,
     /\.service-request-print-mode \.new-service-job-page > \.service-request-print-host \{\s*display: block !important;/
@@ -143,7 +159,10 @@ test('the on-screen success card and action buttons are wrapped in the always-hi
   assert.equal((source.match(/className="print-area /g) ?? []).length, 1);
   assert.match(source, /className="service-request-preview-toolbar space-y-6"/);
   const css = await cssSourcePromise;
-  assert.match(css, /\.service-request-preview-toolbar \{\s*display: none !important;\s*\}/);
+  assert.match(
+    css,
+    /\.service-request-preview-toolbar \{\s*display: none !important;\s*\}/
+  );
 });
 
 test('the toolbar wrapper contains the success card and both action buttons, not the print document', async () => {
@@ -169,7 +188,10 @@ test('A4 portrait @page geometry with 10mm margins is present for the Service Re
 
 test('the print root has no screen card margin/padding/shadow/radius under print', async () => {
   const source = await previewSourcePromise;
-  assert.match(source, /print:m-0 print:rounded-none print:p-0 print:shadow-none print:ring-0/);
+  assert.match(
+    source,
+    /print:m-0 print:rounded-none print:p-0 print:shadow-none print:ring-0/
+  );
 });
 
 // --- print-only compaction ----------------------------------------------------
@@ -186,7 +208,10 @@ test('print-only compact spacing exists on major section gaps without changing s
 
 test('evidence photos use a compact 64px print-only thumbnail size, screen size unchanged', async () => {
   const source = await previewSourcePromise;
-  assert.match(source, /h-20 w-20 print:h-16 print:w-16 rounded border border-neutral-300 object-cover/);
+  assert.match(
+    source,
+    /h-20 w-20 print:h-16 print:w-16 rounded border border-neutral-300 object-cover/
+  );
 });
 
 test('evidence photos preserve aspect ratio (object-cover, equal height/width) and are not stretched', async () => {
@@ -301,8 +326,14 @@ test('ServiceReportPrintPreview and DeliveryNotePrintPreview source files are un
   const noteSource = await readSource(
     'src/features/service-jobs/components/DeliveryNotePrintPreview.tsx'
   );
-  assert.match(reportSource, /document\.body\.classList\.add\('service-report-print-mode'\)/);
-  assert.match(noteSource, /document\.body\.classList\.add\('delivery-note-print-mode'\)/);
+  assert.match(
+    reportSource,
+    /document\.body\.classList\.add\('service-report-print-mode'\)/
+  );
+  assert.match(
+    noteSource,
+    /document\.body\.classList\.add\('delivery-note-print-mode'\)/
+  );
   assert.doesNotMatch(reportSource, /service-request-print-mode/);
   assert.doesNotMatch(noteSource, /service-request-print-mode/);
 });

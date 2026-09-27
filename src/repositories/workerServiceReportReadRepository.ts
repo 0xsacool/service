@@ -47,7 +47,7 @@ export interface ApprovalConsoleRepository {
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : null;
 }
 
@@ -71,16 +71,24 @@ function nullableId(value: unknown): value is string | null {
 function isReviewPart(value: unknown): value is ServiceReportPart {
   const part = record(value);
   return Boolean(
-    part && exactKeys(part, ['description', 'partNo', 'quantity', 'remark']) &&
-    typeof part.description === 'string' && nullableString(part.partNo) &&
-    Number.isSafeInteger(part.quantity) && Number(part.quantity) >= 1 &&
-    Number(part.quantity) <= 2_147_483_647 && typeof part.remark === 'string'
+    part &&
+    exactKeys(part, ['description', 'partNo', 'quantity', 'remark']) &&
+    typeof part.description === 'string' &&
+    nullableString(part.partNo) &&
+    Number.isSafeInteger(part.quantity) &&
+    Number(part.quantity) >= 1 &&
+    Number(part.quantity) <= 2_147_483_647 &&
+    typeof part.remark === 'string'
   );
 }
 
 function isCanonicalEvidenceList(value: unknown): value is string[] {
-  if (!Array.isArray(value) || value.length > MAX_EVIDENCE_ATTACHMENTS ||
-      !value.every(isCanonicalAttachmentKey)) return false;
+  if (
+    !Array.isArray(value) ||
+    value.length > MAX_EVIDENCE_ATTACHMENTS ||
+    !value.every(isCanonicalAttachmentKey)
+  )
+    return false;
   return new Set(value).size === value.length;
 }
 
@@ -89,8 +97,10 @@ function hasDistinctActions(value: readonly unknown[]): boolean {
 }
 
 function isResultStatus(value: unknown): boolean {
-  return value === null ||
-    (typeof value === 'string' && (RESULT_STATUSES as readonly string[]).includes(value));
+  return (
+    value === null ||
+    (typeof value === 'string' && (RESULT_STATUSES as readonly string[]).includes(value))
+  );
 }
 
 function isWarrantyOutcome(value: unknown): boolean {
@@ -98,45 +108,89 @@ function isWarrantyOutcome(value: unknown): boolean {
 }
 
 function isApprovalState(value: unknown): boolean {
-  return value === 'not-submitted' || value === 'pending' ||
-    value === 'approved' || value === 'rejected';
+  return (
+    value === 'not-submitted' ||
+    value === 'pending' ||
+    value === 'approved' ||
+    value === 'rejected'
+  );
 }
 
 function parseSnapshot(value: unknown): ServiceReportSnapshot | null {
   const snapshot = record(value);
-  if (!snapshot || !exactKeys(snapshot, [
-    'trackingReference', 'customerName', 'customerPhone', 'customerEmail',
-    'brandCode', 'brandName', 'productName', 'modelOrSku', 'serialNumber',
-    'customerReportedProblem',
-  ])) return null;
   if (
-    !id(snapshot.trackingReference) || typeof snapshot.customerName !== 'string' ||
-    typeof snapshot.customerPhone !== 'string' || typeof snapshot.customerEmail !== 'string' ||
-    typeof snapshot.brandCode !== 'string' || typeof snapshot.brandName !== 'string' ||
-    typeof snapshot.productName !== 'string' || !nullableString(snapshot.modelOrSku) ||
+    !snapshot ||
+    !exactKeys(snapshot, [
+      'trackingReference',
+      'customerName',
+      'customerPhone',
+      'customerEmail',
+      'brandCode',
+      'brandName',
+      'productName',
+      'modelOrSku',
+      'serialNumber',
+      'customerReportedProblem',
+    ])
+  )
+    return null;
+  if (
+    !id(snapshot.trackingReference) ||
+    typeof snapshot.customerName !== 'string' ||
+    typeof snapshot.customerPhone !== 'string' ||
+    typeof snapshot.customerEmail !== 'string' ||
+    typeof snapshot.brandCode !== 'string' ||
+    typeof snapshot.brandName !== 'string' ||
+    typeof snapshot.productName !== 'string' ||
+    !nullableString(snapshot.modelOrSku) ||
     typeof snapshot.serialNumber !== 'string' ||
     typeof snapshot.customerReportedProblem !== 'string'
-  ) return null;
+  )
+    return null;
   return snapshot as unknown as ServiceReportSnapshot;
 }
 
 const HISTORY_COMMON_KEYS = [
-  'historyItemVersion', 'sourceSchemaVersion', 'id', 'serviceJobId', 'reportNo',
-  'status', 'createdAt', 'updatedAt', 'finalizedAt', 'technician',
-  'customerReportedProblem', 'inspectionFindings', 'serviceActions', 'parts',
-  'technicianRemark', 'resultStatus', 'resultDetail', 'evidenceAttachmentIds',
-  'claimNo', 'factoryReference', 'snapshot',
+  'historyItemVersion',
+  'sourceSchemaVersion',
+  'id',
+  'serviceJobId',
+  'reportNo',
+  'status',
+  'createdAt',
+  'updatedAt',
+  'finalizedAt',
+  'technician',
+  'customerReportedProblem',
+  'inspectionFindings',
+  'serviceActions',
+  'parts',
+  'technicianRemark',
+  'resultStatus',
+  'resultDetail',
+  'evidenceAttachmentIds',
+  'claimNo',
+  'factoryReference',
+  'snapshot',
 ] as const;
 
 const HISTORY_V2_KEYS = [
-  ...HISTORY_COMMON_KEYS, 'warrantyOutcome', 'approvalState', 'contentRevision',
-  'finalContentDigest', 'predecessorReportId',
+  ...HISTORY_COMMON_KEYS,
+  'warrantyOutcome',
+  'approvalState',
+  'contentRevision',
+  'finalContentDigest',
+  'predecessorReportId',
 ] as const;
 
 function parseHistoryItem(value: unknown): ServiceReportHistoryItem | null {
   const item = record(value);
-  if (!item || item.historyItemVersion !== 1 ||
-      (item.sourceSchemaVersion !== 1 && item.sourceSchemaVersion !== 2)) return null;
+  if (
+    !item ||
+    item.historyItemVersion !== 1 ||
+    (item.sourceSchemaVersion !== 1 && item.sourceSchemaVersion !== 2)
+  )
+    return null;
   const allowed = item.sourceSchemaVersion === 2 ? HISTORY_V2_KEYS : HISTORY_COMMON_KEYS;
   if (!exactKeys(item, allowed)) return null;
   const snapshot = item.snapshot === null ? null : parseSnapshot(item.snapshot);
@@ -164,15 +218,22 @@ function parseHistoryItem(value: unknown): ServiceReportHistoryItem | null {
   if (!isValidServiceReport(legacyCandidate)) return null;
   if (item.sourceSchemaVersion === 1) return item as unknown as ServiceReportHistoryItem;
   if (
-    !isWarrantyOutcome(item.warrantyOutcome) || !isApprovalState(item.approvalState) ||
-    !Number.isSafeInteger(item.contentRevision) || Number(item.contentRevision) < 0 ||
-    (item.finalContentDigest !== null && !isFinalContentDigest(item.finalContentDigest)) ||
-    !nullableId(item.predecessorReportId) || !Array.isArray(item.parts) ||
-    item.parts.length > 50 || !item.parts.every(isReviewPart) ||
+    !isWarrantyOutcome(item.warrantyOutcome) ||
+    !isApprovalState(item.approvalState) ||
+    !Number.isSafeInteger(item.contentRevision) ||
+    Number(item.contentRevision) < 0 ||
+    (item.finalContentDigest !== null &&
+      !isFinalContentDigest(item.finalContentDigest)) ||
+    !nullableId(item.predecessorReportId) ||
+    !Array.isArray(item.parts) ||
+    item.parts.length > 50 ||
+    !item.parts.every(isReviewPart) ||
     !isCanonicalEvidenceList(item.evidenceAttachmentIds)
-  ) return null;
+  )
+    return null;
   if (item.status === 'draft') {
-    if (item.approvalState !== 'not-submitted' || item.finalContentDigest !== null) return null;
+    if (item.approvalState !== 'not-submitted' || item.finalContentDigest !== null)
+      return null;
   } else if (
     item.approvalState === 'not-submitted' ||
     !isFinalContentDigest(item.finalContentDigest) ||
@@ -185,8 +246,13 @@ function parseHistoryItem(value: unknown): ServiceReportHistoryItem | null {
 
 function parseHistory(value: unknown): ServiceReportHistoryV1 | null {
   const data = record(value);
-  if (!data || !exactKeys(data, ['serviceJobId', 'reports']) ||
-      !id(data.serviceJobId) || !Array.isArray(data.reports)) return null;
+  if (
+    !data ||
+    !exactKeys(data, ['serviceJobId', 'reports']) ||
+    !id(data.serviceJobId) ||
+    !Array.isArray(data.reports)
+  )
+    return null;
   const reports: ServiceReportHistoryItem[] = [];
   for (const value of data.reports) {
     const report = parseHistoryItem(value);
@@ -197,39 +263,83 @@ function parseHistory(value: unknown): ServiceReportHistoryV1 | null {
 }
 
 const QUEUE_ITEM_KEYS = [
-  'queueItemVersion', 'reportId', 'serviceJobId', 'reportNo', 'trackingReference',
-  'finalizedAt', 'approvalState', 'predecessorReportId', 'technician',
-  'finalizedByDisplayName', 'warrantyOutcome', 'customerName', 'productName',
-  'modelOrSku', 'serialNumber', 'customerReportedProblem', 'resultStatus',
-  'finalContentDigest', 'evidenceCount',
+  'queueItemVersion',
+  'reportId',
+  'serviceJobId',
+  'reportNo',
+  'trackingReference',
+  'finalizedAt',
+  'approvalState',
+  'predecessorReportId',
+  'technician',
+  'finalizedByDisplayName',
+  'warrantyOutcome',
+  'customerName',
+  'productName',
+  'modelOrSku',
+  'serialNumber',
+  'customerReportedProblem',
+  'resultStatus',
+  'finalContentDigest',
+  'evidenceCount',
 ] as const;
 
 function parseQueueItem(value: unknown): ApprovalQueueItemV1 | null {
   const item = record(value);
-  if (!item || !exactKeys(item, QUEUE_ITEM_KEYS) || item.queueItemVersion !== 1 ||
-      !id(item.reportId) || !id(item.serviceJobId) || !id(item.trackingReference) ||
-      typeof item.reportNo !== 'string' || !/^FR-[0-9]{4}-[0-9]{6}$/.test(item.reportNo) ||
-      !isCanonicalTimestampMs(item.finalizedAt) || item.approvalState !== 'pending' ||
-      !nullableId(item.predecessorReportId) || typeof item.technician !== 'string' ||
-      !nullableString(item.finalizedByDisplayName) || !isWarrantyOutcome(item.warrantyOutcome) ||
-      typeof item.customerName !== 'string' || typeof item.productName !== 'string' ||
-      !nullableString(item.modelOrSku) || typeof item.serialNumber !== 'string' ||
-      typeof item.customerReportedProblem !== 'string' || !isResultStatus(item.resultStatus) ||
-      !isFinalContentDigest(item.finalContentDigest) ||
-      !Number.isSafeInteger(item.evidenceCount) || Number(item.evidenceCount) < 0 ||
-      Number(item.evidenceCount) > MAX_EVIDENCE_ATTACHMENTS) return null;
+  if (
+    !item ||
+    !exactKeys(item, QUEUE_ITEM_KEYS) ||
+    item.queueItemVersion !== 1 ||
+    !id(item.reportId) ||
+    !id(item.serviceJobId) ||
+    !id(item.trackingReference) ||
+    typeof item.reportNo !== 'string' ||
+    !/^FR-[0-9]{4}-[0-9]{6}$/.test(item.reportNo) ||
+    !isCanonicalTimestampMs(item.finalizedAt) ||
+    item.approvalState !== 'pending' ||
+    !nullableId(item.predecessorReportId) ||
+    typeof item.technician !== 'string' ||
+    !nullableString(item.finalizedByDisplayName) ||
+    !isWarrantyOutcome(item.warrantyOutcome) ||
+    typeof item.customerName !== 'string' ||
+    typeof item.productName !== 'string' ||
+    !nullableString(item.modelOrSku) ||
+    typeof item.serialNumber !== 'string' ||
+    typeof item.customerReportedProblem !== 'string' ||
+    !isResultStatus(item.resultStatus) ||
+    !isFinalContentDigest(item.finalContentDigest) ||
+    !Number.isSafeInteger(item.evidenceCount) ||
+    Number(item.evidenceCount) < 0 ||
+    Number(item.evidenceCount) > MAX_EVIDENCE_ATTACHMENTS
+  )
+    return null;
   return item as unknown as ApprovalQueueItemV1;
 }
 
 function parseQueuePage(value: unknown): ApprovalQueuePageV1 | null {
   const page = record(value);
-  if (!page || !exactKeys(page, [
-    'queueContractVersion', 'mode', 'normalizedSearch', 'pageSize', 'items', 'nextCursor',
-  ]) || page.queueContractVersion !== 1 ||
-      (page.mode !== 'queue' && page.mode !== 'report-number' && page.mode !== 'tracking-reference') ||
-      !nullableString(page.normalizedSearch) || !Number.isSafeInteger(page.pageSize) ||
-      Number(page.pageSize) < 1 || Number(page.pageSize) > 50 || !Array.isArray(page.items) ||
-      !nullableString(page.nextCursor)) return null;
+  if (
+    !page ||
+    !exactKeys(page, [
+      'queueContractVersion',
+      'mode',
+      'normalizedSearch',
+      'pageSize',
+      'items',
+      'nextCursor',
+    ]) ||
+    page.queueContractVersion !== 1 ||
+    (page.mode !== 'queue' &&
+      page.mode !== 'report-number' &&
+      page.mode !== 'tracking-reference') ||
+    !nullableString(page.normalizedSearch) ||
+    !Number.isSafeInteger(page.pageSize) ||
+    Number(page.pageSize) < 1 ||
+    Number(page.pageSize) > 50 ||
+    !Array.isArray(page.items) ||
+    !nullableString(page.nextCursor)
+  )
+    return null;
   const items: ApprovalQueueItemV1[] = [];
   for (const value of page.items) {
     const item = parseQueueItem(value);
@@ -242,40 +352,92 @@ function parseQueuePage(value: unknown): ApprovalQueuePageV1 | null {
 
 function parseActor(value: unknown): ApprovalReviewV1['createdBy'] | null {
   const actor = record(value);
-  if (!actor || !exactKeys(actor, ['role', 'displayName']) ||
-      !isValidStaffRole(actor.role) || !nullableString(actor.displayName)) return null;
+  if (
+    !actor ||
+    !exactKeys(actor, ['role', 'displayName']) ||
+    !isValidStaffRole(actor.role) ||
+    !nullableString(actor.displayName)
+  )
+    return null;
   return actor as unknown as ApprovalReviewV1['createdBy'];
 }
 
 function parseReview(value: unknown): ApprovalReviewV1 | null {
   const review = record(value);
-  if (!review || !exactKeys(review, [
-    'reviewVersion', 'reportId', 'serviceJobId', 'reportNo', 'createdAt', 'finalizedAt',
-    'approvalState', 'predecessorReportId', 'createdBy', 'finalizedBy', 'content',
-    'snapshot', 'finalizedFromRevision', 'finalContentDigest',
-  ]) || review.reviewVersion !== 1 || !id(review.reportId) || !id(review.serviceJobId) ||
-      typeof review.reportNo !== 'string' || !/^FR-[0-9]{4}-[0-9]{6}$/.test(review.reportNo) ||
-      !isCanonicalTimestampMs(review.createdAt) || !isCanonicalTimestampMs(review.finalizedAt) ||
-      review.approvalState !== 'pending' || !nullableId(review.predecessorReportId) ||
-      !parseActor(review.createdBy) || !parseActor(review.finalizedBy) ||
-      !Number.isSafeInteger(review.finalizedFromRevision) || Number(review.finalizedFromRevision) < 1 ||
-      !isFinalContentDigest(review.finalContentDigest) || !parseSnapshot(review.snapshot)) return null;
+  if (
+    !review ||
+    !exactKeys(review, [
+      'reviewVersion',
+      'reportId',
+      'serviceJobId',
+      'reportNo',
+      'createdAt',
+      'finalizedAt',
+      'approvalState',
+      'predecessorReportId',
+      'createdBy',
+      'finalizedBy',
+      'content',
+      'snapshot',
+      'finalizedFromRevision',
+      'finalContentDigest',
+    ]) ||
+    review.reviewVersion !== 1 ||
+    !id(review.reportId) ||
+    !id(review.serviceJobId) ||
+    typeof review.reportNo !== 'string' ||
+    !/^FR-[0-9]{4}-[0-9]{6}$/.test(review.reportNo) ||
+    !isCanonicalTimestampMs(review.createdAt) ||
+    !isCanonicalTimestampMs(review.finalizedAt) ||
+    review.approvalState !== 'pending' ||
+    !nullableId(review.predecessorReportId) ||
+    !parseActor(review.createdBy) ||
+    !parseActor(review.finalizedBy) ||
+    !Number.isSafeInteger(review.finalizedFromRevision) ||
+    Number(review.finalizedFromRevision) < 1 ||
+    !isFinalContentDigest(review.finalContentDigest) ||
+    !parseSnapshot(review.snapshot)
+  )
+    return null;
   const content = record(review.content);
-  if (!content || !exactKeys(content, [
-    'technician', 'customerReportedProblem', 'inspectionFindings', 'serviceActions',
-    'parts', 'technicianRemark', 'resultStatus', 'resultDetail',
-    'evidenceAttachmentIds', 'claimNo', 'factoryReference', 'warrantyOutcome',
-  ]) || typeof content.technician !== 'string' ||
-      typeof content.customerReportedProblem !== 'string' ||
-      typeof content.inspectionFindings !== 'string' || !Array.isArray(content.serviceActions) ||
-      !content.serviceActions.every((action) => typeof action === 'string' &&
-        (SERVICE_ACTIONS as readonly string[]).includes(action)) ||
-      !hasDistinctActions(content.serviceActions) || !Array.isArray(content.parts) ||
-      content.parts.length > 50 || !content.parts.every(isReviewPart) ||
-      typeof content.technicianRemark !== 'string' || !isResultStatus(content.resultStatus) ||
-      typeof content.resultDetail !== 'string' || !isCanonicalEvidenceList(content.evidenceAttachmentIds) ||
-      !nullableString(content.claimNo) || !nullableString(content.factoryReference) ||
-      !isWarrantyOutcome(content.warrantyOutcome)) return null;
+  if (
+    !content ||
+    !exactKeys(content, [
+      'technician',
+      'customerReportedProblem',
+      'inspectionFindings',
+      'serviceActions',
+      'parts',
+      'technicianRemark',
+      'resultStatus',
+      'resultDetail',
+      'evidenceAttachmentIds',
+      'claimNo',
+      'factoryReference',
+      'warrantyOutcome',
+    ]) ||
+    typeof content.technician !== 'string' ||
+    typeof content.customerReportedProblem !== 'string' ||
+    typeof content.inspectionFindings !== 'string' ||
+    !Array.isArray(content.serviceActions) ||
+    !content.serviceActions.every(
+      (action) =>
+        typeof action === 'string' &&
+        (SERVICE_ACTIONS as readonly string[]).includes(action)
+    ) ||
+    !hasDistinctActions(content.serviceActions) ||
+    !Array.isArray(content.parts) ||
+    content.parts.length > 50 ||
+    !content.parts.every(isReviewPart) ||
+    typeof content.technicianRemark !== 'string' ||
+    !isResultStatus(content.resultStatus) ||
+    typeof content.resultDetail !== 'string' ||
+    !isCanonicalEvidenceList(content.evidenceAttachmentIds) ||
+    !nullableString(content.claimNo) ||
+    !nullableString(content.factoryReference) ||
+    !isWarrantyOutcome(content.warrantyOutcome)
+  )
+    return null;
   return review as unknown as ApprovalReviewV1;
 }
 
@@ -293,15 +455,21 @@ async function readData<T>(
         : `Worker Service Report read failed (${response.status})`,
       response.status,
       typeof error?.code === 'string' ? error.code : null,
-      error?.retryClass === 'never' || error?.retryClass === 'reload' ||
-      error?.retryClass === 'same-idempotency-key' || error?.retryClass === 'operator'
+      error?.retryClass === 'never' ||
+        error?.retryClass === 'reload' ||
+        error?.retryClass === 'same-idempotency-key' ||
+        error?.retryClass === 'operator'
         ? error.retryClass
         : null
     );
   }
   const envelope = record(body);
-  if (!envelope || !exactKeys(envelope, ['ok', 'requestId', 'data']) ||
-      envelope.ok !== true || typeof envelope.requestId !== 'string') {
+  if (
+    !envelope ||
+    !exactKeys(envelope, ['ok', 'requestId', 'data']) ||
+    envelope.ok !== true ||
+    typeof envelope.requestId !== 'string'
+  ) {
     throw new Error('Worker returned a malformed Service Report read envelope');
   }
   const parsed = parser(envelope.data);
@@ -349,7 +517,8 @@ export function createWorkerApprovalConsoleRepository(
   return {
     async fetchPendingApprovalQueue(request, signal) {
       const url = new URL(`${getFilesWorkerBaseUrl()}${queuePath(request)}`);
-      if (request.pageSize !== undefined) url.searchParams.set('pageSize', String(request.pageSize));
+      if (request.pageSize !== undefined)
+        url.searchParams.set('pageSize', String(request.pageSize));
       if (request.cursor !== undefined) url.searchParams.set('cursor', request.cursor);
       const response = await fetchWithWorkerToken(tokenProvider, url.toString(), {
         method: 'GET',

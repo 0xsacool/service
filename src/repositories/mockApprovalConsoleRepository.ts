@@ -3,11 +3,12 @@ import type { ApprovalConsoleRepository } from './workerServiceReportReadReposit
 export function createMockApprovalConsoleRepository(): ApprovalConsoleRepository {
   return {
     async fetchPendingApprovalQueue(request) {
-      const normalizedSearch = request.mode === 'queue'
-        ? null
-        : request.mode === 'report-number'
-          ? request.reportNo.trim().toUpperCase()
-          : request.trackingReference.trim();
+      const normalizedSearch =
+        request.mode === 'queue'
+          ? null
+          : request.mode === 'report-number'
+            ? request.reportNo.trim().toUpperCase()
+            : request.trackingReference.trim();
       return {
         queueContractVersion: 1,
         mode: request.mode,

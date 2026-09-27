@@ -2,7 +2,12 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { LockKeyhole } from 'lucide-react';
 import { useAuthSession } from './authSessionContext';
 import { canAccessApprovalConsole } from '../services/approvalConsoleAccess';
-import { GlassCard, PageContainer, EmptyState, SecondaryButton } from '../shared/components';
+import {
+  GlassCard,
+  PageContainer,
+  EmptyState,
+  SecondaryButton,
+} from '../shared/components';
 import { ROUTES } from '../constants';
 
 // Phase 6R-B — composes INSIDE <StaffLayout>, not before it like

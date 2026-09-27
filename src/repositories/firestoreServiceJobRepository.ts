@@ -237,7 +237,7 @@ export async function createFirestoreServiceJobRepository(
     // cache it. The returned `job` is a fresh server read (not the Worker's
     // response, which never echoes the hash back) so the local cache
     // reflects the real persisted publicTrackingCodeHash immediately,
-        // without waiting on the onSnapshot listener's next event.
+    // without waiting on the onSnapshot listener's next event.
     async issuePublicTrackingCode(id) {
       let response: Response;
       try {
@@ -266,7 +266,12 @@ export async function createFirestoreServiceJobRepository(
         throw new PublicTrackingIssuanceError(message, response.status);
       }
       const body: unknown = await response.json();
-      if (!body || typeof body !== 'object' || !('code' in body) || typeof body.code !== 'string') {
+      if (
+        !body ||
+        typeof body !== 'object' ||
+        !('code' in body) ||
+        typeof body.code !== 'string'
+      ) {
         // A 2xx whose body could not be read/parsed: the commit almost
         // certainly succeeded, so this is ambiguous, not a clean failure.
         throw new PublicTrackingIssuanceError(

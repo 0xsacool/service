@@ -92,7 +92,10 @@ export async function createFirestoreAttachmentMetadataStore(): Promise<Attachme
             documentIdsByKey.set(key, resolved.documentId);
           }
         })().catch((error: unknown) => {
-          console.error('[firestoreAttachmentsRepository] identity resolution failed:', error);
+          console.error(
+            '[firestoreAttachmentsRepository] identity resolution failed:',
+            error
+          );
           recordFirestoreInitFailure({
             repository: 'attachments',
             stage: 'listener',
@@ -162,7 +165,9 @@ export async function createFirestoreAttachmentMetadataStore(): Promise<Attachme
     },
     async updateRetention(id, retention) {
       try {
-        const documentId = documentIdsByKey.get(id) ?? await attachmentMetadataDocId(assertCanonicalAttachmentKey(id));
+        const documentId =
+          documentIdsByKey.get(id) ??
+          (await attachmentMetadataDocId(assertCanonicalAttachmentKey(id)));
         await updateDoc(doc(firestore, ATTACHMENTS_COLLECTION, documentId), {
           deleteAfter: retention.deleteAfter,
           retentionStatus: retention.retentionStatus,
@@ -174,7 +179,9 @@ export async function createFirestoreAttachmentMetadataStore(): Promise<Attachme
     },
     async extendRetention(id, extension, retentionStatus) {
       try {
-        const documentId = documentIdsByKey.get(id) ?? await attachmentMetadataDocId(assertCanonicalAttachmentKey(id));
+        const documentId =
+          documentIdsByKey.get(id) ??
+          (await attachmentMetadataDocId(assertCanonicalAttachmentKey(id)));
         await updateDoc(doc(firestore, ATTACHMENTS_COLLECTION, documentId), {
           deleteAfter: extension.newDeleteAfter,
           retentionStatus,
@@ -188,7 +195,9 @@ export async function createFirestoreAttachmentMetadataStore(): Promise<Attachme
     async markDeleted(id, deletedAt) {
       void deletedAt;
       try {
-        const documentId = documentIdsByKey.get(id) ?? await attachmentMetadataDocId(assertCanonicalAttachmentKey(id));
+        const documentId =
+          documentIdsByKey.get(id) ??
+          (await attachmentMetadataDocId(assertCanonicalAttachmentKey(id)));
         await updateDoc(doc(firestore, ATTACHMENTS_COLLECTION, documentId), {
           deletedAt: serverTimestamp(),
         });

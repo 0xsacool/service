@@ -447,9 +447,7 @@ test('F5d-69 authorized staff can set, correct, and clear all service-event meta
       orderDeliveredDate: null,
     })
   );
-  await assertSucceeds(
-    updateDoc(jobRef, { orderNumber: null, orderVerification: null })
-  );
+  await assertSucceeds(updateDoc(jobRef, { orderNumber: null, orderVerification: null }));
   await assertSucceeds(
     updateDoc(jobRef, { contactChannel: null, contactChannelIdentity: null })
   );
@@ -470,7 +468,13 @@ test('F5d-69 invalid service-event metadata is denied', async () => {
   await assertFails(
     updateDoc(jobRef, { orderNumber: 'ABC-1', orderVerification: 'approved' })
   );
-  for (const badDate of ['18-08-2026', '2026/08/18', '2026-8-1', '2026-13-01', '2026-08-32']) {
+  for (const badDate of [
+    '18-08-2026',
+    '2026/08/18',
+    '2026-8-1',
+    '2026-13-01',
+    '2026-08-32',
+  ]) {
     await assertFails(updateDoc(jobRef, { purchaseDate: badDate }));
     await assertFails(updateDoc(jobRef, { orderDeliveredDate: badDate }));
   }
@@ -481,7 +485,9 @@ test('F5d-69 invalid service-event metadata is denied', async () => {
   // though RE2's '.' never matches one is the reason it fails, not an
   // explicit control-character screen — externalEvidenceUrl keeps zero
   // tolerance here, unlike the plain string fields below.
-  await assertFails(updateDoc(jobRef, { externalEvidenceUrl: 'https://example.com/a\nb' }));
+  await assertFails(
+    updateDoc(jobRef, { externalEvidenceUrl: 'https://example.com/a\nb' })
+  );
   await assertFails(
     updateDoc(jobRef, { externalEvidenceUrl: `https://example.com/${'a'.repeat(2048)}` })
   );
@@ -500,8 +506,12 @@ test('F5d-69 plain string fields tolerate embedded control characters, matching 
   await assertSucceeds(
     updateDoc(jobRef, { contactChannel: 'line', contactChannelIdentity: 'a\nb' })
   );
-  await assertSucceeds(updateDoc(jobRef, { orderNumber: 'ABC\t1', orderVerification: 'verified' }));
-  await assertSucceeds(updateDoc(jobRef, { externalEvidenceNote: 'line one\r\nline two' }));
+  await assertSucceeds(
+    updateDoc(jobRef, { orderNumber: 'ABC\t1', orderVerification: 'verified' })
+  );
+  await assertSucceeds(
+    updateDoc(jobRef, { externalEvidenceNote: 'line one\r\nline two' })
+  );
 });
 
 test('F5d-69 cross-field invariants are enforced on the resulting document', async () => {
@@ -542,9 +552,7 @@ test('F5d-69 cross-field invariants are enforced on the resulting document', asy
   // without an order number); this closes the asymmetry the Phase 2A-R
   // audit found. Reset to a clean (null, null) pair first so the write
   // under test is the only thing touching either field.
-  await assertSucceeds(
-    updateDoc(jobRef, { orderNumber: null, orderVerification: null })
-  );
+  await assertSucceeds(updateDoc(jobRef, { orderNumber: null, orderVerification: null }));
   await assertFails(updateDoc(jobRef, { orderNumber: 'NEW-1' }));
   // The valid transition — both set together in the same write — remains
   // allowed.
@@ -580,7 +588,9 @@ test('F5d-69 a legacy Service Job missing every new field remains editable', asy
   //                                                      missing its pair)
   //   legacy (both absent) + both set together       -> ALLOW
   await assertFails(
-    updateDoc(doc(brunoDb, 'serviceJobs', 'job-legacy-bruno-2'), { orderNumber: 'FIRST-1' })
+    updateDoc(doc(brunoDb, 'serviceJobs', 'job-legacy-bruno-2'), {
+      orderNumber: 'FIRST-1',
+    })
   );
   await assertSucceeds(
     updateDoc(doc(brunoDb, 'serviceJobs', 'job-legacy-bruno-2'), {
@@ -766,7 +776,10 @@ test('cross-brand ServiceReport read and write are denied', async () => {
   await assertFails(getDoc(doc(brunoDb, 'serviceReports', 'report-join-lux-draft')));
   await assertFails(
     getDocs(
-      query(collection(brunoDb, 'serviceReports'), where('serviceJobId', '==', 'job-join-lux'))
+      query(
+        collection(brunoDb, 'serviceReports'),
+        where('serviceJobId', '==', 'job-join-lux')
+      )
     )
   );
   await assertFails(
@@ -779,7 +792,10 @@ test('cross-brand ServiceReport read and write are denied', async () => {
 test('browser ServiceReport creation is denied', async () => {
   const brunoDb = staffDb(brunoUid);
   await assertFails(
-    setDoc(doc(brunoDb, 'serviceReports', 'report-new'), serviceReport('job-bruno', 'draft'))
+    setDoc(
+      doc(brunoDb, 'serviceReports', 'report-new'),
+      serviceReport('job-bruno', 'draft')
+    )
   );
 });
 
@@ -846,9 +862,7 @@ test('the Worker-only ServiceReport allocator collections are fully denied to th
       draftReportId: 'report-bruno-draft',
     })
   );
-  await assertFails(
-    deleteDoc(doc(brunoDb, 'serviceReportActiveDrafts', 'job-bruno'))
-  );
+  await assertFails(deleteDoc(doc(brunoDb, 'serviceReportActiveDrafts', 'job-bruno')));
   await assertFails(getDoc(doc(brunoDb, 'serviceReportDraftKeys', 'some-key')));
   await assertFails(
     setDoc(doc(brunoDb, 'serviceReportDraftKeys', 'some-key'), {
@@ -873,7 +887,9 @@ test('the Worker-only Product Import collections are denied to the browser by de
   await assertFails(deleteDoc(doc(brunoDb, 'productImports', 'some-import-key')));
 
   await assertFails(getDoc(doc(brunoDb, 'productCatalogState', 'current')));
-  await assertFails(setDoc(doc(brunoDb, 'productCatalogState', 'current'), { revision: 99 }));
+  await assertFails(
+    setDoc(doc(brunoDb, 'productCatalogState', 'current'), { revision: 99 })
+  );
   await assertFails(deleteDoc(doc(brunoDb, 'productCatalogState', 'current')));
 });
 
@@ -1013,7 +1029,11 @@ test('a report whose authoritative Service Job is missing or malformed is denied
 
 test('anonymous direct ServiceReport GET is denied', async () => {
   const anonDb = unauthenticatedDb();
-  for (const reportId of ['report-bruno-draft', 'report-bruno-v2-draft', 'report-bruno-final']) {
+  for (const reportId of [
+    'report-bruno-draft',
+    'report-bruno-v2-draft',
+    'report-bruno-final',
+  ]) {
     await assertFails(getDoc(doc(anonDb, 'serviceReports', reportId)));
   }
 });
@@ -1026,7 +1046,12 @@ test('Public Tracking clients get no credentialed Service Report or console acce
   await assertFails(getDoc(doc(anonDb, 'staffProfiles', brunoUid)));
   await assertFails(getDoc(doc(anonDb, 'serviceReports', 'report-bruno-v2-draft')));
   await assertFails(
-    getDocs(query(collection(anonDb, 'serviceReports'), where('serviceJobId', '==', 'job-bruno')))
+    getDocs(
+      query(
+        collection(anonDb, 'serviceReports'),
+        where('serviceJobId', '==', 'job-bruno')
+      )
+    )
   );
   await assertFails(getDoc(doc(anonDb, 'products', 'product-1')));
 });

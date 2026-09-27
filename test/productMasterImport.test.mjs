@@ -33,9 +33,8 @@ const { runProductImport } = await vite.ssrLoadModule(
 const { productMasterRepository } = await vite.ssrLoadModule(
   '/src/repositories/productMasterRepository.ts'
 );
-const { buildProductFromImportRecord, buildProductUpdatePatch } = await vite.ssrLoadModule(
-  '/src/services/productMasterAdmin.ts'
-);
+const { buildProductFromImportRecord, buildProductUpdatePatch } =
+  await vite.ssrLoadModule('/src/services/productMasterAdmin.ts');
 const { canMutateProductCatalogForBackend, canImportProductCatalogForBackend } =
   await vite.ssrLoadModule('/src/services/productCatalogAccess.ts');
 const { rejectClientProductMutation } = await vite.ssrLoadModule(
@@ -60,7 +59,9 @@ const { reduce: reduceWizardState, submitImport } = await vite.ssrLoadModule(
 );
 const { buildCanonicalRequestString, parseProductImportRequest, sanitizeImportFileName } =
   await vite.ssrLoadModule('/src/services/productImportRequest.ts');
-const { normalizeDisplayValue } = await vite.ssrLoadModule('/src/services/productIdentity.ts');
+const { normalizeDisplayValue } = await vite.ssrLoadModule(
+  '/src/services/productIdentity.ts'
+);
 
 // A minimal in-memory Storage implementation for testing
 // productImportPendingAttempt.ts's sessionStorage-backed functions without
@@ -117,7 +118,8 @@ test('CSV template and export headers match the established Product Master contr
 // --- CSV parsing edge cases -----------------------------------------------
 
 test('parseCsv handles a UTF-8 BOM on the first header without corrupting the first column name', () => {
-  const withBom = '﻿Brand,SKU,Model,Product Name,Category\r\nBRUNO,ABC-123,ABC,Test,Hot Plate';
+  const withBom =
+    '﻿Brand,SKU,Model,Product Name,Category\r\nBRUNO,ABC-123,ABC,Test,Hot Plate';
   const rows = parseCsv(withBom);
   assert.equal(rows[0][0], '﻿Brand');
   // getField/parseRows trims each header cell, and JS trim() strips U+FEFF
@@ -183,10 +185,7 @@ test('a row with SKU but no derivable Model and no explicit Model column still p
   });
   // No '-' separator in "ABC123" -> whole SKU becomes the model, no MISSING_MODEL.
   assert.equal(preview.rows[0].record.model, 'ABC123');
-  assert.doesNotMatch(
-    JSON.stringify(preview.rows[0].issues),
-    /MISSING_MODEL/
-  );
+  assert.doesNotMatch(JSON.stringify(preview.rows[0].issues), /MISSING_MODEL/);
 });
 
 // --- Duplicate rows in the same CSV -----------------------------------------
@@ -206,7 +205,7 @@ test('duplicate SKU rows within one CSV are both flagged as errors (DUPLICATE_SK
   assert.ok(preview.rows[1].issues.some((i) => i.code === 'DUPLICATE_SKU'));
 });
 
-test('duplicate SKU detection is case-insensitive, matching matchStateFor\'s existing-product comparison policy', () => {
+test("duplicate SKU detection is case-insensitive, matching matchStateFor's existing-product comparison policy", () => {
   const preview = runProductImport({
     kind: 'matrix',
     header: ['Brand', 'SKU', 'Model', 'Product Name', 'Category'],
@@ -237,7 +236,11 @@ test('duplicate Model+Variant rows are a warning only, not blocked', () => {
   });
   assert.equal(preview.rows[0].status, 'new');
   assert.equal(preview.rows[1].status, 'new');
-  assert.ok(preview.rows[0].issues.some((i) => i.code === 'DUPLICATE_MODEL' && i.severity === 'warning'));
+  assert.ok(
+    preview.rows[0].issues.some(
+      (i) => i.code === 'DUPLICATE_MODEL' && i.severity === 'warning'
+    )
+  );
 });
 
 // --- NEW / UPDATE / SKIP / ERROR classification -----------------------------
@@ -358,7 +361,11 @@ test('unrecognized category is a warning (INVALID_CATEGORY), not a blocking erro
   );
   assert.equal(preview.rows[0].status, 'new');
   assert.equal(preview.rows[0].record.categoryId, undefined);
-  assert.ok(preview.rows[0].issues.some((i) => i.code === 'INVALID_CATEGORY' && i.severity === 'warning'));
+  assert.ok(
+    preview.rows[0].issues.some(
+      (i) => i.code === 'INVALID_CATEGORY' && i.severity === 'warning'
+    )
+  );
 });
 
 // --- Commit blocked while errors exist (wizard-level, structural) ----------
@@ -441,7 +448,11 @@ test('mockProductImportRepository: a skipped row (already up to date) performs n
     `skip-behavior-skip-${Date.now()}`
   );
 
-  assert.equal(productMasterRepository.getProducts().length, countAfterCreate, 'a skipped row must write nothing');
+  assert.equal(
+    productMasterRepository.getProducts().length,
+    countAfterCreate,
+    'a skipped row must write nothing'
+  );
   assert.equal(skipResult.rows.length, 1);
   assert.equal(skipResult.rows[0].status, 'skipped');
   assert.equal(skipResult.rows[0].productId, createResult.rows[0].productId);
@@ -461,15 +472,33 @@ test('mockProductImportRepository: a request with any error row (duplicate ident
           fileName: null,
           catalogFingerprint: fingerprint,
           rows: [
-            { rowNumber: 1, brand: 'ANYERROR', sku: sharedSku, model: 'AE1', productName: 'A', category: null },
-            { rowNumber: 2, brand: 'ANYERROR', sku: sharedSku, model: 'AE2', productName: 'B', category: null },
+            {
+              rowNumber: 1,
+              brand: 'ANYERROR',
+              sku: sharedSku,
+              model: 'AE1',
+              productName: 'A',
+              category: null,
+            },
+            {
+              rowNumber: 2,
+              brand: 'ANYERROR',
+              sku: sharedSku,
+              model: 'AE2',
+              productName: 'B',
+              category: null,
+            },
           ],
         },
         `any-error-key-${Date.now()}`
       ),
     (error) => error instanceof ProductImportError && error.code === 'validation_failed'
   );
-  assert.equal(productMasterRepository.getProducts().length, countBefore, 'no row may be written when any row in the request errors');
+  assert.equal(
+    productMasterRepository.getProducts().length,
+    countBefore,
+    'no row may be written when any row in the request errors'
+  );
 });
 
 // --- Double submit -----------------------------------------------------------
@@ -482,7 +511,7 @@ test('mockProductImportRepository: a request with any error row (duplicate ident
 // reducer itself is a second, independent line of defense: it can never
 // re-enter 'submitting' from 'submitting' on a 'submit' action.
 
-test('the wizard\'s import handler uses a synchronous useRef admission latch, checked and set before any dispatch/await', async () => {
+test("the wizard's import handler uses a synchronous useRef admission latch, checked and set before any dispatch/await", async () => {
   const source = await readSource(
     'src/features/master-data/products/components/import/ImportProductsWizard.tsx'
   );
@@ -545,7 +574,11 @@ test('demonstrates why the UI guard is necessary: commitImportRows on the raw mo
   const matches = productMasterRepository
     .getProducts()
     .filter((p) => p.sku === 'DS-1-TEST');
-  assert.equal(matches.length, 2, 'without the UI guard, two products would exist for one row');
+  assert.equal(
+    matches.length,
+    2,
+    'without the UI guard, two products would exist for one row'
+  );
   assert.notEqual(entry.id, secondEntry.id);
 });
 
@@ -590,7 +623,10 @@ test('the privileged Worker product-import route exists and is the only product 
   assert.equal(productPathConstants.length, 1);
   const dispatchSites = source.match(/url\.pathname === PRODUCTS_IMPORT_PATH/g) ?? [];
   assert.equal(dispatchSites.length, 1);
-  assert.doesNotMatch(source, /handleProductDelete|handleProductUpdate|handleProductList/);
+  assert.doesNotMatch(
+    source,
+    /handleProductDelete|handleProductUpdate|handleProductList/
+  );
 });
 
 test('the Worker import route is gated on the dedicated canImportProducts permission, not merely on being staff', async () => {
@@ -599,9 +635,7 @@ test('the Worker import route is gated on the dedicated canImportProducts permis
   assert.match(source, /!profile\.canImportProducts/);
   // It must not reuse authorizeStaffCreation, which grants any valid staff
   // member and collapses 401 into 403.
-  const handler = source.match(
-    /async function handleProductImport\([\s\S]*?\n\}/
-  );
+  const handler = source.match(/async function handleProductImport\([\s\S]*?\n\}/);
   assert.notEqual(handler, null);
   assert.doesNotMatch(handler[0], /authorizeStaffCreation/);
 });
@@ -676,8 +710,13 @@ test('createProduct/updateProduct on the mock repository are immediately visible
 
 test('useProductMaster reloads from the repository (not local mutation only) after both addProduct and commitImportRows', async () => {
   const source = await readSource('src/hooks/useProductMaster.ts');
-  const setProductsCalls = source.match(/setProducts\(repositories\.productMaster\.getProducts\(\)\)/g) ?? [];
-  assert.equal(setProductsCalls.length, 2, 'expected one reload in addProduct and one in commitImportRows');
+  const setProductsCalls =
+    source.match(/setProducts\(repositories\.productMaster\.getProducts\(\)\)/g) ?? [];
+  assert.equal(
+    setProductsCalls.length,
+    2,
+    'expected one reload in addProduct and one in commitImportRows'
+  );
 });
 
 test('old Product Master read behavior (getCategories/getProductById) is unaffected by this phase', () => {
@@ -693,7 +732,9 @@ test('old Product Master read behavior (getCategories/getProductById) is unaffec
 // --- UI wiring: import action present alongside template/export ------------
 
 test('the Product Master page still renders นำเข้าสินค้า alongside แม่แบบ/ส่งออก, now gated by canImportProductCatalog rather than canEdit', async () => {
-  const source = await readSource('src/features/master-data/products/pages/ProductsPage.tsx');
+  const source = await readSource(
+    'src/features/master-data/products/pages/ProductsPage.tsx'
+  );
   assert.match(source, /นำเข้าสินค้า/);
   assert.match(source, /canImportProductCatalog && \(/);
   assert.match(source, /<ImportProductsWizard/);
@@ -729,11 +770,25 @@ test('parseCanImportProducts fails closed on anything but a literal boolean true
 
 const baseFile = { fileName: 'products.csv', header: [], rows: [] };
 const previewWithErrors = {
-  summary: { totalRows: 2, newCount: 1, updatedCount: 0, skippedCount: 0, errorCount: 1, warningCount: 0 },
+  summary: {
+    totalRows: 2,
+    newCount: 1,
+    updatedCount: 0,
+    skippedCount: 0,
+    errorCount: 1,
+    warningCount: 0,
+  },
   rows: [],
 };
 const cleanPreview = {
-  summary: { totalRows: 1, newCount: 1, updatedCount: 0, skippedCount: 0, errorCount: 0, warningCount: 0 },
+  summary: {
+    totalRows: 1,
+    newCount: 1,
+    updatedCount: 0,
+    skippedCount: 0,
+    errorCount: 0,
+    warningCount: 0,
+  },
   rows: [],
 };
 
@@ -751,7 +806,12 @@ test('importWizardController allows submit -> submitting once the preview is err
 });
 
 test('importWizardController: ambiguous failure stays in submitting with a retryMessage (same-key retry eligible)', () => {
-  const submitting = { step: 'submitting', file: baseFile, preview: cleanPreview, retryMessage: null };
+  const submitting = {
+    step: 'submitting',
+    file: baseFile,
+    preview: cleanPreview,
+    retryMessage: null,
+  };
   const next = reduceWizardState(submitting, {
     type: 'commitFailedAmbiguous',
     message: 'network error',
@@ -761,14 +821,24 @@ test('importWizardController: ambiguous failure stays in submitting with a retry
 });
 
 test('importWizardController: stale_catalog transitions to staleCatalog, never auto-resubmits', () => {
-  const submitting = { step: 'submitting', file: baseFile, preview: cleanPreview, retryMessage: null };
+  const submitting = {
+    step: 'submitting',
+    file: baseFile,
+    preview: cleanPreview,
+    retryMessage: null,
+  };
   const next = reduceWizardState(submitting, { type: 'commitFailedStale' });
   assert.equal(next.step, 'staleCatalog');
   assert.equal(next.file, baseFile);
 });
 
 test('importWizardController: a conclusive failure transitions to a hard-stop error state', () => {
-  const submitting = { step: 'submitting', file: baseFile, preview: cleanPreview, retryMessage: null };
+  const submitting = {
+    step: 'submitting',
+    file: baseFile,
+    preview: cleanPreview,
+    retryMessage: null,
+  };
   const next = reduceWizardState(submitting, {
     type: 'commitFailedConclusive',
     message: 'validation failed',
@@ -778,7 +848,12 @@ test('importWizardController: a conclusive failure transitions to a hard-stop er
 });
 
 test('importWizardController: success carries the preview summary through to the result step', () => {
-  const submitting = { step: 'submitting', file: baseFile, preview: cleanPreview, retryMessage: null };
+  const submitting = {
+    step: 'submitting',
+    file: baseFile,
+    preview: cleanPreview,
+    retryMessage: null,
+  };
   const next = reduceWizardState(submitting, {
     type: 'commitSucceeded',
     result: { created: 1, updated: 0 },
@@ -815,7 +890,10 @@ test('submitImport maps a 5xx/no-status ProductImportError, and a raw thrown err
 
 test('submitImport maps a successful commit to commitSucceeded', async () => {
   const action = await submitImport(async () => ({ created: 2, updated: 1 }), 'key-1');
-  assert.deepEqual(action, { type: 'commitSucceeded', result: { created: 2, updated: 1 } });
+  assert.deepEqual(action, {
+    type: 'commitSucceeded',
+    result: { created: 2, updated: 1 },
+  });
 });
 
 // --- productImportPendingAttempt --------------------------------------------
@@ -956,7 +1034,8 @@ test('mockProductImportRepository: reusing an idempotency key with a different r
         },
         key
       ),
-    (error) => error instanceof ProductImportError && error.code === 'idempotency_mismatch'
+    (error) =>
+      error instanceof ProductImportError && error.code === 'idempotency_mismatch'
   );
 });
 
@@ -965,10 +1044,17 @@ test('mockProductImportRepository: reusing an idempotency key with a different r
 test('Modal routes overlay-click, the X button, and Escape all through one handleClose that checks preventClose', async () => {
   const source = await readSource('src/shared/components/Modal.tsx');
   assert.match(source, /preventClose\?: boolean;/);
-  assert.match(source, /const handleClose = \(\) => \{\s*\n\s*if \(!preventClose\) onClose\(\);/);
+  assert.match(
+    source,
+    /const handleClose = \(\) => \{\s*\n\s*if \(!preventClose\) onClose\(\);/
+  );
   assert.match(source, /onClick=\{handleClose\}/g);
   const overlayAndButtonClicks = source.match(/onClick=\{handleClose\}/g) ?? [];
-  assert.equal(overlayAndButtonClicks.length, 2, 'both the overlay and the X button must use handleClose');
+  assert.equal(
+    overlayAndButtonClicks.length,
+    2,
+    'both the overlay and the X button must use handleClose'
+  );
   assert.match(source, /if \(!preventCloseRef\.current\) onCloseRef\.current\(\);/);
 });
 
@@ -981,7 +1067,10 @@ test('Modal routes overlay-click, the X button, and Escape all through one handl
 
 test('ProductMasterRepository.refreshFromServer exists and is called unconditionally after every successful commitImportRows outcome (fresh AND replayed alike)', async () => {
   const typesSource = await readSource('src/repositories/types.ts');
-  assert.match(typesSource, /refreshFromServer\(productIds\?: readonly string\[\]\): Promise<void>;/);
+  assert.match(
+    typesSource,
+    /refreshFromServer\(productIds\?: readonly string\[\]\): Promise<void>;/
+  );
 
   const hookSource = await readSource('src/hooks/useProductMaster.ts');
   assert.match(
@@ -999,7 +1088,10 @@ test('firestoreProductMasterRepository.refreshFromServer forces a genuine Firest
   assert.match(source, /getDocFromServer,/);
   assert.match(source, /getDocsFromServer,/);
   assert.match(source, /getDocFromServer\(doc\(firestore, PRODUCTS_COLLECTION, id\)\)/);
-  assert.match(source, /getDocsFromServer\(collection\(firestore, PRODUCTS_COLLECTION\)\)/);
+  assert.match(
+    source,
+    /getDocsFromServer\(collection\(firestore, PRODUCTS_COLLECTION\)\)/
+  );
 });
 
 test('the mock ProductMasterRepository.refreshFromServer is a documented no-op — its Map is already synchronously authoritative for every writer, including mockProductImportRepository', async () => {
@@ -1015,7 +1107,7 @@ test('the unavailable RepositoryProvider stub wires refreshFromServer through th
 // --- #A1 wire-shape correctness — ProductImportCommitResult.rows must match
 // the ACTUAL Worker response, not the classification-time row shape --------
 
-test('ProductImportCommitResult.rows matches worker/src/productImport.ts\'s CompletedProductImportRow exactly (rowNumber/status/productId/warnings — never the full classification row)', async () => {
+test("ProductImportCommitResult.rows matches worker/src/productImport.ts's CompletedProductImportRow exactly (rowNumber/status/productId/warnings — never the full classification row)", async () => {
   const typesSource = await readSource('src/repositories/types.ts');
   assert.match(
     typesSource,
@@ -1030,7 +1122,7 @@ test('ProductImportCommitResult.rows matches worker/src/productImport.ts\'s Comp
   );
 });
 
-test('ProductImportError.rowErrors matches the Worker\'s validation_failed body exactly ({rowNumber, errors}[]), never the full classification row', async () => {
+test("ProductImportError.rowErrors matches the Worker's validation_failed body exactly ({rowNumber, errors}[]), never the full classification row", async () => {
   const typesSource = await readSource('src/repositories/types.ts');
   assert.match(
     typesSource,
@@ -1078,9 +1170,21 @@ test('mockProductImportRepository.commit returns rows in the corrected Completed
   assert.equal(typeof row.productId, 'string');
   assert.ok(row.productId.length > 0);
   assert.ok(Array.isArray(row.warnings));
-  assert.equal('changedFields' in row, false, 'the committed-row shape must NOT carry classification-only fields');
-  assert.equal('categoryId' in row, false, 'the committed-row shape must NOT carry classification-only fields');
-  assert.equal('errors' in row, false, 'the committed-row shape must NOT carry classification-only fields');
+  assert.equal(
+    'changedFields' in row,
+    false,
+    'the committed-row shape must NOT carry classification-only fields'
+  );
+  assert.equal(
+    'categoryId' in row,
+    false,
+    'the committed-row shape must NOT carry classification-only fields'
+  );
+  assert.equal(
+    'errors' in row,
+    false,
+    'the committed-row shape must NOT carry classification-only fields'
+  );
 });
 
 // --- #A2 / #3 / #4 / #5 — stale_catalog: refresh before re-preview, never
@@ -1097,8 +1201,14 @@ test('stale_catalog recovery refreshes canonical Products BEFORE rebuilding the 
   const discardIndex = handlerMatch[0].indexOf('setPending(discard());');
   const refreshIndex = handlerMatch[0].indexOf('await refreshAndRebuildImportContext();');
   const runPreviewIndex = handlerMatch[0].indexOf('runPreview(file, context);');
-  assert.ok(discardIndex >= 0 && discardIndex < refreshIndex, 'the stale key must be discarded before refreshing');
-  assert.ok(refreshIndex < runPreviewIndex, 'the refresh must complete BEFORE the preview is rebuilt — never re-preview against the same stale list');
+  assert.ok(
+    discardIndex >= 0 && discardIndex < refreshIndex,
+    'the stale key must be discarded before refreshing'
+  );
+  assert.ok(
+    refreshIndex < runPreviewIndex,
+    'the refresh must complete BEFORE the preview is rebuilt — never re-preview against the same stale list'
+  );
 });
 
 test('the wizard never calls the plain synchronous buildImportContext() for stale_catalog recovery — only refreshAndRebuildImportContext', async () => {
@@ -1116,7 +1226,7 @@ test('the wizard never calls the plain synchronous buildImportContext() for stal
   assert.doesNotMatch(handlerMatch[0], /\bbuildImportContext\(\)/);
 });
 
-test('after stale_catalog discard(), the wizard\'s own key-selection logic can only mint a NEW key — idle state never supplies one to reuse', async () => {
+test("after stale_catalog discard(), the wizard's own key-selection logic can only mint a NEW key — idle state never supplies one to reuse", async () => {
   const afterDiscard = discard();
   assert.equal(afterDiscard.kind, 'idle');
 
@@ -1149,10 +1259,16 @@ test('commitImportRows treats an ambiguous ProductImportError (or a raw thrown e
     catchMatch[0],
     /const isAmbiguous = !\(error instanceof ProductImportError\) \|\| !error\.isConclusive;/
   );
-  assert.match(catchMatch[0], /if \(!isAmbiguous\) \{\s*\n\s*clearPersistedAttempt\(\);\s*\n\s*\}/);
+  assert.match(
+    catchMatch[0],
+    /if \(!isAmbiguous\) \{\s*\n\s*clearPersistedAttempt\(\);\s*\n\s*\}/
+  );
   assert.match(catchMatch[0], /throw error;/);
   // clearPersistedAttempt is unconditional on the success path too.
-  assert.match(source, /clearPersistedAttempt\(\);\s*\n\s*await repositories\.productMaster\.refreshFromServer/);
+  assert.match(
+    source,
+    /clearPersistedAttempt\(\);\s*\n\s*await repositories\.productMaster\.refreshFromServer/
+  );
 });
 
 test('commitImportRows reuses the persisted idempotency key only when the about-to-submit request canonically matches the persisted one (#8/#9)', async () => {
@@ -1161,8 +1277,14 @@ test('commitImportRows reuses the persisted idempotency key only when the about-
     source,
     /const matchesPersisted =\s*\n\s*persisted !== null &&\s*\n\s*buildCanonicalRequestString\(persisted\.request\) === canonicalRequest;/
   );
-  assert.match(source, /const effectiveKey = matchesPersisted \? persisted\.idempotencyKey : idempotencyKey;/);
-  assert.match(source, /if \(!matchesPersisted\) \{\s*\n\s*persistAttempt\(effectiveKey, request\);\s*\n\s*\}/);
+  assert.match(
+    source,
+    /const effectiveKey = matchesPersisted \? persisted\.idempotencyKey : idempotencyKey;/
+  );
+  assert.match(
+    source,
+    /if \(!matchesPersisted\) \{\s*\n\s*persistAttempt\(effectiveKey, request\);\s*\n\s*\}/
+  );
 });
 
 test('two independently-built ProductImportRequest objects with identical content produce the same canonical string; a genuinely different one does not (the mechanism session recovery relies on)', () => {
@@ -1170,18 +1292,42 @@ test('two independently-built ProductImportRequest objects with identical conten
     version: 1,
     fileName: null,
     catalogFingerprint: 'a'.repeat(64),
-    rows: [{ rowNumber: 1, brand: 'B', sku: 'S', model: 'M', productName: 'P', category: null }],
+    rows: [
+      {
+        rowNumber: 1,
+        brand: 'B',
+        sku: 'S',
+        model: 'M',
+        productName: 'P',
+        category: null,
+      },
+    ],
   };
   const requestB = {
     version: 1,
     fileName: null,
     catalogFingerprint: 'a'.repeat(64),
-    rows: [{ rowNumber: 1, brand: 'B', sku: 'S', model: 'M', productName: 'P', category: null }],
+    rows: [
+      {
+        rowNumber: 1,
+        brand: 'B',
+        sku: 'S',
+        model: 'M',
+        productName: 'P',
+        category: null,
+      },
+    ],
   };
-  assert.equal(buildCanonicalRequestString(requestA), buildCanonicalRequestString(requestB));
+  assert.equal(
+    buildCanonicalRequestString(requestA),
+    buildCanonicalRequestString(requestB)
+  );
 
   const requestC = { ...requestB, catalogFingerprint: 'b'.repeat(64) };
-  assert.notEqual(buildCanonicalRequestString(requestA), buildCanonicalRequestString(requestC));
+  assert.notEqual(
+    buildCanonicalRequestString(requestA),
+    buildCanonicalRequestString(requestC)
+  );
 });
 
 test('productImportPendingAttempt: persistAttempt + readPersistedAttempt round-trips a valid request across a simulated remount/refresh (#9)', () => {
@@ -1190,7 +1336,16 @@ test('productImportPendingAttempt: persistAttempt + readPersistedAttempt round-t
     version: 1,
     fileName: null,
     catalogFingerprint: 'c'.repeat(64),
-    rows: [{ rowNumber: 1, brand: 'REMOUNT', sku: 'RM-1', model: 'RM', productName: 'Remount Test', category: null }],
+    rows: [
+      {
+        rowNumber: 1,
+        brand: 'REMOUNT',
+        sku: 'RM-1',
+        model: 'RM',
+        productName: 'Remount Test',
+        category: null,
+      },
+    ],
   };
 
   const key = mintIdempotencyKey();
@@ -1226,7 +1381,16 @@ test('productImportPendingAttempt: clearPersistedAttempt removes any stored atte
     version: 1,
     fileName: null,
     catalogFingerprint: 'e'.repeat(64),
-    rows: [{ rowNumber: 1, brand: 'B', sku: 'S', model: 'M', productName: 'P', category: null }],
+    rows: [
+      {
+        rowNumber: 1,
+        brand: 'B',
+        sku: 'S',
+        model: 'M',
+        productName: 'P',
+        category: null,
+      },
+    ],
   };
   persistAttempt(mintIdempotencyKey(), request, storage);
   assert.notEqual(readPersistedAttempt(storage), null);
@@ -1242,7 +1406,16 @@ test('productImportPendingAttempt: readPersistedAttempt strictly parses malforme
     version: 1,
     fileName: null,
     catalogFingerprint: 'f'.repeat(64),
-    rows: [{ rowNumber: 1, brand: 'B', sku: 'S', model: 'M', productName: 'P', category: null }],
+    rows: [
+      {
+        rowNumber: 1,
+        brand: 'B',
+        sku: 'S',
+        model: 'M',
+        productName: 'P',
+        category: null,
+      },
+    ],
   };
   persistAttempt(VALID_UUID_V4, validRequest, storage);
   const [storageKey] = storage._map.keys();
@@ -1273,7 +1446,11 @@ test('productImportPendingAttempt: readPersistedAttempt strictly parses malforme
   // Wrong schema version.
   persistAttempt(VALID_UUID_V4, validRequest, storage);
   assertRejectedAndRemoved(
-    JSON.stringify({ schemaVersion: 2, idempotencyKey: VALID_UUID_V4, request: validRequest })
+    JSON.stringify({
+      schemaVersion: 2,
+      idempotencyKey: VALID_UUID_V4,
+      request: validRequest,
+    })
   );
 
   // Extra outer key beyond {schemaVersion, idempotencyKey, request} — the
@@ -1332,7 +1509,11 @@ test('productImportPendingAttempt: readPersistedAttempt strictly parses malforme
   // A genuinely valid record still round-trips after all the above.
   storage._map.set(
     storageKey,
-    JSON.stringify({ schemaVersion: 1, idempotencyKey: VALID_UUID_V4, request: validRequest })
+    JSON.stringify({
+      schemaVersion: 1,
+      idempotencyKey: VALID_UUID_V4,
+      request: validRequest,
+    })
   );
   assert.notEqual(readPersistedAttempt(storage), null);
 });
@@ -1343,7 +1524,16 @@ test('productImportPendingAttempt: persistAttempt itself refuses to write an inv
     version: 1,
     fileName: null,
     catalogFingerprint: 'a'.repeat(64),
-    rows: [{ rowNumber: 1, brand: 'B', sku: 'S', model: 'M', productName: 'P', category: null }],
+    rows: [
+      {
+        rowNumber: 1,
+        brand: 'B',
+        sku: 'S',
+        model: 'M',
+        productName: 'P',
+        category: null,
+      },
+    ],
   };
 
   // Not a UUIDv4 — nothing is written.
@@ -1371,7 +1561,10 @@ test('productImportPendingAttempt: the persisted schema can never carry a token/
   // Scan CODE only — the module's own comments legitimately discuss why
   // tokens/credentials are excluded, which would otherwise self-trip this
   // check.
-  assert.doesNotMatch(stripComments(pendingSource), /token|credential|password|bearer|idToken/i);
+  assert.doesNotMatch(
+    stripComments(pendingSource),
+    /token|credential|password|bearer|idToken/i
+  );
 
   const requestSource = await readSource('src/services/productImportRequest.ts');
   for (const forbidden of ['authorization', 'actorUid', 'canImportProducts']) {
@@ -1379,7 +1572,7 @@ test('productImportPendingAttempt: the persisted schema can never carry a token/
   }
 });
 
-test('the wizard\'s Modal is also prevented from closing during the stale_catalog server refresh, not only during commit', async () => {
+test("the wizard's Modal is also prevented from closing during the stale_catalog server refresh, not only during commit", async () => {
   const source = await readSource(
     'src/features/master-data/products/components/import/ImportProductsWizard.tsx'
   );
@@ -1408,7 +1601,14 @@ test('reconciliation regression check: double-submit is still blocked synchronou
     step: 'validation',
     file: { fileName: 'f.csv', header: [], rows: [] },
     preview: {
-      summary: { totalRows: 1, newCount: 0, updatedCount: 0, skippedCount: 0, errorCount: 1, warningCount: 0 },
+      summary: {
+        totalRows: 1,
+        newCount: 0,
+        updatedCount: 0,
+        skippedCount: 0,
+        errorCount: 1,
+        warningCount: 0,
+      },
       rows: [],
     },
   };
@@ -1437,7 +1637,11 @@ test('parseProductImportRequest normalizes display text to NFC — canonically-e
   // different strings until normalized.
   const nfcCafe = 'Caf\u00e9';
   const nfdCafe = 'Cafe\u0301';
-  assert.notEqual(nfcCafe, nfdCafe, 'sanity: the two source strings are genuinely byte-different');
+  assert.notEqual(
+    nfcCafe,
+    nfdCafe,
+    'sanity: the two source strings are genuinely byte-different'
+  );
   assert.equal(
     nfcCafe.normalize('NFC'),
     nfdCafe.normalize('NFC'),
@@ -1457,7 +1661,14 @@ test('parseProductImportRequest normalizes display text to NFC — canonically-e
     fileName: null,
     catalogFingerprint: '0'.repeat(64),
     rows: [
-      { rowNumber: 1, brand: 'BRUNO', sku: 'SKU-1', model: 'M1', productName, category: null },
+      {
+        rowNumber: 1,
+        brand: 'BRUNO',
+        sku: 'SKU-1',
+        model: 'M1',
+        productName,
+        category: null,
+      },
     ],
   });
 
@@ -1475,7 +1686,10 @@ test('parseProductImportRequest normalizes display text to NFC — canonically-e
   const fromNfdHan = parseProductImportRequest(buildRequest(nfdHan));
   assert.equal(fromNfcHan.ok, true);
   assert.equal(fromNfdHan.ok, true);
-  assert.equal(fromNfcHan.value.rows[0].productName, fromNfdHan.value.rows[0].productName);
+  assert.equal(
+    fromNfcHan.value.rows[0].productName,
+    fromNfdHan.value.rows[0].productName
+  );
   assert.equal(fromNfdHan.value.rows[0].productName, nfcHan);
 });
 
@@ -1507,7 +1721,16 @@ test('a Thai display value survives parseProductImportRequest unmangled', () => 
     version: 1,
     fileName: null,
     catalogFingerprint: '0'.repeat(64),
-    rows: [{ rowNumber: 1, brand: 'BRUNO', sku: 'TH-1', model: 'TH', productName: thaiName, category: null }],
+    rows: [
+      {
+        rowNumber: 1,
+        brand: 'BRUNO',
+        sku: 'TH-1',
+        model: 'TH',
+        productName: thaiName,
+        category: null,
+      },
+    ],
   };
   const result = parseProductImportRequest(request);
   assert.equal(result.ok, true);
@@ -1546,9 +1769,15 @@ test('productValidator: an explicit Variant/Variant Name/Color column with a non
       header: ['Brand', 'SKU', 'Model', 'Product Name', header],
       rows: [['BRUNO', `VARTEST-${header}`, 'VT', 'Variant Test Product', 'Red']],
     });
-    assert.equal(preview.rows[0].status, 'error', `expected a blocking error for header "${header}"`);
+    assert.equal(
+      preview.rows[0].status,
+      'error',
+      `expected a blocking error for header "${header}"`
+    );
     assert.ok(
-      preview.rows[0].issues.some((i) => i.code === 'UNSUPPORTED_VARIANT' && i.severity === 'error'),
+      preview.rows[0].issues.some(
+        (i) => i.code === 'UNSUPPORTED_VARIANT' && i.severity === 'error'
+      ),
       `expected UNSUPPORTED_VARIANT for header "${header}"`
     );
   }
@@ -1590,7 +1819,10 @@ test('sanitizeImportFileName: a normal filename passes through, NFC-normalized a
 });
 
 test('sanitizeImportFileName: a path-like value is reduced to its basename only, regardless of separator style', () => {
-  assert.equal(sanitizeImportFileName('C:\\Users\\staff\\Desktop\\products.csv'), 'products.csv');
+  assert.equal(
+    sanitizeImportFileName('C:\\Users\\staff\\Desktop\\products.csv'),
+    'products.csv'
+  );
   assert.equal(sanitizeImportFileName('/home/staff/products.csv'), 'products.csv');
   assert.equal(sanitizeImportFileName('../../etc/passwd'), 'passwd');
 });
@@ -1627,10 +1859,23 @@ test('a sanitized filename can never itself fail parseProductImportRequest — t
       version: 1,
       fileName,
       catalogFingerprint: '0'.repeat(64),
-      rows: [{ rowNumber: 1, brand: 'B', sku: 'S', model: 'M', productName: 'P', category: null }],
+      rows: [
+        {
+          rowNumber: 1,
+          brand: 'B',
+          sku: 'S',
+          model: 'M',
+          productName: 'P',
+          category: null,
+        },
+      ],
     };
     const result = parseProductImportRequest(request);
-    assert.equal(result.ok, true, `sanitized fileName from "${candidate}" must never fail the request parser`);
+    assert.equal(
+      result.ok,
+      true,
+      `sanitized fileName from "${candidate}" must never fail the request parser`
+    );
   }
 });
 
@@ -1719,7 +1964,10 @@ test('productValidator: alias COLUMN ORDER in the CSV never changes whether the 
 test('productNormalizer inspects every variant alias independently rather than short-circuiting on the first EXISTING header (root-cause proof)', async () => {
   const source = await readSource('src/imports/products/productNormalizer.ts');
   assert.match(source, /function collectExplicitVariantValues/);
-  assert.doesNotMatch(source, /getField\(row\.fields, 'Variant', 'Variant Name', 'Color'\)/);
+  assert.doesNotMatch(
+    source,
+    /getField\(row\.fields, 'Variant', 'Variant Name', 'Color'\)/
+  );
 });
 
 // --- Fix 2: authoritative filename sanitization -----------------------------
@@ -1732,7 +1980,10 @@ test('sanitizeImportFileName: an NFD basename is normalized to NFC — case 9', 
 });
 
 test('sanitizeImportFileName: a genuinely mixed-separator path reduces to its basename — case 4', () => {
-  assert.equal(sanitizeImportFileName('C:/staff\\mixed/separators\\products.csv'), 'products.csv');
+  assert.equal(
+    sanitizeImportFileName('C:/staff\\mixed/separators\\products.csv'),
+    'products.csv'
+  );
 });
 
 test('parseProductImportRequest is now the AUTHORITATIVE filename sanitizer — a forged direct request carrying a path-bearing fileName can never be accepted with that path intact (case 12, critical)', () => {
@@ -1749,11 +2000,28 @@ test('parseProductImportRequest is now the AUTHORITATIVE filename sanitizer — 
       version: 1,
       fileName: forged,
       catalogFingerprint: '0'.repeat(64),
-      rows: [{ rowNumber: 1, brand: 'B', sku: 'S', model: 'M', productName: 'P', category: null }],
+      rows: [
+        {
+          rowNumber: 1,
+          brand: 'B',
+          sku: 'S',
+          model: 'M',
+          productName: 'P',
+          category: null,
+        },
+      ],
     };
     const result = parseProductImportRequest(request);
-    assert.equal(result.ok, true, `a path-bearing fileName must not fail the whole request: "${forged}"`);
-    assert.notEqual(result.value.fileName, forged, 'the raw forged path must never be accepted as-is');
+    assert.equal(
+      result.ok,
+      true,
+      `a path-bearing fileName must not fail the whole request: "${forged}"`
+    );
+    assert.notEqual(
+      result.value.fileName,
+      forged,
+      'the raw forged path must never be accepted as-is'
+    );
     assert.ok(
       result.value.fileName === null || !/[/\\]/.test(result.value.fileName),
       `accepted fileName must never contain a path separator: got ${JSON.stringify(result.value.fileName)}`
@@ -1774,7 +2042,16 @@ test('parseProductImportRequest applies the exact same canonicalization as sanit
       version: 1,
       fileName: rawFileName,
       catalogFingerprint: '0'.repeat(64),
-      rows: [{ rowNumber: 1, brand: 'B', sku: 'S', model: 'M', productName: 'P', category: null }],
+      rows: [
+        {
+          rowNumber: 1,
+          brand: 'B',
+          sku: 'S',
+          model: 'M',
+          productName: 'P',
+          category: null,
+        },
+      ],
     };
     const result = parseProductImportRequest(request);
     assert.equal(result.ok, true);
@@ -1787,7 +2064,16 @@ test('parseProductImportRequest: control characters in fileName degrade the fiel
     version: 1,
     fileName: 'products\r\n.csv',
     catalogFingerprint: '0'.repeat(64),
-    rows: [{ rowNumber: 1, brand: 'B', sku: 'S', model: 'M', productName: 'P', category: null }],
+    rows: [
+      {
+        rowNumber: 1,
+        brand: 'B',
+        sku: 'S',
+        model: 'M',
+        productName: 'P',
+        category: null,
+      },
+    ],
   };
   const result = parseProductImportRequest(request);
   assert.equal(result.ok, true);
@@ -1799,7 +2085,16 @@ test('parseProductImportRequest: formula-prefix and oversized fileName values de
     version: 1,
     fileName: '=cmd|calc.csv',
     catalogFingerprint: '0'.repeat(64),
-    rows: [{ rowNumber: 1, brand: 'B', sku: 'S', model: 'M', productName: 'P', category: null }],
+    rows: [
+      {
+        rowNumber: 1,
+        brand: 'B',
+        sku: 'S',
+        model: 'M',
+        productName: 'P',
+        category: null,
+      },
+    ],
   };
   const oversizedRequest = {
     ...formulaRequest,
@@ -1818,7 +2113,16 @@ test('parseProductImportRequest: a blank fileName is null — case 5', () => {
     version: 1,
     fileName: '   ',
     catalogFingerprint: '0'.repeat(64),
-    rows: [{ rowNumber: 1, brand: 'B', sku: 'S', model: 'M', productName: 'P', category: null }],
+    rows: [
+      {
+        rowNumber: 1,
+        brand: 'B',
+        sku: 'S',
+        model: 'M',
+        productName: 'P',
+        category: null,
+      },
+    ],
   };
   const result = parseProductImportRequest(request);
   assert.equal(result.ok, true);
@@ -1830,7 +2134,16 @@ test('parseProductImportRequest: a non-string fileName is still a hard parse fai
     version: 1,
     fileName: 12345,
     catalogFingerprint: '0'.repeat(64),
-    rows: [{ rowNumber: 1, brand: 'B', sku: 'S', model: 'M', productName: 'P', category: null }],
+    rows: [
+      {
+        rowNumber: 1,
+        brand: 'B',
+        sku: 'S',
+        model: 'M',
+        productName: 'P',
+        category: null,
+      },
+    ],
   };
   const result = parseProductImportRequest(request);
   assert.equal(result.ok, false);
@@ -1844,7 +2157,16 @@ test('session persistence round-trips the canonical (already-sanitized) filename
     version: 1,
     fileName: 'C:\\Users\\staff\\products.csv',
     catalogFingerprint: 'a'.repeat(64),
-    rows: [{ rowNumber: 1, brand: 'B', sku: 'S', model: 'M', productName: 'P', category: null }],
+    rows: [
+      {
+        rowNumber: 1,
+        brand: 'B',
+        sku: 'S',
+        model: 'M',
+        productName: 'P',
+        category: null,
+      },
+    ],
   };
   persistAttempt(key, request, storage);
   const recovered = readPersistedAttempt(storage);
@@ -1857,9 +2179,21 @@ test('the canonical request string (what the idempotency fingerprint hashes) is 
     version: 1,
     fileName: 'products.csv',
     catalogFingerprint: 'b'.repeat(64),
-    rows: [{ rowNumber: 1, brand: 'B', sku: 'S', model: 'M', productName: 'P', category: null }],
+    rows: [
+      {
+        rowNumber: 1,
+        brand: 'B',
+        sku: 'S',
+        model: 'M',
+        productName: 'P',
+        category: null,
+      },
+    ],
   };
-  const forgedPathRequest = { ...canonicalRequest, fileName: 'C:\\Users\\staff\\products.csv' };
+  const forgedPathRequest = {
+    ...canonicalRequest,
+    fileName: 'C:\\Users\\staff\\products.csv',
+  };
   const parsedCanonical = parseProductImportRequest(canonicalRequest);
   const parsedForged = parseProductImportRequest(forgedPathRequest);
   assert.equal(parsedCanonical.ok, true);
@@ -1876,7 +2210,10 @@ test('the canonical request string (what the idempotency fingerprint hashes) is 
 test('useProductMaster sends the actual sanitized fileName, never a bare null', async () => {
   const source = await readSource('src/hooks/useProductMaster.ts');
   assert.doesNotMatch(source, /fileName: null,\s*\n\s*catalogFingerprint/);
-  assert.match(source, /fileName: fileName \? sanitizeImportFileName\(fileName\) : null,/);
+  assert.match(
+    source,
+    /fileName: fileName \? sanitizeImportFileName\(fileName\) : null,/
+  );
 });
 
 test('the wizard threads the identical fileName through every retry path — same key, same rows, same fileName, never re-derived', async () => {
@@ -1884,7 +2221,10 @@ test('the wizard threads the identical fileName through every retry path — sam
     'src/features/master-data/products/components/import/ImportProductsWizard.tsx'
   );
   assert.match(source, /void runSubmit\(idempotencyKey, rows, fileName\);/);
-  assert.match(source, /void runSubmit\(key, state\.preview\.rows, state\.file\.fileName\);/);
+  assert.match(
+    source,
+    /void runSubmit\(key, state\.preview\.rows, state\.file\.fileName\);/
+  );
   assert.match(
     source,
     /void runSubmit\(pending\.idempotencyKey, state\.preview\.rows, state\.file\.fileName\);/
@@ -1895,7 +2235,10 @@ test('the wizard threads the identical fileName through every retry path — sam
 
 test('Modal syncs onCloseRef/preventCloseRef via useLayoutEffect, not useEffect — closes the Escape-vs-committed-render race', async () => {
   const source = await readSource('src/shared/components/Modal.tsx');
-  assert.match(source, /import \{ useEffect, useId, useLayoutEffect, useRef \} from 'react';/);
+  assert.match(
+    source,
+    /import \{ useEffect, useId, useLayoutEffect, useRef \} from 'react';/
+  );
   assert.match(
     source,
     /useLayoutEffect\(\(\) => \{\s*\n\s*onCloseRef\.current = onClose;\s*\n\s*\}, \[onClose\]\);/
@@ -1906,7 +2249,10 @@ test('Modal syncs onCloseRef/preventCloseRef via useLayoutEffect, not useEffect 
   );
   // X and backdrop read `preventClose` directly from the render closure —
   // never stale by construction, unaffected by this fix, re-confirmed here.
-  assert.match(source, /const handleClose = \(\) => \{\s*\n\s*if \(!preventClose\) onClose\(\);\s*\n\s*\};/);
+  assert.match(
+    source,
+    /const handleClose = \(\) => \{\s*\n\s*if \(!preventClose\) onClose\(\);\s*\n\s*\};/
+  );
   // Escape is the only path that ever needed the ref (it's registered once
   // in a stable-callback `useEffect(..., [])` outside the render closure).
   assert.match(source, /if \(!preventCloseRef\.current\) onCloseRef\.current\(\);/);

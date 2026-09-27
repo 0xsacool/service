@@ -34,7 +34,8 @@ export function ServiceIntakeSection({ value, onChange }: ServiceIntakeSectionPr
             : null
         }
         orderDeliveredDateError={
-          value.orderDeliveredDate !== '' && !isValidCalendarDate(value.orderDeliveredDate)
+          value.orderDeliveredDate !== '' &&
+          !isValidCalendarDate(value.orderDeliveredDate)
             ? 'วันที่ไม่ถูกต้อง'
             : null
         }
@@ -63,7 +64,9 @@ export function ServiceIntakeSection({ value, onChange }: ServiceIntakeSectionPr
         url={value.externalEvidenceUrl}
         note={value.externalEvidenceNote}
         onUrlChange={(externalEvidenceUrl) => onChange({ ...value, externalEvidenceUrl })}
-        onNoteChange={(externalEvidenceNote) => onChange({ ...value, externalEvidenceNote })}
+        onNoteChange={(externalEvidenceNote) =>
+          onChange({ ...value, externalEvidenceNote })
+        }
       />
     </div>
   );

@@ -337,7 +337,7 @@ config/` pattern) and must never be committed; this repository records
   Hosting artifact to clone or restore. If an emergency withdrawal is ever
   separately approved, the established rollback remains an explicit
   `firebase hosting:disable --site luxace-service --project luxace-service
-  --force`; do not improvise a prior release that does not exist.
+--force`; do not improvise a prior release that does not exist.
 - The Mutation 2 pre-deploy manifest gate failed as an operational control:
   the interactive PowerShell/.NET host lacked
   `[System.IO.Path]::GetRelativePath()`, producing the invalid aggregate
@@ -407,7 +407,7 @@ config/` pattern) and must never be committed; this repository records
 - `service-tech-files-worker` is live at F5d-65 version
   `1da88d90-0131-4859-8e10-2c5546199971`, deployment message "F5d-65
   production Worker rollout", 100% traffic (confirmed via `wrangler
-  deployments list`; not redeployed during this Hosting phase). The
+deployments list`; not redeployed during this Hosting phase). The
   retained Worker rollback baseline remains F5d-62 version
   `06bc88e9-1437-4708-b68e-07f82caaf916`.
 - F5d-65A deployed the reviewed source commit
@@ -457,7 +457,7 @@ config/` pattern) and must never be committed; this repository records
   Rules, Auth, IAM, or R2 mutations.
 - `firestore.rules`, `firestore.indexes.json`, `firebase.json`, and
   `.firebaserc` are byte-identical to the F5d-64 baseline (`git diff --stat
-  f5d-64 HEAD` reports no change to any of the four); this rollout carried
+f5d-64 HEAD` reports no change to any of the four); this rollout carried
   no infrastructure-config change.
 - The retained Hosting rollback baseline is F5d-64 release
   `projects/769692662603/sites/luxace-service/channels/live/releases/1786857261574000`
@@ -474,7 +474,7 @@ config/` pattern) and must never be committed; this repository records
 
 - **Worker.** `service-tech-files-worker` is live at F5d-66 version
   `a3d5afd8-fb9a-42da-b589-3f77cb1c92ea`, deployed via `wrangler versions
-  deploy a3d5afd8-fb9a-42da-b589-3f77cb1c92ea@100` (deployment message "F5d-66
+deploy a3d5afd8-fb9a-42da-b589-3f77cb1c92ea@100` (deployment message "F5d-66
   production Worker rollout") at `2026-08-17T13:41:41.282Z`, 100% traffic.
   Worker Gate 1's predeploy review found the checked-in `worker/wrangler.toml`
   did not match live production's `ALLOWED_ORIGINS` (missing
@@ -485,7 +485,7 @@ config/` pattern) and must never be committed; this repository records
   candidate was uploaded. The retained Worker rollback baseline is F5d-65
   version `1da88d90-0131-4859-8e10-2c5546199971`.
 - **Firestore Rules.** Deployed via `firebase deploy --only firestore:rules
-  --project luxace-service` to release
+--project luxace-service` to release
   `projects/luxace-service/releases/cloud.firestore`, ruleset
   `projects/luxace-service/rulesets/075129c8-6dc4-46ef-9d0e-93174c8e0409`, live
   source SHA-256
@@ -716,7 +716,7 @@ config/` pattern) and must never be committed; this repository records
   Service Job Details reconciliation, and a StrictMode-safe stale-issuance
   ownership guard in `PublicTrackingSection`
   ([DECISIONS.md](DECISIONS.md) #042). `firebase deploy --only hosting
-  --project luxace-service` published bundle `index-BSJOMhpi.js`; the live
+--project luxace-service` published bundle `index-BSJOMhpi.js`; the live
   channel's release timestamp read back as `2026-08-20 16:56:34`
   Asia/Bangkok immediately after this deploy. **The raw numeric Hosting
   release/version ID for this specific deploy was not exposed by the
@@ -741,7 +741,7 @@ config/` pattern) and must never be committed; this repository records
   operation's pending window) after an independent review found two races
   (typing into the note field while its own write was pending; Quick Add
   and Save overlapping). `firebase deploy --only hosting --project
-  luxace-service` published bundle `index-DyHA_yZ6.js`; the live channel's
+luxace-service` published bundle `index-DyHA_yZ6.js`; the live channel's
   release timestamp read back as `2026-08-20 21:42:50` Asia/Bangkok
   immediately after this deploy. **The raw numeric Hosting release/version
   ID was again not exposed by available CLI tooling** — same evidence

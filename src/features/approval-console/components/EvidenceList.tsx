@@ -1,7 +1,11 @@
 import { Paperclip } from 'lucide-react';
 import type { CanonicalAttachmentKey } from '../../../types';
 import { useServiceJobAttachments } from '../../../hooks/useServiceJobAttachments';
-import { PhotoGallery, SecondaryButton, AsyncErrorAlert } from '../../../shared/components';
+import {
+  PhotoGallery,
+  SecondaryButton,
+  AsyncErrorAlert,
+} from '../../../shared/components';
 import { useEvidencePreview } from '../hooks/useEvidencePreview';
 
 // Phase 6R-B — renders documentary evidence for an ApprovalReviewV1. Never
@@ -69,7 +73,10 @@ export function EvidenceList({
             {state.status === 'ready' && state.url ? (
               isImage ? (
                 <div className="mt-3">
-                  <PhotoGallery photos={[state.url]} alt={attachment?.name ?? 'หลักฐาน'} />
+                  <PhotoGallery
+                    photos={[state.url]}
+                    alt={attachment?.name ?? 'หลักฐาน'}
+                  />
                 </div>
               ) : (
                 <a

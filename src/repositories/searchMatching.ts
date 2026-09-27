@@ -28,7 +28,10 @@ export function normalizeOrderNumberForMatch(value: string): string {
 export function matchesOrderNumber(orderNumber: string | null, query: string): boolean {
   if (!orderNumber) return false;
   const normalizedQuery = normalizeOrderNumberForMatch(query);
-  return normalizedQuery.length > 0 && normalizeOrderNumberForMatch(orderNumber).includes(normalizedQuery);
+  return (
+    normalizedQuery.length > 0 &&
+    normalizeOrderNumberForMatch(orderNumber).includes(normalizedQuery)
+  );
 }
 
 // Channel identity matching. A single leading '@' is ignored on both sides

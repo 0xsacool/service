@@ -41,7 +41,9 @@ after(() => vite.close());
 const { notesEqual, reconcileField } = await vite.ssrLoadModule(
   '/src/services/serviceJobDraftReconciliation.ts'
 );
-const { buildServiceJobUpdate } = await vite.ssrLoadModule('/src/services/serviceJobUpdate.ts');
+const { buildServiceJobUpdate } = await vite.ssrLoadModule(
+  '/src/services/serviceJobUpdate.ts'
+);
 
 function baseServiceJob(overrides = {}) {
   return {
@@ -98,7 +100,10 @@ test('3. reconciliation is per-field independent — a dirty field never blocks 
   assert.equal(status, 'Diagnosing');
   // ...but notes, evaluated completely independently, is pristine and adopts the fresh value.
   const previousNotes = [{ author: 'A', date: '2026-08-01', text: 'x' }];
-  const nextNotes = [{ author: 'A', date: '2026-08-01', text: 'x' }, { author: 'B', date: '2026-08-02', text: 'y' }];
+  const nextNotes = [
+    { author: 'A', date: '2026-08-01', text: 'x' },
+    { author: 'B', date: '2026-08-02', text: 'y' },
+  ];
   const notes = reconcileField(previousNotes, previousNotes, nextNotes, notesEqual);
   assert.equal(notes, nextNotes);
 });
@@ -129,7 +134,10 @@ test('5. atomic metadata groups remain coherent — a dirty contact group never 
 
   // Only the order group is supplied as dirty, against a job that already
   // has a real contact channel — the invariant resolver must not corrupt it.
-  const current2 = baseServiceJob({ contactChannel: 'shopee', contactChannelIdentity: 'shp1' });
+  const current2 = baseServiceJob({
+    contactChannel: 'shopee',
+    contactChannelIdentity: 'shp1',
+  });
   const orderOnlyPatch = buildServiceJobUpdate(
     { orderNumber: 'NEW-1', orderVerification: 'unverified' },
     current2,
@@ -177,7 +185,11 @@ test('8. a status-only dirty patch omits unrelated metadata entirely', () => {
     'externalEvidenceNote',
     'technician',
   ]) {
-    assert.equal(key in patch, false, `expected "${key}" to be absent from a status-only patch`);
+    assert.equal(
+      key in patch,
+      false,
+      `expected "${key}" to be absent from a status-only patch`
+    );
   }
 });
 
@@ -245,13 +257,17 @@ test('saveChanges computes anyDirty and skips updateServiceJob entirely when not
   const skipIndex = source.indexOf(skipBlock[0]);
   const updateCallIndex = source.indexOf('await updateServiceJob(claim.id,');
   assert.ok(skipIndex < updateCallIndex);
-  const saveChangesBody = source.match(/const saveChanges = async \(\) => \{[\s\S]*?\n {2}\};/)[0];
+  const saveChangesBody = source.match(
+    /const saveChanges = async \(\) => \{[\s\S]*?\n {2}\};/
+  )[0];
   assert.equal((saveChangesBody.match(/await updateServiceJob\(/g) ?? []).length, 1);
 });
 
 test('an empty save still performs the existing completion/navigation behavior (onDone), just without a repository mutation', async () => {
   const source = await serviceJobDetailsSourcePromiseForSave;
-  const saveBody = source.match(/const saveChanges = async \(\) => \{[\s\S]*?\n {2}\};/)[0];
+  const saveBody = source.match(
+    /const saveChanges = async \(\) => \{[\s\S]*?\n {2}\};/
+  )[0];
   // Exactly two onDone() calls in the whole handler: the empty-save skip
   // path and the normal post-mutation path — both reach the same
   // completion behavior, one without ever calling the repository.
@@ -295,8 +311,14 @@ test('12. persisted activation never synthesizes plaintext — issuedCode is set
   // F5d-70 Phase 5B.1 — with the entity-reset effect removed, there is now
   // exactly one explicit setIssuedCode(...) call site in the whole
   // component: the real issuance result inside issue().
-  const setIssuedCodeCalls = [...source.matchAll(/setIssuedCode\(([^)]*)\)/g)].map((m) => m[1]);
-  assert.equal(setIssuedCodeCalls.length, 1, 'expected exactly one setIssuedCode(...) call site');
+  const setIssuedCodeCalls = [...source.matchAll(/setIssuedCode\(([^)]*)\)/g)].map(
+    (m) => m[1]
+  );
+  assert.equal(
+    setIssuedCodeCalls.length,
+    1,
+    'expected exactly one setIssuedCode(...) call site'
+  );
   assert.equal(setIssuedCodeCalls[0], 'result.code');
 });
 
@@ -324,7 +346,10 @@ test('14. rotate reuses the exact same issue() path — a single code path alway
 
 test('16. issuedCode has no persisted source and defaults to null on every fresh mount — the remount contract structurally destroys it', async () => {
   const source = await publicTrackingSourcePromise;
-  assert.match(source, /const \[issuedCode, setIssuedCode\] = useState<string \| null>\(null\);/);
+  assert.match(
+    source,
+    /const \[issuedCode, setIssuedCode\] = useState<string \| null>\(null\);/
+  );
 });
 
 test('F5d-70 Phase 5B.1: no entity-RESET effect exists — entity isolation still does not rely on a passive prop-driven reconciliation effect', async () => {
@@ -353,7 +378,10 @@ test('5B.2-1/5B.2-2. PublicTrackingSection has an explicit mount-lifetime owners
   // created fresh inside issue() itself.
   const mountedRefIndex = source.indexOf('const mountedRef = useRef(true);');
   const issueFnIndex = source.indexOf('const issue = async () => {');
-  assert.ok(mountedRefIndex < issueFnIndex, 'expected mountedRef to be declared before issue()');
+  assert.ok(
+    mountedRefIndex < issueFnIndex,
+    'expected mountedRef to be declared before issue()'
+  );
 });
 
 // --- F5d-70 Phase 5B.3: StrictMode-safe setup/cleanup re-arming ------------
@@ -380,7 +408,9 @@ test('5B.3-4. the setup assignment (true) appears in source before the cleanup a
 
 test('5B.3-5. the guard effect remains mount-lifetime-only: an empty dependency array, never keyed on job/job.id/hash/dataVersion', async () => {
   const source = await publicTrackingSourcePromise;
-  const effectDeclaration = source.match(/useLayoutEffect\(\(\) => \{\s*\n\s*mountedRef\.current = true;[\s\S]*?\n(\s*\}, \[[^\]]*\]\);)/);
+  const effectDeclaration = source.match(
+    /useLayoutEffect\(\(\) => \{\s*\n\s*mountedRef\.current = true;[\s\S]*?\n(\s*\}, \[[^\]]*\]\);)/
+  );
   assert.notEqual(effectDeclaration, null);
   assert.equal(effectDeclaration[1].trim(), '}, []);');
 });
@@ -398,8 +428,16 @@ test('5B.3-explicit-lifecycle-invariant: source proves the StrictMode setup -> c
   // because nothing ever sets it back to true again.
   const setupCount = (source.match(/mountedRef\.current = true;/g) ?? []).length;
   const cleanupCount = (source.match(/mountedRef\.current = false;/g) ?? []).length;
-  assert.equal(setupCount, 1, 'expected exactly one setup assignment (mountedRef.current = true)');
-  assert.equal(cleanupCount, 1, 'expected exactly one cleanup assignment (mountedRef.current = false)');
+  assert.equal(
+    setupCount,
+    1,
+    'expected exactly one setup assignment (mountedRef.current = true)'
+  );
+  assert.equal(
+    cleanupCount,
+    1,
+    'expected exactly one cleanup assignment (mountedRef.current = false)'
+  );
 });
 
 test('5B.2-3. the guard is checked immediately after await onIssue(job.id), before setIssuedCode or onIssued', async () => {
@@ -416,16 +454,24 @@ test('5B.2-3. the guard is checked immediately after await onIssue(job.id), befo
 
 test('5B.2-4. a stale continuation structurally cannot reach onIssued — the guard return precedes every write in the success path', async () => {
   const source = await publicTrackingSourcePromise;
-  const tryBlock = source.match(/try \{\s*\n\s*const result = await onIssue\(job\.id\);([\s\S]*?)\} catch/)[1];
+  const tryBlock = source.match(
+    /try \{\s*\n\s*const result = await onIssue\(job\.id\);([\s\S]*?)\} catch/
+  )[1];
   const guardIndex = tryBlock.indexOf('if (!mountedRef.current) return;');
   const onIssuedIndex = tryBlock.indexOf('onIssued?.(result.code);');
   const setIssuedCodeIndex = tryBlock.indexOf('setIssuedCode(result.code);');
-  assert.ok(guardIndex >= 0 && guardIndex < setIssuedCodeIndex && setIssuedCodeIndex < onIssuedIndex);
+  assert.ok(
+    guardIndex >= 0 &&
+      guardIndex < setIssuedCodeIndex &&
+      setIssuedCodeIndex < onIssuedIndex
+  );
 });
 
 test('5B.2-5. catch and finally are guarded too — no parent callback or meaningful local write survives a stale continuation through the error path', async () => {
   const source = await publicTrackingSourcePromise;
-  const catchBlock = source.match(/\} catch \(issuanceError\) \{([\s\S]*?)\} finally \{/)[1];
+  const catchBlock = source.match(
+    /\} catch \(issuanceError\) \{([\s\S]*?)\} finally \{/
+  )[1];
   assert.match(catchBlock, /^\s*if \(!mountedRef\.current\) return;/);
   // onRefreshJob (a parent callback) only fires after the guard, since the
   // guard is the very first statement in the catch block.
@@ -457,7 +503,9 @@ test('5B.2-8. the mount guard introduces no new persistence surface — mountedR
 
 test('5B.2-9. NewServiceJob still clears savedPublicTrackingCode when starting a new job (unchanged, re-verified)', async () => {
   const source = await readSource('src/features/service-jobs/pages/NewServiceJob.tsx');
-  const startBlock = source.match(/const startNewServiceJob = \(\) => \{([\s\S]*?)\n {2}\};/);
+  const startBlock = source.match(
+    /const startNewServiceJob = \(\) => \{([\s\S]*?)\n {2}\};/
+  );
   assert.notEqual(startBlock, null);
   assert.match(startBlock[1], /setSavedPublicTrackingCode\(null\);/);
 });
@@ -473,7 +521,9 @@ test('5B.2-10. the corrected source structurally prevents a resolved-but-stale A
 // NewServiceJob — freshest job resolution
 // =====================================================================
 
-const newServiceJobSourcePromise = readSource('src/features/service-jobs/pages/NewServiceJob.tsx');
+const newServiceJobSourcePromise = readSource(
+  'src/features/service-jobs/pages/NewServiceJob.tsx'
+);
 
 test('17/18. displayJob resolves the freshest repository row by id, falling back to the original saved snapshot', async () => {
   const source = await newServiceJobSourcePromise;
@@ -494,7 +544,11 @@ test('19. the auto-print effect depends on exactly [savedJob] — a repository r
   const effectBlock = source.match(
     /useEffect\(\(\) => \{\s*\n\s*if \(savedJob\) \{[\s\S]*?\}, \[savedJob\]\);/
   );
-  assert.notEqual(effectBlock, null, 'expected the auto-print effect with dependency array [savedJob]');
+  assert.notEqual(
+    effectBlock,
+    null,
+    'expected the auto-print effect with dependency array [savedJob]'
+  );
   assert.match(effectBlock[0], /window\.print\(\);/);
   // displayJob must never appear inside this specific effect body or its
   // dependency array.
@@ -503,7 +557,9 @@ test('19. the auto-print effect depends on exactly [savedJob] — a repository r
 
 test('savedJob itself is reassigned only by handleSaveAndPrint (once) and startNewServiceJob (reset) — no effect re-derives it from serviceJobs', async () => {
   const source = await newServiceJobSourcePromise;
-  const setSavedJobCalls = [...source.matchAll(/setSavedJob\(([^)]*)\)/g)].map((m) => m[1].trim());
+  const setSavedJobCalls = [...source.matchAll(/setSavedJob\(([^)]*)\)/g)].map((m) =>
+    m[1].trim()
+  );
   assert.deepEqual(setSavedJobCalls.sort(), ['job', 'null'].sort());
 });
 
@@ -529,7 +585,13 @@ test('20.2. the key expression is literally claim.id — not dataVersion, public
   const keyMatch = source.match(/key=\{([^}]*)\}/);
   assert.notEqual(keyMatch, null, 'expected a key prop on ServiceJobDetailsView');
   assert.equal(keyMatch[1].trim(), 'claim.id');
-  for (const forbidden of ['dataVersion', 'publicTrackingCodeHash', 'status', 'updatedAt', 'JSON.stringify(claim)']) {
+  for (const forbidden of [
+    'dataVersion',
+    'publicTrackingCodeHash',
+    'status',
+    'updatedAt',
+    'JSON.stringify(claim)',
+  ]) {
     assert.notEqual(keyMatch[1].trim(), forbidden);
   }
 });
@@ -552,7 +614,10 @@ test('20.4. same-job data changes (a claim update, not an identity change) are s
 
 test('the reconciliation effect runs at layout-phase (useLayoutEffect, not useEffect) and depends only on [claim, canReassignTechnician]', async () => {
   const source = await serviceJobDetailsSourcePromise;
-  assert.match(source, /import \{ useEffect, useLayoutEffect, useRef, useState \} from 'react';/);
+  assert.match(
+    source,
+    /import \{ useEffect, useLayoutEffect, useRef, useState \} from 'react';/
+  );
   const layoutEffectBlock = source.match(
     /useLayoutEffect\(\(\) => \{[\s\S]*?\}, \[claim, canReassignTechnician\]\);/
   );

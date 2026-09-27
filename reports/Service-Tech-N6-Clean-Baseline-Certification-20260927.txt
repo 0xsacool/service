@@ -1,0 +1,73 @@
+Service Tech — N6 Clean Baseline Certification
+Date: 2026-09-27
+Verdict: PASS — BASELINE CERTIFIED AFTER FORMATTING REMEDIATION
+
+BASELINE
+- Starting source checkpoint: acd52f1a9fc6f321ca3f8d8f55faf9f4772c876b
+- Tag at start: n5-worker-deploy-guardrail-20260927
+- Certification worktree: C:\service\.n6-baseline-cert-20260927
+- Production was not changed by N6.
+
+PRE-FLIGHT
+- HEAD matched origin/master at acd52f1 before N6 corrections.
+- Divergence was 0/0.
+- Worktree was clean before certification.
+- git diff --check passed.
+
+FIRST FAILURE AND CORRECTION
+- Root build and ESLint passed.
+- The first npm run format:check failed repository-wide on 351 files.
+- Global Git core.autocrlf=true caused CRLF worktree output, but this was not the whole issue.
+- A diagnostic Prettier run with end-of-line auto still found 101 tracked files with genuine formatting drift.
+- N6 added endOfLine=auto to .prettierrc.json so the documented format check is cross-platform on the Windows development host.
+- Prettier was then applied mechanically to the 101 tracked files. No intended business logic, authorization, Rules, Worker route, Public Tracking, or production behavior was changed.
+- No package install or dependency version change occurred.
+
+APPLICATION CERTIFICATION
+- npm run build: PASS.
+- npm run lint: PASS.
+- npm run format:check: PASS.
+- Root deterministic suites all passed:
+  - service-jobs
+  - service-job-brand
+  - service-reports
+  - service-reports-ui
+  - service-reports-print
+  - attachment-retention
+  - ownership-public-tracking
+  - public-tracking-browser
+  - auth-readiness
+  - backend-configuration
+  - approval-console
+- Build emitted the existing non-failing large-chunk warning.
+- Approval Console runtime tests emitted transient Vite WebSocket port-in-use diagnostics while still completing all assertions successfully.
+
+WORKER CERTIFICATION
+- First Worker attempt failed only because the clean worktree had no worker/node_modules and therefore could not resolve @cloudflare/workers-types.
+- N6 created a local-only junction from the certification worktree to the already-installed C:\service\worker\node_modules; no dependency install or source mutation was used for this environment fix.
+- Worker npm run typecheck: PASS.
+- Worker full npm test chain: PASS, including N5 production-version guard and Public Tracking containment.
+
+FIRESTORE RULES CERTIFICATION
+- Firebase Firestore emulator suite: PASS.
+- 34 tests executed, 34 passed, 0 failed, 0 skipped.
+- Browser Service Report list/update denial, cross-brand denial, Worker-only collections, Product Import containment, direct GET authorization, and Public Tracking isolation all remained enforced.
+
+SAFETY / PRODUCTION
+- No Worker upload or deploy.
+- No traffic change.
+- No Firebase/Cloudflare/IAM/Rules/index production mutation.
+- No production business-data write.
+- No Public Tracking enablement.
+- No destructive git reset/clean/history rewrite.
+
+INDEPENDENT REVIEW
+- GPT-6 Astra read-only review: PASS.
+- REQUIRED_FIXES: NONE.
+- All 90 staged source/test files matched mechanical Prettier output from the exact baseline.
+- AST checks confirmed semantic equivalence, including the one JSX whitespace representation difference in ApprovalReviewPanel.tsx after comparison at emitted-JavaScript AST level.
+- No hidden value, operator, string, regex, object-key, route, auth, Rules, Worker, or Public Tracking behavior change was found.
+- endOfLine=auto was confirmed to accommodate the Windows core.autocrlf=true environment while leaving the other formatting checks active.
+
+N6 RESULT
+The baseline is certified after the formatting remediation. Application build/lint/format/tests, Worker typecheck/full tests, Firestore Rules emulator tests, and independent read-only review all pass. The only tracked policy correction introduced by N6 beyond mechanical Prettier normalization is the cross-platform endOfLine=auto Prettier policy.

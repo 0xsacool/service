@@ -63,7 +63,10 @@ import {
   shareCustomerNotification,
 } from '../../../services/customerNotificationShare';
 import { serviceJobUpdateErrorMessage } from '../serviceJobErrorMessages';
-import { notesEqual, reconcileField } from '../../../services/serviceJobDraftReconciliation';
+import {
+  notesEqual,
+  reconcileField,
+} from '../../../services/serviceJobDraftReconciliation';
 
 // F5d-70 Phase 5B — the single place claim -> local-draft-shape mapping is
 // defined, used to seed the initial local draft on mount.
@@ -219,9 +222,13 @@ function ServiceJobDetailsView({
     previousClaimRef.current = claim;
 
     setStatus((current) => reconcileField(current, previous.status, claim.status));
-    setNotes((current) => reconcileField(current, previous.notes, claim.notes, notesEqual));
+    setNotes((current) =>
+      reconcileField(current, previous.notes, claim.notes, notesEqual)
+    );
     if (canReassignTechnician) {
-      setTech((current) => reconcileField(current, previous.technician, claim.technician));
+      setTech((current) =>
+        reconcileField(current, previous.technician, claim.technician)
+      );
     }
     setEventMetadata((current) => {
       const contactPristine =
@@ -253,8 +260,12 @@ function ServiceJobDetailsView({
           ? (claim.contactChannelIdentity ?? '')
           : current.contactChannelIdentity,
         orderNumber: orderPristine ? (claim.orderNumber ?? '') : current.orderNumber,
-        orderVerification: orderPristine ? claim.orderVerification : current.orderVerification,
-        purchaseDate: purchaseDatePristine ? (claim.purchaseDate ?? '') : current.purchaseDate,
+        orderVerification: orderPristine
+          ? claim.orderVerification
+          : current.orderVerification,
+        purchaseDate: purchaseDatePristine
+          ? (claim.purchaseDate ?? '')
+          : current.purchaseDate,
         orderDeliveredDate: orderDeliveredDatePristine
           ? (claim.orderDeliveredDate ?? '')
           : current.orderDeliveredDate,
@@ -352,7 +363,9 @@ function ServiceJobDetailsView({
               orderVerification: eventMetadata.orderVerification,
             }
           : {}),
-        ...(purchaseDateDirty ? { purchaseDate: eventMetadata.purchaseDate || null } : {}),
+        ...(purchaseDateDirty
+          ? { purchaseDate: eventMetadata.purchaseDate || null }
+          : {}),
         ...(orderDeliveredDateDirty
           ? { orderDeliveredDate: eventMetadata.orderDeliveredDate || null }
           : {}),
@@ -687,7 +700,10 @@ function ServiceJobDetailsView({
         </div>
       </div>
 
-      <ServiceEventMetadataEditSection value={eventMetadata} onChange={setEventMetadata} />
+      <ServiceEventMetadataEditSection
+        value={eventMetadata}
+        onChange={setEventMetadata}
+      />
 
       <PublicTrackingSection
         job={claim}
@@ -702,7 +718,10 @@ function ServiceJobDetailsView({
           <ArrowLeft className="h-4 w-4" />
           งานบริการทั้งหมด
         </SecondaryButton>
-        <PrimaryButton onClick={() => void saveChanges()} disabled={isSaving || isAddingNote}>
+        <PrimaryButton
+          onClick={() => void saveChanges()}
+          disabled={isSaving || isAddingNote}
+        >
           <Check className="h-5 w-5" />
           {isSaving ? 'กำลังบันทึก…' : 'บันทึกการเปลี่ยนแปลง'}
         </PrimaryButton>

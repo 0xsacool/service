@@ -336,7 +336,8 @@ export interface AttachmentsRepository {
 export class WorkerServiceReportError extends Error {
   public readonly status: number;
   public readonly code: string | null;
-  public readonly retryClass: 'never' | 'reload' | 'same-idempotency-key' | 'operator' | null;
+  public readonly retryClass:
+    'never' | 'reload' | 'same-idempotency-key' | 'operator' | null;
   constructor(
     message: string,
     status: number,
@@ -352,7 +353,13 @@ export class WorkerServiceReportError extends Error {
 }
 
 export interface TrustedPrintResult {
-  printState: 'legacy-v1' | 'v2-draft' | 'v2-pending' | 'v2-approved' | 'v2-rejected' | 'integrity-incident';
+  printState:
+    | 'legacy-v1'
+    | 'v2-draft'
+    | 'v2-pending'
+    | 'v2-approved'
+    | 'v2-rejected'
+    | 'integrity-incident';
   report: ServiceReportDocument;
   event: Record<string, unknown> | null;
   evidence: { canonicalAttachmentKey: string; status: 'available' | 'missing' }[];
@@ -414,5 +421,9 @@ export interface ServiceReportsRepository {
     confirmedOmittedEvidenceAttachmentIds: string[],
     idempotencyKey: string
   ): Promise<ServiceReportV2>;
-  trustedPrint(reportId: string, contractVersion: 1 | 2, mode: 'normal' | 'diagnostic'): Promise<TrustedPrintResult>;
+  trustedPrint(
+    reportId: string,
+    contractVersion: 1 | 2,
+    mode: 'normal' | 'diagnostic'
+  ): Promise<TrustedPrintResult>;
 }

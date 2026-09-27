@@ -2,7 +2,10 @@ import { ImageIcon } from 'lucide-react';
 import type { ApprovalQueueItemV1 } from '../../../types/serviceReportWorkerReads';
 import { GlassCard, SecondaryButton } from '../../../shared/components';
 import { formatDateShort } from '../../../utils/formatDate';
-import { warrantyOutcomeColor, warrantyOutcomeLabel } from '../../../services/serviceJobPresentation';
+import {
+  warrantyOutcomeColor,
+  warrantyOutcomeLabel,
+} from '../../../services/serviceJobPresentation';
 import { RESULT_STATUS_LABELS } from '../approvalConsoleUi';
 
 export function ApprovalQueueRow({
@@ -35,13 +38,18 @@ export function ApprovalQueueRow({
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500">
             <span>ช่าง {item.technician}</span>
             <span>สรุปผลเมื่อ {formatDateShort(item.finalizedAt)}</span>
-            {item.resultStatus ? <span>{RESULT_STATUS_LABELS[item.resultStatus]}</span> : null}
+            {item.resultStatus ? (
+              <span>{RESULT_STATUS_LABELS[item.resultStatus]}</span>
+            ) : null}
             <span className="inline-flex items-center gap-1">
               <ImageIcon className="h-3.5 w-3.5" /> หลักฐาน {item.evidenceCount} รายการ
             </span>
           </div>
         </div>
-        <SecondaryButton onClick={() => onSelect(item)} className="shrink-0 px-4 py-2.5 text-sm">
+        <SecondaryButton
+          onClick={() => onSelect(item)}
+          className="shrink-0 px-4 py-2.5 text-sm"
+        >
           เปิดพิจารณา
         </SecondaryButton>
       </div>

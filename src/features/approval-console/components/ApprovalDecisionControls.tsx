@@ -4,7 +4,14 @@ import {
   ApprovalDecisionGuardError,
   type ApprovalReviewState,
 } from '../../../hooks/useApprovalConsoleReads';
-import { Modal, PrimaryButton, SecondaryButton, Field, inputClass, AsyncErrorAlert } from '../../../shared/components';
+import {
+  Modal,
+  PrimaryButton,
+  SecondaryButton,
+  Field,
+  inputClass,
+  AsyncErrorAlert,
+} from '../../../shared/components';
 import { GUARD_REASON_MESSAGES } from '../approvalConsoleUi';
 
 // Phase 6R-B — decisionEnabled/isDeciding are read directly from the D25
@@ -94,7 +101,10 @@ export function ApprovalDecisionControls({ review }: { review: ApprovalReviewSta
     }
     updateOwned(owner, (current) => ({ ...current, error: null }));
     try {
-      await review.decide(owner.kind === 'approve' ? 'approved' : 'rejected', rejectionReason);
+      await review.decide(
+        owner.kind === 'approve' ? 'approved' : 'rejected',
+        rejectionReason
+      );
       updateOwned(owner, () => null);
     } catch (error) {
       const message =
@@ -143,7 +153,10 @@ export function ApprovalDecisionControls({ review }: { review: ApprovalReviewSta
             </p>
             <AsyncErrorAlert message={activeModal.error} />
             <div className="flex justify-end gap-2">
-              <SecondaryButton onClick={() => setModal(null)} disabled={review.isDeciding}>
+              <SecondaryButton
+                onClick={() => setModal(null)}
+                disabled={review.isDeciding}
+              >
                 ยกเลิก
               </SecondaryButton>
               <PrimaryButton
@@ -177,7 +190,10 @@ export function ApprovalDecisionControls({ review }: { review: ApprovalReviewSta
             </Field>
             <AsyncErrorAlert message={activeModal.error} />
             <div className="flex justify-end gap-2">
-              <SecondaryButton onClick={() => setModal(null)} disabled={review.isDeciding}>
+              <SecondaryButton
+                onClick={() => setModal(null)}
+                disabled={review.isDeciding}
+              >
                 ยกเลิก
               </SecondaryButton>
               <PrimaryButton

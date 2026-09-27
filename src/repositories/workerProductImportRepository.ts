@@ -1,5 +1,8 @@
 import type { ProductImportRequest } from '../services/productImportRequest';
-import { fetchWithWorkerToken, type WorkerTokenProvider } from '../auth/workerTokenProvider';
+import {
+  fetchWithWorkerToken,
+  type WorkerTokenProvider,
+} from '../auth/workerTokenProvider';
 import { getFilesWorkerBaseUrl } from '../config/workerUrl';
 import {
   ProductImportError,
@@ -57,19 +60,25 @@ export function createWorkerProductImportRepository(
     async commit(request: ProductImportRequest, idempotencyKey: string) {
       let response: Response;
       try {
-        response = await fetchWithWorkerToken(tokenProvider, `${baseUrl}/products/import`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Idempotency-Key': idempotencyKey,
-          },
-          body: JSON.stringify(request),
-        });
+        response = await fetchWithWorkerToken(
+          tokenProvider,
+          `${baseUrl}/products/import`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Idempotency-Key': idempotencyKey,
+            },
+            body: JSON.stringify(request),
+          }
+        );
       } catch (networkError) {
         // No response at all — the request's real server-side effect is
         // unknown, so this is ambiguous (status: null), never conclusive.
         throw new ProductImportError(
-          networkError instanceof Error ? networkError.message : 'Network error during product import',
+          networkError instanceof Error
+            ? networkError.message
+            : 'Network error during product import',
           null,
           null
         );

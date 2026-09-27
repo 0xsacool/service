@@ -5,7 +5,8 @@ import {
 } from '../../services/imageEvidenceProcessing';
 
 const DECODE_ERROR_MESSAGE = 'ไม่สามารถประมวลผลรูปภาพนี้ได้ กรุณาลองไฟล์รูปภาพอื่น';
-const TOO_LARGE_ERROR_MESSAGE = 'รูปภาพนี้มีขนาดใหญ่เกินไป แม้จะบีบอัดแล้ว กรุณาลองรูปภาพอื่น';
+const TOO_LARGE_ERROR_MESSAGE =
+  'รูปภาพนี้มีขนาดใหญ่เกินไป แม้จะบีบอัดแล้ว กรุณาลองรูปภาพอื่น';
 const AGGREGATE_TOO_LARGE_MESSAGE =
   'รูปภาพทั้งหมดที่เลือกมีขนาดรวมใหญ่เกินไป กรุณาลบบางรูปก่อนเพิ่มรูปใหม่';
 const TOO_MANY_PHOTOS_MESSAGE = 'เลือกรูปภาพได้สูงสุด 10 รูปต่องานบริการ';

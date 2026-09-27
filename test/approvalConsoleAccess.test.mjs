@@ -24,13 +24,14 @@ const vite = await createServer({
 });
 after(() => vite.close());
 
-const { canAccessApprovalConsoleForBackend, canAccessApprovalConsole } = await vite.ssrLoadModule(
-  '/src/services/approvalConsoleAccess.ts'
-);
+const { canAccessApprovalConsoleForBackend, canAccessApprovalConsole } =
+  await vite.ssrLoadModule('/src/services/approvalConsoleAccess.ts');
 const { ApprovalConsoleRouteGuard } = await vite.ssrLoadModule(
   '/src/auth/ApprovalConsoleRouteGuard.tsx'
 );
-const { AuthSessionContext } = await vite.ssrLoadModule('/src/auth/authSessionContext.ts');
+const { AuthSessionContext } = await vite.ssrLoadModule(
+  '/src/auth/authSessionContext.ts'
+);
 
 const BACKEND_KINDS = ['mock', 'firestore', null];
 const ALLOWED_ROLES = ['approver', 'admin'];
@@ -57,12 +58,20 @@ test('firestore backend allows only approver/admin, denies technician/roleless',
 
 test('the outcome is identical in every backend mode — no mode may bypass the role gate', () => {
   for (const role of ALLOWED_ROLES) {
-    const results = BACKEND_KINDS.map((kind) => canAccessApprovalConsoleForBackend(kind, role));
+    const results = BACKEND_KINDS.map((kind) =>
+      canAccessApprovalConsoleForBackend(kind, role)
+    );
     assert.deepEqual(results, [true, true, true], `${role} is allowed in every mode`);
   }
   for (const role of DENIED_ROLES) {
-    const results = BACKEND_KINDS.map((kind) => canAccessApprovalConsoleForBackend(kind, role));
-    assert.deepEqual(results, [false, false, false], `${String(role)} is denied in every mode`);
+    const results = BACKEND_KINDS.map((kind) =>
+      canAccessApprovalConsoleForBackend(kind, role)
+    );
+    assert.deepEqual(
+      results,
+      [false, false, false],
+      `${String(role)} is denied in every mode`
+    );
   }
 });
 
@@ -106,7 +115,13 @@ function sessionValue(role, { hasProfile = true } = {}) {
               ? undefined
               : role === null
                 ? null
-                : { uid: 'uid-1', brandId: 'bruno-thailand', canImportProducts: true, role, displayName: 'QA Staff' },
+                : {
+                    uid: 'uid-1',
+                    brandId: 'bruno-thailand',
+                    canImportProducts: true,
+                    role,
+                    displayName: 'QA Staff',
+                  },
         }
       : null,
     error: null,
@@ -132,7 +147,11 @@ function renderGuarded(role, options) {
             { element: createElement(ApprovalConsoleRouteGuard) },
             createElement(Route, {
               path: '/approval-console',
-              element: createElement('div', { 'data-testid': 'protected' }, 'PROTECTED_CONSOLE_CONTENT'),
+              element: createElement(
+                'div',
+                { 'data-testid': 'protected' },
+                'PROTECTED_CONSOLE_CONTENT'
+              ),
             })
           )
         )

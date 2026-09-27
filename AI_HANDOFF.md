@@ -59,6 +59,23 @@ visible plain-text `false` before candidate promotion. N5 itself made no live
 Cloudflare/Firebase mutation or traffic change. Full Worker tests, typecheck,
 and independent GPT-6 Astra review passed with no required fixes.
 
+## N6 clean baseline certification (2026-09-27)
+
+The post-N5 baseline at `acd52f1` was certified in an isolated worktree.
+Build and ESLint passed immediately. The first Prettier check exposed
+repository-wide formatting debt; after separating Windows CRLF effects from
+real style drift, N6 normalized the remaining 101 tracked files mechanically
+and added `endOfLine: "auto"` to the Prettier configuration for this Windows
+development environment. No dependency version changed.
+
+After correction, app build/lint/format and all documented deterministic root
+test groups pass; Worker typecheck/full tests pass; Firestore Rules emulator
+tests pass 34/34. Independent GPT-6 Astra read-only review also passed with
+`REQUIRED_FIXES: NONE`; all staged source/test changes were confirmed
+mechanical and semantic-neutral. N6 performs no production mutation or
+deployment. Detailed evidence is in
+`reports/Service-Tech-N6-Clean-Baseline-Certification-20260927.txt`.
+
 ## Historical production override (2026-09-26)
 
 RRC-2A/D24/D25 source checkpoint

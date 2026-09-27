@@ -154,10 +154,7 @@ export function classifyProductImport(
   // Pass 3 — final status per row. An error always wins over a match state:
   // a row that failed any check is never safe to create or update.
   const classified: ClassifiedProductImportRow[] = resolved.map((entry) => {
-    const errors = [
-      ...entry.errors,
-      ...(collisionErrors.get(entry.row.rowNumber) ?? []),
-    ];
+    const errors = [...entry.errors, ...(collisionErrors.get(entry.row.rowNumber) ?? [])];
 
     if (errors.length > 0) {
       return {

@@ -153,18 +153,25 @@ export async function createFirestoreProductMasterRepository(): Promise<ProductM
     async refreshFromServer(productIds) {
       if (productIds && productIds.length > 0) {
         const snapshots = await Promise.all(
-          productIds.map((id) => getDocFromServer(doc(firestore, PRODUCTS_COLLECTION, id)))
+          productIds.map((id) =>
+            getDocFromServer(doc(firestore, PRODUCTS_COLLECTION, id))
+          )
         );
         for (const snapshot of snapshots) {
           if (snapshot.exists()) {
-            productsById.set(snapshot.id, fromFirestoreData(snapshot.id, snapshot.data()));
+            productsById.set(
+              snapshot.id,
+              fromFirestoreData(snapshot.id, snapshot.data())
+            );
           } else {
             productsById.delete(snapshot.id);
           }
         }
         return;
       }
-      const snapshot = await getDocsFromServer(collection(firestore, PRODUCTS_COLLECTION));
+      const snapshot = await getDocsFromServer(
+        collection(firestore, PRODUCTS_COLLECTION)
+      );
       const next = new Map<string, ProductMasterEntry>();
       snapshot.forEach((docSnap) => {
         next.set(docSnap.id, fromFirestoreData(docSnap.id, docSnap.data()));

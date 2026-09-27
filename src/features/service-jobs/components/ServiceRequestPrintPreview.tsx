@@ -159,7 +159,10 @@ export function ServiceRequestPrintPreview({
             <PrintField label="โทรศัพท์" value={job.customerPhone} />
             <PrintField label="อีเมล" value={job.customerEmail} />
             {job.contactChannel && (
-              <PrintField label="ช่องทางติดต่อ" value={channelLabel(job.contactChannel)} />
+              <PrintField
+                label="ช่องทางติดต่อ"
+                value={channelLabel(job.contactChannel)}
+              />
             )}
             {job.contactChannelIdentity && (
               <PrintField label="บัญชี / ชื่อผู้ใช้" value={job.contactChannelIdentity} />

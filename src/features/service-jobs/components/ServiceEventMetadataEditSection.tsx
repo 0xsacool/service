@@ -6,8 +6,14 @@ import {
   type OrderVerification,
 } from '../../../types';
 import { Field, GlassCard, inputClass } from '../../../shared/components';
-import { channelLabel, orderVerificationLabel } from '../../../services/serviceJobPresentation';
-import { isValidCalendarDate, isValidHttpsUrl } from '../../../utils/serviceEventValidation';
+import {
+  channelLabel,
+  orderVerificationLabel,
+} from '../../../services/serviceJobPresentation';
+import {
+  isValidCalendarDate,
+  isValidHttpsUrl,
+} from '../../../utils/serviceEventValidation';
 
 const IDENTITY_LABEL: Partial<Record<ChannelId, string>> = {
   shopee: 'ชื่อผู้ใช้ / บัญชี Shopee',
@@ -66,7 +72,8 @@ export function ServiceEventMetadataEditSection({
 
   const showIdentity = value.contactChannel !== null && value.contactChannel !== 'phone';
   const showVerification = value.orderNumber.trim() !== '';
-  const purchaseDateError = value.purchaseDate !== '' && !isValidCalendarDate(value.purchaseDate);
+  const purchaseDateError =
+    value.purchaseDate !== '' && !isValidCalendarDate(value.purchaseDate);
   const orderDeliveredDateError =
     value.orderDeliveredDate !== '' && !isValidCalendarDate(value.orderDeliveredDate);
   const trimmedUrl = value.externalEvidenceUrl.trim();
@@ -80,7 +87,9 @@ export function ServiceEventMetadataEditSection({
       </h2>
       <div className="space-y-4">
         <div>
-          <span className="mb-2 block text-sm font-medium text-neutral-700">ช่องทางติดต่อ</span>
+          <span className="mb-2 block text-sm font-medium text-neutral-700">
+            ช่องทางติดต่อ
+          </span>
           <div className="flex flex-wrap gap-2" role="group" aria-label="ช่องทางติดต่อ">
             {CHANNEL_IDS.map((channel) => {
               const isSelected = value.contactChannel === channel;
@@ -104,10 +113,14 @@ export function ServiceEventMetadataEditSection({
         </div>
 
         {showIdentity && value.contactChannel && (
-          <Field label={IDENTITY_LABEL[value.contactChannel] ?? 'รายละเอียดช่องทางติดต่อ'}>
+          <Field
+            label={IDENTITY_LABEL[value.contactChannel] ?? 'รายละเอียดช่องทางติดต่อ'}
+          >
             <input
               value={value.contactChannelIdentity}
-              onChange={(e) => onChange({ ...value, contactChannelIdentity: e.target.value })}
+              onChange={(e) =>
+                onChange({ ...value, contactChannelIdentity: e.target.value })
+              }
               maxLength={120}
               className={inputClass()}
             />
@@ -128,14 +141,20 @@ export function ServiceEventMetadataEditSection({
             <span className="mb-2 block text-sm font-medium text-neutral-700">
               สถานะการตรวจสอบคำสั่งซื้อ
             </span>
-            <div className="flex flex-wrap gap-2" role="group" aria-label="สถานะการตรวจสอบคำสั่งซื้อ">
+            <div
+              className="flex flex-wrap gap-2"
+              role="group"
+              aria-label="สถานะการตรวจสอบคำสั่งซื้อ"
+            >
               {ORDER_VERIFICATIONS.map((verification) => {
                 const isSelected = value.orderVerification === verification;
                 return (
                   <button
                     key={verification}
                     type="button"
-                    onClick={() => onChange({ ...value, orderVerification: verification })}
+                    onClick={() =>
+                      onChange({ ...value, orderVerification: verification })
+                    }
                     aria-pressed={isSelected}
                     className={`rounded-full px-4 py-2 text-sm font-medium transition-all ${
                       isSelected

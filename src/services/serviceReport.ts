@@ -449,7 +449,7 @@ export function compareServiceReportDocumentaryOrder(
 }
 
 export function orderServiceReports<
-  T extends Pick<ServiceReport, 'id' | 'createdAt' | 'reportNo'>
+  T extends Pick<ServiceReport, 'id' | 'createdAt' | 'reportNo'>,
 >(reports: readonly T[]): T[] {
   return [...reports].sort(compareServiceReportDocumentaryOrder);
 }

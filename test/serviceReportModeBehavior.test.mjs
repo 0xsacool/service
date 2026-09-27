@@ -6,8 +6,12 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 
 const RUNTIME = fileURLToPath(new URL('./support/componentRuntime.mjs', import.meta.url));
-const JSX_RUNTIME = fileURLToPath(new URL('./support/componentJsxRuntime.mjs', import.meta.url));
-const REACT_DOM = fileURLToPath(new URL('./support/componentReactDom.mjs', import.meta.url));
+const JSX_RUNTIME = fileURLToPath(
+  new URL('./support/componentJsxRuntime.mjs', import.meta.url)
+);
+const REACT_DOM = fileURLToPath(
+  new URL('./support/componentReactDom.mjs', import.meta.url)
+);
 
 class VisibilityDocument extends EventTarget {
   constructor() {
@@ -32,7 +36,8 @@ const vite = await createServer({
     ],
   },
   define: {
-    'import.meta.env.VITE_SERVICE_REPORT_V2_MODE': 'globalThis.__SERVICE_REPORT_TEST_MODE__',
+    'import.meta.env.VITE_SERVICE_REPORT_V2_MODE':
+      'globalThis.__SERVICE_REPORT_TEST_MODE__',
   },
   ssr: { noExternal: ['lucide-react'] },
   optimizeDeps: { noDiscovery: true, include: [] },
@@ -50,7 +55,9 @@ const { useServiceReports } = await vite.ssrLoadModule('/src/hooks/useServiceRep
 const { ServiceReportsSection } = await vite.ssrLoadModule(
   '/src/features/service-jobs/components/ServiceReportsSection.tsx'
 );
-const { repositories } = await vite.ssrLoadModule('/src/repositories/repositoryProvider.ts');
+const { repositories } = await vite.ssrLoadModule(
+  '/src/repositories/repositoryProvider.ts'
+);
 
 let jobSequence = 0;
 const nextJobId = () => `BRN-2026-${String((jobSequence += 1)).padStart(6, '0')}`;
@@ -134,7 +141,7 @@ function installRepositories(serviceJobId, initialReports) {
   };
   repositories.serviceJobs = {
     ...repositories.serviceJobs,
-    getById: (id) => id === serviceJobId ? makeServiceJob(id) : undefined,
+    getById: (id) => (id === serviceJobId ? makeServiceJob(id) : undefined),
   };
   repositories.attachments = {
     ...repositories.attachments,
@@ -150,7 +157,9 @@ function installRepositories(serviceJobId, initialReports) {
       const current = history.find((item) => item.id === reportId);
       assert.ok(current);
       if (expectedUpdatedAt && current.updatedAt !== expectedUpdatedAt) {
-        throw Object.assign(new Error('The V1 draft timestamp is stale'), { status: 412 });
+        throw Object.assign(new Error('The V1 draft timestamp is stale'), {
+          status: 412,
+        });
       }
       return replace({ ...current, ...patch, updatedAt: '2026-02-01T00:00:00.000Z' });
     },
@@ -190,7 +199,9 @@ function installRepositories(serviceJobId, initialReports) {
       const current = history.find((item) => item.id === reportId);
       assert.ok(current);
       if (current.contentRevision !== expectedContentRevision) {
-        throw Object.assign(new Error('The V2 finalize revision is stale'), { status: 412 });
+        throw Object.assign(new Error('The V2 finalize revision is stale'), {
+          status: 412,
+        });
       }
       if (failNextV2Finalize) {
         failNextV2Finalize = false;
@@ -202,7 +213,11 @@ function installRepositories(serviceJobId, initialReports) {
         finalizedAt: '2026-02-02T00:00:00.000Z',
         updatedAt: '2026-02-02T00:00:00.000Z',
       });
-      finalizedByKey.set(idempotencyKey, { reportId, expectedContentRevision, report: finalized });
+      finalizedByKey.set(idempotencyKey, {
+        reportId,
+        expectedContentRevision,
+        report: finalized,
+      });
       committedV2Finalizations += 1;
       if (loseNextV2FinalizeResponse) {
         loseNextV2FinalizeResponse = false;
@@ -213,10 +228,16 @@ function installRepositories(serviceJobId, initialReports) {
   };
   return {
     calls,
-    failNextV2Finalize() { failNextV2Finalize = true; },
-    loseNextV2FinalizeResponse() { loseNextV2FinalizeResponse = true; },
+    failNextV2Finalize() {
+      failNextV2Finalize = true;
+    },
+    loseNextV2FinalizeResponse() {
+      loseNextV2FinalizeResponse = true;
+    },
     committedV2Finalizations: () => committedV2Finalizations,
-    setHistory(next) { history = [...next]; },
+    setHistory(next) {
+      history = [...next];
+    },
     getHistory: () => [...history],
   };
 }
@@ -244,10 +265,15 @@ test('the V1 hook rejects update and finalize locally in v2-active mode', async 
   await host.root.flush();
 
   await assert.rejects(
-    host.result().updateDraft(report.id, { technicianRemark: 'must not call the repository' }),
+    host
+      .result()
+      .updateDraft(report.id, { technicianRemark: 'must not call the repository' }),
     /V1 Service Reports are read-only/
   );
-  await assert.rejects(host.result().finalize(report.id), /V1 Service Reports are read-only/);
+  await assert.rejects(
+    host.result().finalize(report.id),
+    /V1 Service Reports are read-only/
+  );
   assert.deepEqual(calls.v1Update, []);
   assert.deepEqual(calls.v1Finalize, []);
   host.root.unmount();
@@ -262,7 +288,9 @@ for (const mode of ['disabled', 'compatibility']) {
     const host = mountHookFor(serviceJobId);
     await host.root.flush();
 
-    await host.result().updateDraft(report.id, { technicianRemark: 'saved in legacy mode' });
+    await host
+      .result()
+      .updateDraft(report.id, { technicianRemark: 'saved in legacy mode' });
     await host.result().finalize(report.id);
     assert.equal(calls.v1Update.length, 1);
     assert.equal(calls.v1Finalize.length, 1);
@@ -304,16 +332,35 @@ test('V2 finalize 503 retries the saved revision without another draft write', a
   };
 
   await confirmFinalize();
-  assert.equal(repository.getHistory()[0].contentRevision, 1, 'the draft save commits before the simulated finalize failure');
+  assert.equal(
+    repository.getHistory()[0].contentRevision,
+    1,
+    'the draft save commits before the simulated finalize failure'
+  );
   assert.equal(repository.getHistory()[0].status, 'draft');
   assert.equal(repository.calls.v2Update[0].expectedContentRevision, 0);
-  assert.equal(repository.calls.v2Finalize[0].expectedContentRevision, 1, 'first finalize uses the saved revision N+1');
+  assert.equal(
+    repository.calls.v2Finalize[0].expectedContentRevision,
+    1,
+    'first finalize uses the saved revision N+1'
+  );
   assert.ok(root.text().includes('Simulated finalize failure'));
 
   await confirmFinalize();
-  assert.equal(repository.calls.v2Update.length, 1, 'an ambiguous finalize response must not resave the draft');
-  assert.equal(repository.calls.v2Finalize[1].expectedContentRevision, 1, 'retry finalizes the same saved revision');
-  assert.equal(repository.calls.v2Finalize[1].idempotencyKey, repository.calls.v2Finalize[0].idempotencyKey);
+  assert.equal(
+    repository.calls.v2Update.length,
+    1,
+    'an ambiguous finalize response must not resave the draft'
+  );
+  assert.equal(
+    repository.calls.v2Finalize[1].expectedContentRevision,
+    1,
+    'retry finalizes the same saved revision'
+  );
+  assert.equal(
+    repository.calls.v2Finalize[1].idempotencyKey,
+    repository.calls.v2Finalize[0].idempotencyKey
+  );
   assert.equal(repository.getHistory()[0].status, 'final');
   root.unmount();
 });
@@ -334,7 +381,11 @@ test('V2 finalize retries the same request when the committed response is lost',
   };
 
   await confirmFinalize();
-  assert.equal(repository.getHistory()[0].status, 'final', 'the server committed before its response was lost');
+  assert.equal(
+    repository.getHistory()[0].status,
+    'final',
+    'the server committed before its response was lost'
+  );
   assert.equal(repository.committedV2Finalizations(), 1);
   assert.equal(repository.calls.v2Update.length, 1);
   assert.equal(repository.calls.v2Finalize[0].expectedContentRevision, 1);
@@ -342,7 +393,11 @@ test('V2 finalize retries the same request when the committed response is lost',
   assert.ok(root.text().includes('ผลการสรุปอาจสำเร็จแล้ว'));
 
   await confirmFinalize();
-  assert.equal(repository.calls.v2Update.length, 1, 'retry does not attempt to save a finalized report');
+  assert.equal(
+    repository.calls.v2Update.length,
+    1,
+    'retry does not attempt to save a finalized report'
+  );
   assert.equal(repository.calls.v2Finalize.length, 2);
   assert.equal(repository.calls.v2Finalize[1].expectedContentRevision, 1);
   assert.equal(
@@ -350,25 +405,33 @@ test('V2 finalize retries the same request when the committed response is lost',
     repository.calls.v2Finalize[0].idempotencyKey,
     'retry uses the same idempotency key'
   );
-  assert.equal(repository.committedV2Finalizations(), 1, 'replay causes no second finalization');
+  assert.equal(
+    repository.committedV2Finalizations(),
+    1,
+    'replay causes no second finalization'
+  );
   root.unmount();
 });
 
 for (const version of [1, 2]) {
   test(`V${version} editor keeps dirty form data and refuses a stale displayed version after history refresh`, async () => {
-    globalThis.__SERVICE_REPORT_TEST_MODE__ = version === 2 ? 'v2-active' : 'compatibility';
+    globalThis.__SERVICE_REPORT_TEST_MODE__ =
+      version === 2 ? 'v2-active' : 'compatibility';
     const serviceJob = makeServiceJob(nextJobId());
-    const draft = version === 2
-      ? makeV2Draft(`stale-editor-v${version}`, serviceJob.id)
-      : makeReport(`stale-editor-v${version}`, serviceJob.id);
+    const draft =
+      version === 2
+        ? makeV2Draft(`stale-editor-v${version}`, serviceJob.id)
+        : makeReport(`stale-editor-v${version}`, serviceJob.id);
     const repository = installRepositories(serviceJob.id, [draft]);
     const root = mountSection(serviceJob);
     await root.flush();
     await root.click(root.button('ดำเนินการแก้ไขต่อ'));
 
-    const findingsField = () => root.find(
-      (node) => node.type === 'textarea' && node.props.placeholder === 'บันทึกผลการตรวจสอบ…'
-    );
+    const findingsField = () =>
+      root.find(
+        (node) =>
+          node.type === 'textarea' && node.props.placeholder === 'บันทึกผลการตรวจสอบ…'
+      );
     await root.type(findingsField(), 'Unsaved dirty form');
     const remote = {
       ...draft,
@@ -380,14 +443,29 @@ for (const version of [1, 2]) {
     window.dispatchEvent(new Event('focus'));
     await root.flush();
 
-    assert.equal(findingsField().props.value, 'Unsaved dirty form', 'history refresh must not replace dirty editor state');
+    assert.equal(
+      findingsField().props.value,
+      'Unsaved dirty form',
+      'history refresh must not replace dirty editor state'
+    );
     await root.click(root.button('บันทึกร่าง'));
-    assert.equal(repository.getHistory()[0].inspectionFindings, 'Remote edit', 'stale editor must not overwrite the remote change');
-    assert.ok(root.text().includes('stale'), 'the stale-save refusal is shown to the technician');
+    assert.equal(
+      repository.getHistory()[0].inspectionFindings,
+      'Remote edit',
+      'stale editor must not overwrite the remote change'
+    );
+    assert.ok(
+      root.text().includes('stale'),
+      'the stale-save refusal is shown to the technician'
+    );
 
     await root.click(root.button('กลับใบรายงาน'));
     await root.click(root.button('ดำเนินการแก้ไขต่อ'));
-    assert.equal(findingsField().props.value, 'Remote edit', 'a newly opened editor uses the current report');
+    assert.equal(
+      findingsField().props.value,
+      'Remote edit',
+      'a newly opened editor uses the current report'
+    );
     await root.type(findingsField(), 'Fresh editor save');
     await root.click(root.button('บันทึกร่าง'));
     assert.equal(repository.getHistory()[0].inspectionFindings, 'Fresh editor save');

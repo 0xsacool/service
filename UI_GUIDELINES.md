@@ -6,15 +6,15 @@
 
 Defined as Tailwind v4 theme tokens in `src/index.css`.
 
-| Scale | Use | Base value |
-|---|---|---|
-| `brand-*` (50–900) | Primary actions, links, active states | `brand-500 = #0071e3` (Apple blue — placeholder) |
-| `success-*` (50–700) | Ready/positive states | `success-500 = #34c759` |
-| `warning-*` (50–600) | Awaiting/attention states | `warning-500 = #f59e0b` |
-| `danger-*` (50–600) | Errors, urgent priority | `danger-500 = #ef4444` |
-| `neutral-*` | Text, borders, backgrounds | Tailwind default neutral scale |
-| `canvas` | Page background | `#f5f5f7` |
-| `ink` | Primary text color | `#1d1d1f` |
+| Scale                | Use                                   | Base value                                       |
+| -------------------- | ------------------------------------- | ------------------------------------------------ |
+| `brand-*` (50–900)   | Primary actions, links, active states | `brand-500 = #0071e3` (Apple blue — placeholder) |
+| `success-*` (50–700) | Ready/positive states                 | `success-500 = #34c759`                          |
+| `warning-*` (50–600) | Awaiting/attention states             | `warning-500 = #f59e0b`                          |
+| `danger-*` (50–600)  | Errors, urgent priority               | `danger-500 = #ef4444`                           |
+| `neutral-*`          | Text, borders, backgrounds            | Tailwind default neutral scale                   |
+| `canvas`             | Page background                       | `#f5f5f7`                                        |
+| `ink`                | Primary text color                    | `#1d1d1f`                                        |
 
 **Status color mapping** (`src/lib.ts` → `statusColor`): each `ClaimStatus` maps to a `{ text, bg, dot, ring }` tuple — brand blue for Received, violet for Diagnosing, amber for Awaiting Parts, blue for In Repair, cyan for Quality Check, success green for Ready for Pickup, neutral gray for Completed. New exception statuses (**Cancelled**, **Rejected** — see `BUSINESS_RULES.md`) need color assignments added here before they're implemented; suggested: `danger` tones for both, distinguished by icon rather than color alone (see Accessibility note below).
 
@@ -72,7 +72,7 @@ Defined as Tailwind v4 theme tokens in `src/index.css`.
 
 ## Print Layout Principles
 
-*(New section — no print layout exists yet; this defines the target for Sprint 8's "Print receipt" implementation.)*
+_(New section — no print layout exists yet; this defines the target for Sprint 8's "Print receipt" implementation.)_
 
 - Print output must **not** carry over the glass/blur/gradient visual language — use plain white background, solid borders, high-contrast black text for print media (`@media print` overrides).
 - Must prominently show: tracking number, product, customer name, status, and the Buddhist Era date (per `DECISIONS.md`) alongside or instead of the Gregorian date.

@@ -82,9 +82,7 @@ async function allocateReportNumber(brandId: BrandId, year: number): Promise<str
 
 export const serviceReportsRepository: ServiceReportsRepository = {
   async fetchHistoryForServiceJob(serviceJobId) {
-    return serviceReportsRepository
-      .listForServiceJob(serviceJobId)
-      .map(toHistoryItem);
+    return serviceReportsRepository.listForServiceJob(serviceJobId).map(toHistoryItem);
   },
 
   listForServiceJob(serviceJobId) {
@@ -160,13 +158,14 @@ export const serviceReportsRepository: ServiceReportsRepository = {
     return finalized;
   },
 
-  async createDraftV2(
-    serviceJobId: string,
-    content: ServiceReportV2Content
-  ) {
+  async createDraftV2(serviceJobId: string, content: ServiceReportV2Content) {
     const serviceJob = requireServiceJob(serviceJobId);
     if (!serviceJob.brandId) throw new Error('A canonical brand is required');
-    if (Array.from(reportsById.values()).some((report) => report.serviceJobId === serviceJobId && report.status === 'draft')) {
+    if (
+      Array.from(reportsById.values()).some(
+        (report) => report.serviceJobId === serviceJobId && report.status === 'draft'
+      )
+    ) {
       throw new Error('An active draft already exists');
     }
     const now = new Date().toISOString();
@@ -176,10 +175,16 @@ export const serviceReportsRepository: ServiceReportsRepository = {
       reportId,
       id: reportId,
       serviceJobId,
-      reportNo: await allocateReportNumber(serviceJob.brandId, bangkokNumberingYear(new Date())),
+      reportNo: await allocateReportNumber(
+        serviceJob.brandId,
+        bangkokNumberingYear(new Date())
+      ),
       brandId: serviceJob.brandId,
       status: 'draft',
-      activeDraftGeneration: Array.from(reportsById.values()).filter((item) => item.serviceJobId === serviceJobId).length + 1,
+      activeDraftGeneration:
+        Array.from(reportsById.values()).filter(
+          (item) => item.serviceJobId === serviceJobId
+        ).length + 1,
       createdAt: now,
       createdByUid: 'mock-staff',
       createdByRoleSnapshot: 'technician',
@@ -210,10 +215,16 @@ export const serviceReportsRepository: ServiceReportsRepository = {
   ) {
     const report = reportsById.get(reportId);
     const normalized = normalizeServiceReportV2DraftPatch(patch);
-    if (!report || !isServiceReportV2(report) || report.status !== 'draft' || !normalized) {
+    if (
+      !report ||
+      !isServiceReportV2(report) ||
+      report.status !== 'draft' ||
+      !normalized
+    ) {
       throw new Error('The V2 draft cannot be updated');
     }
-    if (report.contentRevision !== expectedContentRevision) throw new Error('stale_revision');
+    if (report.contentRevision !== expectedContentRevision)
+      throw new Error('stale_revision');
     const updated: ServiceReportV2 = {
       ...report,
       ...normalized,
@@ -226,8 +237,10 @@ export const serviceReportsRepository: ServiceReportsRepository = {
 
   async finalizeV2(reportId, expectedContentRevision) {
     const report = reportsById.get(reportId);
-    if (!report || !isServiceReportV2(report) || report.status !== 'draft') throw new Error('The V2 draft cannot be finalized');
-    if (report.contentRevision !== expectedContentRevision || report.contentRevision < 1) throw new Error('stale_revision');
+    if (!report || !isServiceReportV2(report) || report.status !== 'draft')
+      throw new Error('The V2 draft cannot be finalized');
+    if (report.contentRevision !== expectedContentRevision || report.contentRevision < 1)
+      throw new Error('stale_revision');
     const serviceJob = requireServiceJob(report.serviceJobId);
     const snapshot = createServiceJobSnapshotV2(serviceJob);
     if (!snapshot) throw new Error('The Service Job snapshot is invalid');
@@ -247,14 +260,22 @@ export const serviceReportsRepository: ServiceReportsRepository = {
       approvalDecidedAt: null,
       updatedAt: now,
     };
-    const finalized = { ...candidate, finalContentDigest: await computeServiceReportFinalDigest(candidate) };
+    const finalized = {
+      ...candidate,
+      finalContentDigest: await computeServiceReportFinalDigest(candidate),
+    };
     reportsById.set(reportId, finalized);
     return finalized;
   },
 
   async decideV2(reportId, decision, _reason, expectedDigest) {
     const report = reportsById.get(reportId);
-    if (!report || !isServiceReportV2(report) || report.status !== 'final' || report.finalContentDigest !== expectedDigest) {
+    if (
+      !report ||
+      !isServiceReportV2(report) ||
+      report.status !== 'final' ||
+      report.finalContentDigest !== expectedDigest
+    ) {
       throw new Error('The V2 report cannot be decided');
     }
     const decided: ServiceReportV2 = {
@@ -269,13 +290,24 @@ export const serviceReportsRepository: ServiceReportsRepository = {
 
   async createSuccessorV2(predecessorReportId, expectedDigest, omissions) {
     const predecessor = reportsById.get(predecessorReportId);
-    if (!predecessor || !isServiceReportV2(predecessor) || predecessor.status !== 'final' ||
-        predecessor.approvalState !== 'rejected' || predecessor.finalContentDigest !== expectedDigest) {
+    if (
+      !predecessor ||
+      !isServiceReportV2(predecessor) ||
+      predecessor.status !== 'final' ||
+      predecessor.approvalState !== 'rejected' ||
+      predecessor.finalContentDigest !== expectedDigest
+    ) {
       throw new Error('The predecessor cannot create a successor');
     }
     const content = buildSuccessorContent(predecessor);
-    content.evidenceAttachmentIds = content.evidenceAttachmentIds.filter((key) => !omissions.includes(key));
-    const successor = await serviceReportsRepository.createDraftV2(predecessor.serviceJobId, content, crypto.randomUUID());
+    content.evidenceAttachmentIds = content.evidenceAttachmentIds.filter(
+      (key) => !omissions.includes(key)
+    );
+    const successor = await serviceReportsRepository.createDraftV2(
+      predecessor.serviceJobId,
+      content,
+      crypto.randomUUID()
+    );
     const linked = { ...successor, predecessorReportId };
     reportsById.set(linked.id, linked);
     return linked;
@@ -285,10 +317,16 @@ export const serviceReportsRepository: ServiceReportsRepository = {
     const report = reportsById.get(reportId);
     if (!report) throw new Error('The report does not exist');
     return {
-      printState: contractVersion === 1 ? 'legacy-v1' :
-        !isServiceReportV2(report) || report.status === 'draft' ? 'v2-draft' :
-        report.approvalState === 'pending' ? 'v2-pending' :
-        report.approvalState === 'approved' ? 'v2-approved' : 'v2-rejected',
+      printState:
+        contractVersion === 1
+          ? 'legacy-v1'
+          : !isServiceReportV2(report) || report.status === 'draft'
+            ? 'v2-draft'
+            : report.approvalState === 'pending'
+              ? 'v2-pending'
+              : report.approvalState === 'approved'
+                ? 'v2-approved'
+                : 'v2-rejected',
       report,
       event: null,
       evidence: [],

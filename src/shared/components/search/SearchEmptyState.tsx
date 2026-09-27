@@ -6,7 +6,8 @@ import { RecentCustomers } from './RecentCustomers';
 // F5d-49B (Terra P2 UX honesty) — see SearchInput.tsx's identical rationale.
 // F5d-69 closed the Firestore-mode gap this used to branch around; both
 // modes advertise the same dimensions now.
-const BARE_PROMPT = 'เริ่มพิมพ์ชื่อ โทรศัพท์ ชื่อผู้ใช้ ออเดอร์ เลขติดตาม หรือหมายเลขเครื่อง';
+const BARE_PROMPT =
+  'เริ่มพิมพ์ชื่อ โทรศัพท์ ชื่อผู้ใช้ ออเดอร์ เลขติดตาม หรือหมายเลขเครื่อง';
 
 // The idle state (no query typed yet) — Recent Searches and Recent
 // Customers, each only rendered when non-empty. The bare prompt below only

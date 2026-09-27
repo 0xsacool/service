@@ -140,7 +140,11 @@ export function compressWithLadder(
   tiers: readonly DimensionQualityTier[] = DIMENSION_QUALITY_TIERS
 ): CompressAttempt | null {
   for (const tier of tiers) {
-    const { width, height } = computeScaledDimensions(naturalWidth, naturalHeight, tier.dimension);
+    const { width, height } = computeScaledDimensions(
+      naturalWidth,
+      naturalHeight,
+      tier.dimension
+    );
     const encode = makeEncoder(width, height);
     const result = compressToFit(encode, maxBytes, tier.qualities);
     if (result) return result;
@@ -165,7 +169,11 @@ export function computePerPhotoTargetBytes(
   existingAcceptedCount: number,
   batchSize: number
 ): number {
-  const expectedTotal = Math.max(RECOMMENDED_PHOTO_COUNT, existingAcceptedCount + batchSize, 1);
+  const expectedTotal = Math.max(
+    RECOMMENDED_PHOTO_COUNT,
+    existingAcceptedCount + batchSize,
+    1
+  );
   return Math.min(
     MAX_PHOTO_DATA_URL_SAFE_BYTES,
     Math.floor(PHOTOS_TARGET_AGGREGATE_BYTES / expectedTotal)
@@ -178,8 +186,7 @@ export type PhotoSubmissionValidationFailure =
   | { ok: false; reason: 'aggregate-too-large' };
 
 export type PhotoSubmissionValidationResult =
-  | { ok: true }
-  | PhotoSubmissionValidationFailure;
+  { ok: true } | PhotoSubmissionValidationFailure;
 
 // Defense-in-depth final check before a Service Job payload is built — every
 // photo added through processPhotoFile()/PhotoEvidenceSection should already
@@ -213,7 +220,10 @@ export function wouldExceedAggregate(
   existingPhotos: readonly { dataUrl: string }[],
   candidateDataUrl: string
 ): boolean {
-  const currentTotal = existingPhotos.reduce((sum, photo) => sum + photo.dataUrl.length, 0);
+  const currentTotal = existingPhotos.reduce(
+    (sum, photo) => sum + photo.dataUrl.length,
+    0
+  );
   return currentTotal + candidateDataUrl.length > MAX_PHOTOS_TOTAL_SAFE_BYTES;
 }
 

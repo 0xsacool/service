@@ -8,7 +8,7 @@
 
 ## Completed Sprints
 
-### Sprint 0 — Documentation Foundation *(complete)*
+### Sprint 0 — Documentation Foundation _(complete)_
 
 **Objective:** Establish a shared, written foundation before any backend/auth/database work begins.
 
@@ -18,11 +18,12 @@
 
 ---
 
-### Sprint 1 — Architecture Cleanup *(complete)*
+### Sprint 1 — Architecture Cleanup _(complete)_
 
 **Objective:** Fix the structural gaps that would otherwise make every later sprint harder — routing, duplicated components, and the data-access seam — without changing what the app looks like or adding any backend.
 
 **Delivered:**
+
 - `react-router-dom` adopted, replacing the `PageId` `useState` switch in `App.tsx`; every page now has a real, shareable URL ([DECISIONS.md](DECISIONS.md) #007).
 - Shared components extracted: `Row`, `Timeline`, `PhotoGallery`, `ProgressBar`, `Logo` — no longer duplicated between what were `ClaimDetails.tsx`/`TrackResult.tsx`.
 - Code-level rename `Claim` → `ServiceJob` completed (types, files, routes) ([DECISIONS.md](DECISIONS.md) #009).
@@ -34,7 +35,7 @@
 
 ---
 
-### Sprint 1B — Repository & Shared-UI Foundation *(complete)*
+### Sprint 1B — Repository & Shared-UI Foundation _(complete)_
 
 **Objective:** Formalize the data-access seam and shared UI primitives that every later feature sprint would otherwise rebuild ad hoc.
 
@@ -44,11 +45,12 @@
 
 ---
 
-### Search, Product Identity & Service Intake Phases *(complete)*
+### Search, Product Identity & Service Intake Phases _(complete)_
 
 **Objective:** Turn the static intake form into a real, progressively-revealed flow: find-or-recognize the customer and product first, then capture the problem and intake details.
 
 **Delivered (consolidated from several internally-tracked phases):**
+
 - Universal search (`searchRepository`, `useUniversalSearch`, recent-searches/recent-customers UI) and a search-first rewrite of `NewServiceJob`.
 - `RegisteredProduct` concept, `registeredProductsRepository`, `useCustomerProducts`, product identity UI — plus two architecture refinements made after initial delivery: switching to a stable `customerId` (not phone) as identity, and modeling warranty independently per registered product rather than as a flat flag.
 - Service intake types/validation, intake section components (accessories, problem, photo evidence, internal notes).
@@ -58,11 +60,12 @@
 
 ---
 
-### Product Master, Sprint P1–P3 *(complete)*
+### Product Master, Sprint P1–P3 _(complete)_
 
 **Objective:** Replace the flat, per-serial mock lookup with a real, admin-manageable product catalog — the foundation every later Product Master/Knowledge feature builds on.
 
 **Delivered:**
+
 - Product Master types, a real Bruno Thailand mock catalog, `productMasterRepository`.
 - A generic, reusable import framework (`src/imports/shared/`: parser, validator helpers, preview/summary builder) specialized for products (`src/imports/products/`: normalizer, validator, importer).
 - Add Product form + validation, CSV/Excel export, `ProductsPage` (search/filter/sort/table), and a full CSV import wizard (choose file → preview → validation → completed summary).
@@ -71,7 +74,7 @@
 
 ---
 
-### Product Knowledge, Sprint P4 *(complete)*
+### Product Knowledge, Sprint P4 _(complete)_
 
 **Objective:** Give each product a knowledge base (accessories, common problems) and a real detail/edit view, not just a catalog row.
 
@@ -81,7 +84,7 @@
 
 ---
 
-### Sprint F0 — Backend Abstraction *(complete)*
+### Sprint F0 — Backend Abstraction _(complete)_
 
 **Objective:** Prepare the application so a real backend can be plugged in later with minimal changes, before any actual backend SDK is introduced.
 
@@ -91,7 +94,7 @@
 
 ---
 
-### Sprint F1 — Firebase SDK Integration *(complete)*
+### Sprint F1 — Firebase SDK Integration _(complete)_
 
 **Objective:** Introduce Firebase into the application without connecting it to anything yet — the app must keep running entirely on Mock.
 
@@ -101,7 +104,7 @@
 
 ---
 
-### Sprint F2 — Firestore Product Repository *(complete)*
+### Sprint F2 — Firestore Product Repository _(complete)_
 
 **Objective:** Stand up the first real Firestore-backed repository, scoped to Product Master only.
 
@@ -111,7 +114,7 @@
 
 ---
 
-### Sprint F2.1 — Firestore Hardening *(complete)*
+### Sprint F2.1 — Firestore Hardening _(complete)_
 
 **Objective:** Improve maintainability and deployment readiness of the Firestore infrastructure — no new business features, no UI changes.
 
@@ -121,7 +124,7 @@
 
 ---
 
-### Sprint F2.2 — Documentation Refresh *(complete)*
+### Sprint F2.2 — Documentation Refresh _(complete)_
 
 **Objective:** Bring `PROJECT_STATE.md`, `PRODUCT_ROADMAP.md`, `SPRINT_ROADMAP.md` (this file), `DATABASE_SCHEMA.md`, and `DECISIONS.md` back in sync with the actual codebase after the Product Master / Firestore work above. Documentation only — no application code touched.
 
@@ -140,7 +143,7 @@ verification, and the first staff-only Firebase Hosting rollout. The current
 production record is in `PROJECT_STATE.md`; `@supabase/supabase-js` remains an
 unused, orphaned dependency.
 
-### Sprint 2 — UX, Accessibility & Thai-First Pass *(in progress; F5d-64 P0/P1 live)*
+### Sprint 2 — UX, Accessibility & Thai-First Pass _(in progress; F5d-64 P0/P1 live)_
 
 **Objective:** Bring the UI up to a real, launch-shaped standard: usable by screen readers/keyboard, and dressed in Thai-market conventions instead of English/placeholder content. (Note: the intake form itself is no longer non-functional — that part of the original Sprint 2 scope was delivered early, during the Search/Intake phases above.)
 
@@ -174,6 +177,7 @@ authenticated StaffShell/list/link/drawer smoke was unavailable because neither
 safe browser surface had an existing staff session.
 
 **Remaining deliverables:**
+
 - Deferred P2/P3 accessibility work: `aria-current="step"` timeline and
   progress semantics, PhotoGallery and DownloadMenu improvements, import
   chooser and broader ProductFieldsForm cleanup, contrast, reduced motion,
@@ -185,7 +189,7 @@ safe browser surface had an existing staff session.
 
 ---
 
-### F5d-65 — Atomic new-customer + product registration *(Production, 2026-08-17)*
+### F5d-65 — Atomic new-customer + product registration _(Production, 2026-08-17)_
 
 **Objective:** Close the gap the New Service Job flow has had since the
 Firestore cutover — Universal Search could find an existing customer, but
@@ -231,7 +235,7 @@ record. Production is F5d-65.
 
 ---
 
-### F5d-66/F5d-66A/F5d-66B — Service Report live persistence *(Production, 2026-08-17)*
+### F5d-66/F5d-66A/F5d-66B — Service Report live persistence _(Production, 2026-08-17)_
 
 **Objective:** Activate live Firestore persistence for Service Reports —
 source-complete since SR-4/SR-4.1 but intentionally blocked pending a Rules
@@ -279,7 +283,7 @@ rollout.
 
 ---
 
-### F5d-67/F5d-67A — Service Job intake photo hotfix *(Production, 2026-08-17)*
+### F5d-67/F5d-67A — Service Job intake photo hotfix _(Production, 2026-08-17)_
 
 **Objective:** Fix a production bug where New Service Job evidence photos
 failed to submit — root-caused (Phase 1, read-only) to real camera photos
@@ -292,7 +296,7 @@ creation transaction ever began (no partial-job or duplicate-job risk).
 processed through a bounded-concurrency pool (2 at a time, not unbounded).
 Three layered ceilings with real margin under the unchanged Worker caps
 (300 KiB/photo, 700 KiB aggregate, 900 KiB intake): 260 KiB absolute
-per-photo, a 600 KiB compression *target* aggregate (200 KiB/photo across
+per-photo, a 600 KiB compression _target_ aggregate (200 KiB/photo across
 the UI's recommended 3-photo checklist, with a genuine 40 KiB headroom —
 tightened from an initial ~1-byte margin found at Phase 3 review), a 640 KiB
 hard rejection ceiling, and a new 860 KiB whole-request UTF-8 byte guard.
@@ -326,7 +330,7 @@ while the footer still declares "page 1 of 1." **Resolved by F5d-68 below.**
 
 ---
 
-### F5d-68/F5d-68A — Service Request one-page print fix *(Production, 2026-08-17)*
+### F5d-68/F5d-68A — Service Request one-page print fix _(Production, 2026-08-17)_
 
 **Objective:** Fix the deferred print bug carried over from F5d-67 — the
 Service Request printed as 2 physical pages while its own footer declared
@@ -378,7 +382,7 @@ release `1786984404257000` / version `234caccc3034c98f`.
 
 ---
 
-### F5d-69/F5d-69G — Contact/order/evidence metadata and Public Tracking activation *(Production, 2026-08-18–19)*
+### F5d-69/F5d-69G — Contact/order/evidence metadata and Public Tracking activation _(Production, 2026-08-18–19)_
 
 Condensed bridge entry — see `PROJECT_STATE.md`'s F5d-69/F5d-69G entry for
 what this repository can currently support with directly-verified evidence.
@@ -394,7 +398,7 @@ issuing browser session, never persisted in plaintext anywhere.
 
 ---
 
-### F5d-70 — Core reactivity, UI reconciliation, and Internal Notes persistence fix *(Production, 2026-08-20)*
+### F5d-70 — Core reactivity, UI reconciliation, and Internal Notes persistence fix _(Production, 2026-08-20)_
 
 **Objective:** Make a mounted Service Job list/detail view reactively reflect
 changes made elsewhere (`useSyncExternalStore` over the existing
@@ -437,7 +441,7 @@ F5d-70 entry for the complete evidence record. Production is now F5d-70
 
 ---
 
-### Sprint F3/F4 repository expansion *(delivered through later F-series work)*
+### Sprint F3/F4 repository expansion _(delivered through later F-series work)_
 
 Customer, Service Job, Search, Registered Product, attachment, and related
 staff repositories now have Firestore/Worker production paths. Their actual
@@ -447,7 +451,7 @@ roadmap lineage it superseded.
 
 ---
 
-### Auth expansion *(staff Auth delivered; broader roles remain)*
+### Auth expansion _(staff Auth delivered; broader roles remain)_
 
 Firebase Email/Password staff login, staff-profile/brand authorization, and
 the reviewed Firestore Rules are live. Broader Admin and Customer role models,
@@ -455,7 +459,7 @@ account lifecycle, and administration UX remain future scopes.
 
 ---
 
-### Photos & Attachments *(production foundation delivered; UX expansion remains)*
+### Photos & Attachments _(production foundation delivered; UX expansion remains)_
 
 Private production attachment storage uses the authenticated Cloudflare
 Worker plus R2 path. Remaining work is product/UI scope such as broader
@@ -466,7 +470,7 @@ Firebase Storage is not the selected production design.
 
 ---
 
-### Notifications *(not yet scoped)*
+### Notifications _(not yet scoped)_
 
 Customer status-change notifications via SMS/LINE/email — channel choice still undecided (see `PRODUCT_ROADMAP.md`).
 
@@ -474,7 +478,7 @@ Customer status-change notifications via SMS/LINE/email — channel choice still
 
 ---
 
-### Repair Reports, Approvals & Admin Console *(not yet scoped)*
+### Repair Reports, Approvals & Admin Console _(not yet scoped)_
 
 Factory-facing Repair Report workflow (multiple reports per service job, parts, append-only approval log — [DECISIONS.md](DECISIONS.md) #016) and brand/user/settings management for Admins.
 
@@ -482,7 +486,7 @@ Factory-facing Repair Report workflow (multiple reports per service job, parts, 
 
 ---
 
-### QA Hardening & Launch Readiness *(not yet scoped)*
+### QA Hardening & Launch Readiness _(not yet scoped)_
 
 Print-layout implementation for all three V1 documents (per
 `PRINT_SPECIFICATIONS.md` — Service Request print preview already exists,

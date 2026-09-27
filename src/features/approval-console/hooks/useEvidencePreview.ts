@@ -15,7 +15,11 @@ export interface EvidencePreviewController {
   resolve(attachmentKey: string): void;
 }
 
-const IDLE_STATE: EvidencePreviewState = { status: 'idle', url: null, errorMessage: null };
+const IDLE_STATE: EvidencePreviewState = {
+  status: 'idle',
+  url: null,
+  errorMessage: null,
+};
 
 type EvidencePreviewStore = Record<string, EvidencePreviewState>;
 
@@ -49,10 +53,12 @@ const EMPTY_STORE: EvidencePreviewStore = {};
 // dispatching two downloads of which only one could ever be displayed (the
 // same reason the D25 decision latch is a ref — see useApprovalConsoleReads).
 export function useEvidencePreview(ownerKey: string): EvidencePreviewController {
-  const [store, setStore] = useState<{ owner: string; byKey: EvidencePreviewStore }>(() => ({
-    owner: ownerKey,
-    byKey: EMPTY_STORE,
-  }));
+  const [store, setStore] = useState<{ owner: string; byKey: EvidencePreviewStore }>(
+    () => ({
+      owner: ownerKey,
+      byKey: EMPTY_STORE,
+    })
+  );
   const ownedUrls = useRef<Map<string, string>>(new Map());
   const inFlight = useRef<Set<string>>(new Set());
   const ownership = useRef<{ owner: string | null; generation: number }>({

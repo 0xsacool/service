@@ -200,7 +200,10 @@ test('a null (unrecognized/blank) category never counts as a change', () => {
 
 test('adding a SKU to a SKU-less product IS a change', () => {
   const legacy = product({ id: 'legacy', sku: null, model: 'ABC-123' });
-  const changed = changedImportOwnedFields(fields({ sku: 'ABC-123', model: 'ABC-123' }), legacy);
+  const changed = changedImportOwnedFields(
+    fields({ sku: 'ABC-123', model: 'ABC-123' }),
+    legacy
+  );
   assert.ok(changed.includes('sku'));
 });
 
@@ -220,7 +223,10 @@ test('the fingerprint changes when an import-owned field changes', async () => {
 
 test('the fingerprint changes when a product is added or removed', async () => {
   const one = await computeCatalogFingerprint([product()]);
-  const two = await computeCatalogFingerprint([product(), product({ id: 'p2', sku: 'B' })]);
+  const two = await computeCatalogFingerprint([
+    product(),
+    product({ id: 'p2', sku: 'B' }),
+  ]);
   assert.notEqual(one, two);
 });
 
@@ -294,7 +300,10 @@ test('a well-formed request parses', () => {
 });
 
 test('an unknown root or row key is rejected', () => {
-  assert.equal(parseProductImportRequest({ ...request(), extra: 1 }).failure, 'unknown_field');
+  assert.equal(
+    parseProductImportRequest({ ...request(), extra: 1 }).failure,
+    'unknown_field'
+  );
   const withRowKey = request();
   withRowKey.rows[0].extra = 1;
   assert.equal(parseProductImportRequest(withRowKey).failure, 'unknown_field');
@@ -317,7 +326,11 @@ test('every forbidden server-owned field is rejected explicitly, not silently dr
     body.rows[0][forbidden] = 'x';
     const result = parseProductImportRequest(body);
     assert.equal(result.ok, false, `${forbidden} should be rejected`);
-    assert.equal(result.failure, 'forbidden_field', `${forbidden} should be forbidden_field`);
+    assert.equal(
+      result.failure,
+      'forbidden_field',
+      `${forbidden} should be forbidden_field`
+    );
   }
 });
 
@@ -339,11 +352,41 @@ test('the row cap is enforced at exactly 200', () => {
 });
 
 test('rowNumber must be a strictly ascending positive integer', () => {
-  assert.equal(parseProductImportRequest(request({ rows: [{ rowNumber: 0, brand: 'B', sku: null, model: 'M', productName: 'N', category: null }] })).failure, 'invalid_row_number');
+  assert.equal(
+    parseProductImportRequest(
+      request({
+        rows: [
+          {
+            rowNumber: 0,
+            brand: 'B',
+            sku: null,
+            model: 'M',
+            productName: 'N',
+            category: null,
+          },
+        ],
+      })
+    ).failure,
+    'invalid_row_number'
+  );
   const outOfOrder = request({
     rows: [
-      { rowNumber: 3, brand: 'B', sku: 'A', model: 'M', productName: 'N', category: null },
-      { rowNumber: 2, brand: 'B', sku: 'C', model: 'M', productName: 'N', category: null },
+      {
+        rowNumber: 3,
+        brand: 'B',
+        sku: 'A',
+        model: 'M',
+        productName: 'N',
+        category: null,
+      },
+      {
+        rowNumber: 2,
+        brand: 'B',
+        sku: 'C',
+        model: 'M',
+        productName: 'N',
+        category: null,
+      },
     ],
   });
   assert.equal(parseProductImportRequest(outOfOrder).failure, 'invalid_row_number');
@@ -365,7 +408,11 @@ test('formula-style values are rejected on every sigil', () => {
   for (const sigil of ['=', '+', '-', '@']) {
     const body = request();
     body.rows[0].productName = `${sigil}CMD()`;
-    assert.equal(parseProductImportRequest(body).failure, 'unsafe_value', `${sigil} should be rejected`);
+    assert.equal(
+      parseProductImportRequest(body).failure,
+      'unsafe_value',
+      `${sigil} should be rejected`
+    );
   }
 });
 
@@ -384,12 +431,21 @@ test('length limits are measured in CODE POINTS, not UTF-16 units', () => {
 });
 
 test('the catalog fingerprint field must be a SHA-256 hex digest', () => {
-  assert.equal(parseProductImportRequest(request({ catalogFingerprint: 'nope' })).failure, 'invalid_field');
-  assert.equal(parseProductImportRequest(request({ catalogFingerprint: 'A'.repeat(64) })).failure, 'invalid_field');
+  assert.equal(
+    parseProductImportRequest(request({ catalogFingerprint: 'nope' })).failure,
+    'invalid_field'
+  );
+  assert.equal(
+    parseProductImportRequest(request({ catalogFingerprint: 'A'.repeat(64) })).failure,
+    'invalid_field'
+  );
 });
 
 test('an unsupported version is rejected', () => {
-  assert.equal(parseProductImportRequest(request({ version: 2 })).failure, 'unsupported_version');
+  assert.equal(
+    parseProductImportRequest(request({ version: 2 })).failure,
+    'unsupported_version'
+  );
 });
 
 test('the canonical request string is positional and order-sensitive', () => {
@@ -397,8 +453,22 @@ test('the canonical request string is positional and order-sensitive', () => {
   const reordered = parseProductImportRequest(
     request({
       rows: [
-        { rowNumber: 1, brand: 'BRUNO', sku: 'A', model: 'M', productName: 'N', category: null },
-        { rowNumber: 2, brand: 'BRUNO', sku: 'B', model: 'M', productName: 'N', category: null },
+        {
+          rowNumber: 1,
+          brand: 'BRUNO',
+          sku: 'A',
+          model: 'M',
+          productName: 'N',
+          category: null,
+        },
+        {
+          rowNumber: 2,
+          brand: 'BRUNO',
+          sku: 'B',
+          model: 'M',
+          productName: 'N',
+          category: null,
+        },
       ],
     })
   ).value;
@@ -434,7 +504,10 @@ test('classification: identical row is skipped', () => {
 });
 
 test('classification: changed row is updated and reports its write mask', () => {
-  const result = classifyProductImport([classifyRow({ productName: 'Renamed' })], [product()]);
+  const result = classifyProductImport(
+    [classifyRow({ productName: 'Renamed' })],
+    [product()]
+  );
   assert.equal(result.rows[0].status, 'updated');
   assert.deepEqual(result.rows[0].changedFields, ['productName']);
   assert.equal(result.rows[0].productId, 'p1');
@@ -450,7 +523,10 @@ test('classification: an unrecognized category warns but does not error', () => 
 
 test('classification: duplicate request identities are errors on EVERY implicated row', () => {
   const result = classifyProductImport(
-    [classifyRow({ rowNumber: 1, sku: 'DUP' }), classifyRow({ rowNumber: 2, sku: 'dup' })],
+    [
+      classifyRow({ rowNumber: 1, sku: 'DUP' }),
+      classifyRow({ rowNumber: 2, sku: 'dup' }),
+    ],
     []
   );
   assert.equal(result.rows[0].status, 'error');
@@ -506,6 +582,8 @@ test('category resolution accepts either the canonical id or the display name, c
 
 test('the shared category list is the same object the mock fixture re-exports', async () => {
   const shared = await vite.ssrLoadModule('/src/services/productCategories.ts');
-  const fixture = await vite.ssrLoadModule('/src/repositories/mockData/productMaster.mock.ts');
+  const fixture = await vite.ssrLoadModule(
+    '/src/repositories/mockData/productMaster.mock.ts'
+  );
   assert.equal(fixture.productCategories, shared.productCategories);
 });

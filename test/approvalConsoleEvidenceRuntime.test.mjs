@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { after, beforeEach, test } from 'node:test';
-import { createComponentRuntimeServer, COMPONENT_RUNTIME_PATH } from './support/componentRuntimeServer.mjs';
+import {
+  createComponentRuntimeServer,
+  COMPONENT_RUNTIME_PATH,
+} from './support/componentRuntimeServer.mjs';
 
 // Phase 6R-B.2 — SF-2 (late evidence URL cleanup) and SF-3 (evidence error
 // sanitization), proven by mounting the real EvidenceList and driving the real
@@ -16,16 +19,17 @@ import { createComponentRuntimeServer, COMPONENT_RUNTIME_PATH } from './support/
 const vite = await createComponentRuntimeServer('evidence');
 after(() => vite.close());
 
-const { mountComponent, createElement, deferred } = await vite.ssrLoadModule(
-  COMPONENT_RUNTIME_PATH
-);
+const { mountComponent, createElement, deferred } =
+  await vite.ssrLoadModule(COMPONENT_RUNTIME_PATH);
 const { EvidenceList } = await vite.ssrLoadModule(
   '/src/features/approval-console/components/EvidenceList.tsx'
 );
 const { EVIDENCE_ERROR_MESSAGES } = await vite.ssrLoadModule(
   '/src/features/approval-console/approvalConsoleUi.ts'
 );
-const { repositories } = await vite.ssrLoadModule('/src/repositories/repositoryProvider.ts');
+const { repositories } = await vite.ssrLoadModule(
+  '/src/repositories/repositoryProvider.ts'
+);
 
 const JOB = 'BRN-2026-000001';
 const KEY_A = 'service-jobs/BRN-2026-000001/before/photo-1.jpg';
@@ -75,7 +79,10 @@ beforeEach(() => {
   globalThis.URL.revokeObjectURL = (url) => revoked.push(url);
   repositories.attachments = {
     ...originalAttachments,
-    getForJob: () => [attachmentRow(KEY_A, 'ก่อนซ่อม.jpg'), attachmentRow(KEY_B, 'หลังซ่อม.jpg')],
+    getForJob: () => [
+      attachmentRow(KEY_A, 'ก่อนซ่อม.jpg'),
+      attachmentRow(KEY_B, 'หลังซ่อม.jpg'),
+    ],
     getDownloadUrl(id) {
       const gate = deferred();
       pending.push({ id, gate });
@@ -115,7 +122,11 @@ test('SF-2 case 1: a resolution that lands before unmount is published, then rev
   const image = root.find((node) => node.type === 'img');
   assert.ok(image, 'a resolved image evidence item renders through the resolved URL');
   assert.equal(image.props.src, 'blob:evidence-a');
-  assert.deepEqual(revoked, [], 'a live, displayed URL is not revoked while it is on screen');
+  assert.deepEqual(
+    revoked,
+    [],
+    'a live, displayed URL is not revoked while it is on screen'
+  );
 
   root.unmount();
   assert.deepEqual(revoked, ['blob:evidence-a']);
@@ -127,7 +138,11 @@ test('SF-2 case 2: a resolution that lands after unmount is revoked immediately 
   const rendersBeforeUnmount = root.renders();
 
   root.unmount();
-  assert.deepEqual(revoked, [], 'nothing to revoke yet — the URL does not exist at unmount');
+  assert.deepEqual(
+    revoked,
+    [],
+    'nothing to revoke yet — the URL does not exist at unmount'
+  );
 
   pending[0].gate.resolve('blob:late-after-unmount');
   await root.flush();
@@ -140,7 +155,7 @@ test('SF-2 case 2: a resolution that lands after unmount is revoked immediately 
   );
 });
 
-test('SF-2 case 3: A pending, B selected, late A — no publish into B and A\'s URL is revoked', async () => {
+test("SF-2 case 3: A pending, B selected, late A — no publish into B and A's URL is revoked", async () => {
   const root = mountEvidence('report-a');
   await root.click(viewButton(root));
   assert.equal(pending.length, 1);
@@ -150,18 +165,21 @@ test('SF-2 case 3: A pending, B selected, late A — no publish into B and A\'s 
   // same EvidenceList instance — the case unmount cleanup alone cannot catch.
   await root.rerender(evidenceElement('report-b'));
   assert.ok(viewButton(root), 'B starts from an unresolved evidence item');
-  assert.equal(root.find((node) => node.type === 'img'), null);
+  assert.equal(
+    root.find((node) => node.type === 'img'),
+    null
+  );
 
   pending[0].gate.resolve('blob:late-a');
   await root.flush();
 
-  assert.deepEqual(revoked, ['blob:late-a'], 'A\'s object URL is released, not leaked');
+  assert.deepEqual(revoked, ['blob:late-a'], "A's object URL is released, not leaked");
   assert.equal(
     root.find((node) => node.type === 'img'),
     null,
-    'A\'s late evidence never appears under B'
+    "A's late evidence never appears under B"
   );
-  assert.ok(viewButton(root), 'B\'s item is still offered as unresolved');
+  assert.ok(viewButton(root), "B's item is still offered as unresolved");
 });
 
 test('SF-2 case 3b: a selection change revokes an already-displayed URL from the previous review', async () => {
@@ -174,7 +192,10 @@ test('SF-2 case 3b: a selection change revokes an already-displayed URL from the
   await root.rerender(evidenceElement('report-b'));
 
   assert.deepEqual(revoked, ['blob:displayed-a']);
-  assert.equal(root.find((node) => node.type === 'img'), null);
+  assert.equal(
+    root.find((node) => node.type === 'img'),
+    null
+  );
   root.unmount();
 });
 
@@ -187,7 +208,10 @@ test('SF-2 case 4: a failed resolution renders a safe error and leaks nothing', 
   const alert = root.find((node) => node.props.role === 'alert');
   assert.ok(alert, 'the failure surfaces as an alert');
   assert.deepEqual(revoked, [], 'a failure creates no object URL to leak');
-  assert.equal(root.find((node) => node.type === 'img'), null);
+  assert.equal(
+    root.find((node) => node.type === 'img'),
+    null
+  );
 
   root.unmount();
   assert.deepEqual(revoked, []);
@@ -245,7 +269,11 @@ test('SF-2: two clicks in the same tick dispatch exactly one download', async ()
   root.clickSync(button);
   await root.flush();
 
-  assert.equal(pending.length, 1, 'the synchronous in-flight claim defeats the same-tick duplicate');
+  assert.equal(
+    pending.length,
+    1,
+    'the synchronous in-flight claim defeats the same-tick duplicate'
+  );
   pending[0].gate.resolve('blob:single');
   await root.flush();
   root.unmount();
@@ -255,11 +283,30 @@ test('SF-2: two clicks in the same tick dispatch exactly one download', async ()
 // --- SF-3: nothing from below getDownloadUrl reaches the screen -------------
 
 const HOSTILE_ERRORS = [
-  ['raw canonical R2 key', new Error(`Cannot get download URL for attachment "${KEY_A}": no such attachment exists`)],
-  ['worker/provider response body', new Error('Attachment download failed: R2 GetObject denied for bucket service-tech-files')],
-  ['bearer token', new Error('401 Unauthorized: Authorization: Bearer eyJhbGciOiJSUzI1NiJ9.staff-token')],
-  ['firestore path', new Error('projects/luxace-service/databases/(default)/documents/attachments/abc')],
-  ['non-Error rejection', 'service-jobs/BRN-2026-000001/before/photo-1.jpg leaked as a bare string'],
+  [
+    'raw canonical R2 key',
+    new Error(
+      `Cannot get download URL for attachment "${KEY_A}": no such attachment exists`
+    ),
+  ],
+  [
+    'worker/provider response body',
+    new Error(
+      'Attachment download failed: R2 GetObject denied for bucket service-tech-files'
+    ),
+  ],
+  [
+    'bearer token',
+    new Error('401 Unauthorized: Authorization: Bearer eyJhbGciOiJSUzI1NiJ9.staff-token'),
+  ],
+  [
+    'firestore path',
+    new Error('projects/luxace-service/databases/(default)/documents/attachments/abc'),
+  ],
+  [
+    'non-Error rejection',
+    'service-jobs/BRN-2026-000001/before/photo-1.jpg leaked as a bare string',
+  ],
 ];
 
 const FORBIDDEN = [
@@ -364,5 +411,8 @@ test('SF-2 (Phase 6R-B.3): no disposable evidence URL is ever written to persist
   await root.flush();
 
   assert.deepEqual(stored, [], 'the evidence path writes nothing to browser storage');
-  assert.ok(revoked.includes('blob:persist-probe'), 'the URL is disposed of, not retained');
+  assert.ok(
+    revoked.includes('blob:persist-probe'),
+    'the URL is disposed of, not retained'
+  );
 });

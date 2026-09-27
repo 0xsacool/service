@@ -155,7 +155,8 @@ export function PublicTrackingSection({
       // retry would silently rotate a credential that may already be in the
       // customer's hands. Recovery is always an explicit staff rotation.
       const conclusive =
-        issuanceError instanceof PublicTrackingIssuanceError && issuanceError.isConclusive;
+        issuanceError instanceof PublicTrackingIssuanceError &&
+        issuanceError.isConclusive;
       if (conclusive) {
         setError('ไม่สามารถสร้างรหัสติดตามได้ กรุณาลองอีกครั้ง');
       } else {
@@ -188,7 +189,9 @@ export function PublicTrackingSection({
   return (
     <GlassCard className="p-6 animate-[rise_0.55s_cubic-bezier(0.22,1,0.36,1)_both]">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold tracking-tight text-ink">การติดตามสาธารณะ</h2>
+        <h2 className="text-lg font-semibold tracking-tight text-ink">
+          การติดตามสาธารณะ
+        </h2>
         <span
           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
             isActive
@@ -206,8 +209,8 @@ export function PublicTrackingSection({
           role="status"
           className="mb-3 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-200"
         >
-          ไม่สามารถยืนยันผลการสร้างรหัสติดตามได้
-          หากระบบแสดงว่าเปิดใช้งานแล้ว ให้กด “ออกใหม่” เพื่อรับรหัสใหม่
+          ไม่สามารถยืนยันผลการสร้างรหัสติดตามได้ หากระบบแสดงว่าเปิดใช้งานแล้ว ให้กด
+          “ออกใหม่” เพื่อรับรหัสใหม่
         </p>
       )}
 
@@ -221,11 +224,17 @@ export function PublicTrackingSection({
             <p className="mt-1 break-all text-xs text-neutral-500">{trackingUrl}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <SecondaryButton onClick={() => void copy('code', issuedCode)} className="text-sm">
+            <SecondaryButton
+              onClick={() => void copy('code', issuedCode)}
+              className="text-sm"
+            >
               <Copy className="h-4 w-4" />
               คัดลอกรหัส
             </SecondaryButton>
-            <SecondaryButton onClick={() => void copy('link', trackingUrl)} className="text-sm">
+            <SecondaryButton
+              onClick={() => void copy('link', trackingUrl)}
+              className="text-sm"
+            >
               <LinkIcon className="h-4 w-4" />
               คัดลอกลิงก์
             </SecondaryButton>
@@ -242,7 +251,10 @@ export function PublicTrackingSection({
               onCancel={() => setConfirmingRotate(false)}
             />
           ) : (
-            <SecondaryButton onClick={() => setConfirmingRotate(true)} className="text-sm">
+            <SecondaryButton
+              onClick={() => setConfirmingRotate(true)}
+              className="text-sm"
+            >
               <RotateCw className="h-4 w-4" />
               ออกใหม่
             </SecondaryButton>
@@ -251,8 +263,8 @@ export function PublicTrackingSection({
       ) : isActive ? (
         <div className="space-y-3">
           <p className="text-sm text-neutral-500">
-            เปิดใช้งานแล้ว — รหัสเดิมไม่สามารถแสดงซ้ำได้ หากต้องการรหัสสำหรับส่งให้ลูกค้าหรือพิมพ์ QR
-            กรุณากด “ออกใหม่”
+            เปิดใช้งานแล้ว — รหัสเดิมไม่สามารถแสดงซ้ำได้
+            หากต้องการรหัสสำหรับส่งให้ลูกค้าหรือพิมพ์ QR กรุณากด “ออกใหม่”
           </p>
           {confirmingRotate ? (
             <RotateConfirmation
@@ -261,7 +273,10 @@ export function PublicTrackingSection({
               onCancel={() => setConfirmingRotate(false)}
             />
           ) : (
-            <SecondaryButton onClick={() => setConfirmingRotate(true)} className="text-sm">
+            <SecondaryButton
+              onClick={() => setConfirmingRotate(true)}
+              className="text-sm"
+            >
               <RotateCw className="h-4 w-4" />
               ออกใหม่ / Rotate tracking code
             </SecondaryButton>
@@ -272,7 +287,11 @@ export function PublicTrackingSection({
           <p className="text-sm text-neutral-500">
             ยังไม่ได้เปิดใช้งานการติดตามสาธารณะสำหรับงานบริการนี้
           </p>
-          <PrimaryButton onClick={() => void issue()} disabled={isIssuing} className="text-sm">
+          <PrimaryButton
+            onClick={() => void issue()}
+            disabled={isIssuing}
+            className="text-sm"
+          >
             <ShieldCheck className="h-4 w-4" />
             {isIssuing ? 'กำลังสร้างรหัส…' : 'สร้างรหัสติดตาม'}
           </PrimaryButton>

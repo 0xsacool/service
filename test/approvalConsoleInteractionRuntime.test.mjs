@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
-import { createComponentRuntimeServer, COMPONENT_RUNTIME_PATH } from './support/componentRuntimeServer.mjs';
+import {
+  createComponentRuntimeServer,
+  COMPONENT_RUNTIME_PATH,
+} from './support/componentRuntimeServer.mjs';
 
 // Phase 6R-B.2 — SF-5 runtime interaction fidelity for the two surfaces
 // Phase 4R.6 §37 found were only covered by a one-shot SSR render: the queue
@@ -16,7 +19,8 @@ import { createComponentRuntimeServer, COMPONENT_RUNTIME_PATH } from './support/
 const vite = await createComponentRuntimeServer('interaction');
 after(() => vite.close());
 
-const { mountComponent, createElement, deferred } = await vite.ssrLoadModule(COMPONENT_RUNTIME_PATH);
+const { mountComponent, createElement, deferred } =
+  await vite.ssrLoadModule(COMPONENT_RUNTIME_PATH);
 const { ApprovalQueueSearchControls } = await vite.ssrLoadModule(
   '/src/features/approval-console/components/ApprovalQueueSearchControls.tsx'
 );
@@ -84,7 +88,11 @@ test('search: typing an exact report number submits a report-number request verb
     reportNo: 'FR-2026-000001',
     pageSize: 25,
   });
-  assert.equal(input(root).props.value, 'FR-2026-000001', 'the field is controlled by the component');
+  assert.equal(
+    input(root).props.value,
+    'FR-2026-000001',
+    'the field is controlled by the component'
+  );
   root.unmount();
 });
 
@@ -111,7 +119,9 @@ test('search: blank and whitespace-only input never issues a search request', as
   await root.type(input(root), '   ');
   assert.deepEqual(last(), { mode: 'queue', pageSize: 25 });
   assert.ok(
-    requests.every((request) => request.mode !== 'report-number' || request.reportNo.trim().length > 0),
+    requests.every(
+      (request) => request.mode !== 'report-number' || request.reportNo.trim().length > 0
+    ),
     'no search request is ever issued for blank text'
   );
   root.unmount();
@@ -136,8 +146,16 @@ test('search: a mode switch retains no prior-mode text and issues no prior-mode 
   await root.type(input(root), 'FR-2026-000001');
 
   await root.click(root.button(TRACKING_TAB));
-  assert.equal(input(root).props.value, '', 'the previous mode\'s text does not carry over');
-  assert.deepEqual(last(), { mode: 'queue', pageSize: 25 }, 'the switch itself resets to the base queue');
+  assert.equal(
+    input(root).props.value,
+    '',
+    "the previous mode's text does not carry over"
+  );
+  assert.deepEqual(
+    last(),
+    { mode: 'queue', pageSize: 25 },
+    'the switch itself resets to the base queue'
+  );
 
   await root.type(input(root), 'FR-2026-000001');
   assert.deepEqual(
@@ -255,7 +273,10 @@ test('decision: confirming an approval sends decision "approved" with no rejecti
   await root.click(root.button('ยืนยันการอนุมัติ'));
 
   assert.deepEqual(calls, [['approved', null]]);
-  assert.ok(!root.text().includes('ยืนยันการอนุมัติใบรายงาน'), 'the modal closes on success');
+  assert.ok(
+    !root.text().includes('ยืนยันการอนุมัติใบรายงาน'),
+    'the modal closes on success'
+  );
   root.unmount();
 });
 
@@ -267,10 +288,16 @@ test('decision: decide() is called with exactly two arguments — no caller-supp
   await root.click(root.button('ยืนยันการปฏิเสธ'));
 
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].length, 2, 'the UI passes exactly decision + reason, nothing more');
+  assert.equal(
+    calls[0].length,
+    2,
+    'the UI passes exactly decision + reason, nothing more'
+  );
   assert.deepEqual(calls[0], ['rejected', 'a']);
   assert.ok(
-    !calls.flat().some((argument) => typeof argument === 'string' && argument.includes('sha256:')),
+    !calls
+      .flat()
+      .some((argument) => typeof argument === 'string' && argument.includes('sha256:')),
     'no digest-shaped value is ever handed to decide()'
   );
   root.unmount();
@@ -292,9 +319,17 @@ test('decision: a blank or whitespace-only rejection reason cannot be submitted'
   const root = mountDecision(state);
   await root.click(root.button('ปฏิเสธ'));
 
-  assert.equal(root.button('ยืนยันการปฏิเสธ').props.disabled, true, 'blank reason is refused');
+  assert.equal(
+    root.button('ยืนยันการปฏิเสธ').props.disabled,
+    true,
+    'blank reason is refused'
+  );
   await root.type(root.field('textarea'), '    ');
-  assert.equal(root.button('ยืนยันการปฏิเสธ').props.disabled, true, 'whitespace-only is refused');
+  assert.equal(
+    root.button('ยืนยันการปฏิเสธ').props.disabled,
+    true,
+    'whitespace-only is refused'
+  );
 
   await assert.rejects(
     async () => root.click(root.button('ยืนยันการปฏิเสธ')),
@@ -326,11 +361,27 @@ test('decision: an in-flight decision disables every terminal control', async ()
     createElement(ApprovalDecisionControls, { review: { ...state, isDeciding: true } })
   );
 
-  assert.equal(root.button('ยืนยันการปฏิเสธ'), null, 'the confirm control now reads as in progress');
+  assert.equal(
+    root.button('ยืนยันการปฏิเสธ'),
+    null,
+    'the confirm control now reads as in progress'
+  );
   assert.equal(root.button('กำลังปฏิเสธ').props.disabled, true);
-  assert.equal(root.button('ยกเลิก').props.disabled, true, 'cancel cannot abandon a commit mid-flight');
-  assert.equal(root.button('กำลังดำเนินการ').props.disabled, true, 'the approve entry point is disabled');
-  assert.equal(root.button('ปฏิเสธ').props.disabled, true, 'the reject entry point is disabled');
+  assert.equal(
+    root.button('ยกเลิก').props.disabled,
+    true,
+    'cancel cannot abandon a commit mid-flight'
+  );
+  assert.equal(
+    root.button('กำลังดำเนินการ').props.disabled,
+    true,
+    'the approve entry point is disabled'
+  );
+  assert.equal(
+    root.button('ปฏิเสธ').props.disabled,
+    true,
+    'the reject entry point is disabled'
+  );
   assert.deepEqual(calls, []);
   root.unmount();
 });
@@ -434,7 +485,11 @@ test('decision: a reject modal opened under A dispatches nothing under a distinc
 
   // B opening its own reject modal starts from an empty field.
   await root.click(root.button(REJECT_OPEN));
-  assert.equal(root.field('textarea').props.value, '', 'B starts with no inherited reason');
+  assert.equal(
+    root.field('textarea').props.value,
+    '',
+    'B starts with no inherited reason'
+  );
   assert.equal(
     root.button(REJECT_CONFIRM).props.disabled,
     true,
@@ -457,7 +512,11 @@ test('decision: a same-identity rerender keeps the modal and a legitimate decisi
   assert.equal(root.field('textarea').props.value, A_REASON, 'so does its reason');
 
   await root.click(root.button(REJECT_CONFIRM));
-  assert.deepEqual(again.calls, [['rejected', A_REASON]], 'the current review is decided once');
+  assert.deepEqual(
+    again.calls,
+    [['rejected', A_REASON]],
+    'the current review is decided once'
+  );
   assert.deepEqual(first.calls, [], 'the superseded state object is never called');
   assert.equal(root.field('textarea'), null, 'the modal closes on success');
   root.unmount();
@@ -486,7 +545,7 @@ test('decision: a modal that outlives a detour to B and back to A still belongs 
   assert.deepEqual(b.calls, [], 'B is never decided');
   assert.ok(
     a.calls.length === 0 || (a.calls.length === 1 && a.calls[0][0] === 'approved'),
-    'any decision that does happen is A\'s own, at most once'
+    "any decision that does happen is A's own, at most once"
   );
   root.unmount();
 });
@@ -522,7 +581,11 @@ test('decision: an identity change while a decision is in flight adds no second 
   gate.resolve();
   await root.flush();
 
-  assert.equal(aCalls.length, 1, 'the in-flight decision is not dispatched a second time');
+  assert.equal(
+    aCalls.length,
+    1,
+    'the in-flight decision is not dispatched a second time'
+  );
   assert.deepEqual(bCalls, [], "A's completion never dispatches against B");
   assert.ok(!root.text().includes(APPROVE_MODAL), "A's modal is gone under B");
   root.unmount();
@@ -532,18 +595,34 @@ test('decision: the review panel remounts the decision controls when the review 
   const a = decisionState({}, REVIEW_A);
   const b = decisionState({}, REVIEW_B);
   const root = mountComponent(
-    createElement(ApprovalReviewPanel, { review: panelState(a.state, REVIEW_A), onBack() {} })
+    createElement(ApprovalReviewPanel, {
+      review: panelState(a.state, REVIEW_A),
+      onBack() {},
+    })
   );
 
   await root.click(root.button(APPROVE_OPEN));
-  assert.ok(root.text().includes(APPROVE_MODAL), 'A opened its confirmation inside the panel');
-
-  await root.rerender(
-    createElement(ApprovalReviewPanel, { review: panelState(b.state, REVIEW_B), onBack() {} })
+  assert.ok(
+    root.text().includes(APPROVE_MODAL),
+    'A opened its confirmation inside the panel'
   );
 
-  assert.ok(!root.text().includes(APPROVE_MODAL), 'the identity key destroyed the previous modal state');
-  assert.equal(root.button(APPROVE_CONFIRM), null, 'no confirm control survived the remount');
+  await root.rerender(
+    createElement(ApprovalReviewPanel, {
+      review: panelState(b.state, REVIEW_B),
+      onBack() {},
+    })
+  );
+
+  assert.ok(
+    !root.text().includes(APPROVE_MODAL),
+    'the identity key destroyed the previous modal state'
+  );
+  assert.equal(
+    root.button(APPROVE_CONFIRM),
+    null,
+    'no confirm control survived the remount'
+  );
   await root.flush();
   assert.deepEqual(a.calls, []);
   assert.deepEqual(b.calls, []);
@@ -561,7 +640,7 @@ test('decision: unmounting while a modal is open dispatches nothing', async () =
   assert.deepEqual(calls, []);
 });
 
-test('decision: a refused decision surfaces the guard\'s Thai reason, not a raw Error message', async () => {
+test("decision: a refused decision surfaces the guard's Thai reason, not a raw Error message", async () => {
   const { state } = decisionState({
     async decide() {
       throw new ApprovalDecisionGuardError('review-stale');
@@ -574,8 +653,14 @@ test('decision: a refused decision surfaces the guard\'s Thai reason, not a raw 
   const alert = root.find((node) => node.props.role === 'alert');
   assert.ok(alert, 'the refusal is announced');
   assert.ok(root.text().includes(GUARD_REASON_MESSAGES['review-stale']));
-  assert.ok(!root.text().includes('Approval decision refused'), 'the raw guard message is not shown');
-  assert.ok(root.text().includes('ยืนยันการอนุมัติ'), 'the modal stays open so the approver can react');
+  assert.ok(
+    !root.text().includes('Approval decision refused'),
+    'the raw guard message is not shown'
+  );
+  assert.ok(
+    root.text().includes('ยืนยันการอนุมัติ'),
+    'the modal stays open so the approver can react'
+  );
   root.unmount();
 });
 
@@ -590,6 +675,9 @@ test('decision: a failed commit never renders as success and keeps the modal ope
   await root.click(root.button('ยืนยันการอนุมัติ'));
 
   assert.ok(root.find((node) => node.props.role === 'alert'));
-  assert.ok(root.text().includes('ยืนยันการอนุมัติใบรายงาน'), 'the confirmation is not dismissed');
+  assert.ok(
+    root.text().includes('ยืนยันการอนุมัติใบรายงาน'),
+    'the confirmation is not dismissed'
+  );
   root.unmount();
 });

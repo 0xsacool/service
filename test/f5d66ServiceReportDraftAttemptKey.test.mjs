@@ -129,7 +129,7 @@ test('switching jobs synchronously discards the previous pending attempt, not me
   assert.equal(keyBAgain, keyB, 'Job B must now own the single pending slot immediately');
 });
 
-test('a stale onSuccess() for an already-superseded job does not clear the newer job\'s pending key', () => {
+test("a stale onSuccess() for an already-superseded job does not clear the newer job's pending key", () => {
   // Simulates: Job A's request is in flight, the caller switches to Job B
   // before A's response arrives, and A's request *then* resolves
   // successfully. The stale resolution must not wipe out B's now-current
@@ -141,12 +141,16 @@ test('a stale onSuccess() for an already-superseded job does not clear the newer
   assert.equal(controller.get(JOB_B), keyB);
 });
 
-test('a stale onFailure() for an already-superseded job does not clear the newer job\'s pending key', () => {
+test("a stale onFailure() for an already-superseded job does not clear the newer job's pending key", () => {
   const controller = createServiceReportDraftAttemptKeyController();
   controller.get(JOB_A);
   const keyB = controller.get(JOB_B);
   controller.onFailure(JOB_A, 409); // stale conclusive failure for the superseded job A
-  assert.equal(controller.get(JOB_B), keyB, "B's pending key must be untouched by A's stale outcome");
+  assert.equal(
+    controller.get(JOB_B),
+    keyB,
+    "B's pending key must be untouched by A's stale outcome"
+  );
 });
 
 test('a full transport-retry-then-success sequence for one job: reuse, then reuse, then clear', () => {
@@ -175,7 +179,9 @@ test('two independent controller instances (simulating two different hook mounts
 
 test('a caller-supplied key generator is honored (proves get() never bypasses it)', () => {
   let calls = 0;
-  const controller = createServiceReportDraftAttemptKeyController(() => `fixed-key-${++calls}`);
+  const controller = createServiceReportDraftAttemptKeyController(
+    () => `fixed-key-${++calls}`
+  );
   const first = controller.get(JOB_A);
   const second = controller.get(JOB_A);
   assert.equal(first, 'fixed-key-1');

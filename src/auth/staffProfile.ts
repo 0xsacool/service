@@ -31,7 +31,12 @@ export function parseStaffProfile(
   role?: unknown,
   displayName?: unknown
 ): StaffProfile | null {
-  const core = parseCoreStaffProfile(requestedUid, documentUid, brandId, canImportProducts);
+  const core = parseCoreStaffProfile(
+    requestedUid,
+    documentUid,
+    brandId,
+    canImportProducts
+  );
   return core
     ? {
         ...core,

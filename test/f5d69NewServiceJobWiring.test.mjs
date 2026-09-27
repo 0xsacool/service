@@ -23,7 +23,11 @@ const newServiceJobSourcePromise = readSource(
 
 function extractFunctionBody(source, signaturePattern) {
   const match = source.match(signaturePattern);
-  assert.notEqual(match, null, `expected to find a function matching ${signaturePattern}`);
+  assert.notEqual(
+    match,
+    null,
+    `expected to find a function matching ${signaturePattern}`
+  );
   return match[1];
 }
 
@@ -72,11 +76,22 @@ test('derived-channel wiring: prefill updates only contactChannel and contactCha
   const prefillBlock = body.match(
     /if \(priorJob\?\.contactChannel\) \{([\s\S]*?)\n {4}\}/
   );
-  assert.notEqual(prefillBlock, null, 'expected an "if (priorJob?.contactChannel)" prefill block');
+  assert.notEqual(
+    prefillBlock,
+    null,
+    'expected an "if (priorJob?.contactChannel)" prefill block'
+  );
   const setIntakeCall = prefillBlock[1];
-  assert.match(setIntakeCall, /\.\.\.current,/, 'expected the rest of the current intake to be spread in, not replaced');
+  assert.match(
+    setIntakeCall,
+    /\.\.\.current,/,
+    'expected the rest of the current intake to be spread in, not replaced'
+  );
   assert.match(setIntakeCall, /contactChannel: priorJob\.contactChannel,/);
-  assert.match(setIntakeCall, /contactChannelIdentity: priorJob\.contactChannelIdentity \?\? '',/);
+  assert.match(
+    setIntakeCall,
+    /contactChannelIdentity: priorJob\.contactChannelIdentity \?\? '',/
+  );
   // Must NOT inject or reset any of the other six F5d-69 intake fields as
   // part of a channel prefill — those stay whatever the (already-reset,
   // per changeCustomer) current draft has.
@@ -100,13 +115,19 @@ test('derived-channel wiring: prefill updates only contactChannel and contactCha
 
 test('intake reset wiring: changeCustomer resets the full intake draft via setIntake(createEmptyServiceIntake())', async () => {
   const source = await newServiceJobSourcePromise;
-  const body = extractFunctionBody(source, /const changeCustomer = \(\) => \{([\s\S]*?)\n {2}\};/);
+  const body = extractFunctionBody(
+    source,
+    /const changeCustomer = \(\) => \{([\s\S]*?)\n {2}\};/
+  );
   assert.match(body, /setIntake\(createEmptyServiceIntake\(\)\)/);
 });
 
 test('intake reset wiring: changeProduct resets the full intake draft via setIntake(createEmptyServiceIntake())', async () => {
   const source = await newServiceJobSourcePromise;
-  const body = extractFunctionBody(source, /const changeProduct = \(\) => \{([\s\S]*?)\n {2}\};/);
+  const body = extractFunctionBody(
+    source,
+    /const changeProduct = \(\) => \{([\s\S]*?)\n {2}\};/
+  );
   assert.match(body, /setIntake\(createEmptyServiceIntake\(\)\)/);
 });
 
@@ -129,10 +150,16 @@ test('validation ordering: handleSaveAndPrint checks photos, then serviceIntakeM
   );
   const photoIndex = body.indexOf('validatePhotosForSubmission(intake.photos)');
   const metadataIndex = body.indexOf('serviceIntakeMetadataError(intake)');
-  const byteLimitIndex = body.indexOf('estimateIntakeRequestBytes(intakePayload, customerSelector)');
+  const byteLimitIndex = body.indexOf(
+    'estimateIntakeRequestBytes(intakePayload, customerSelector)'
+  );
   assert.equal(photoIndex >= 0, true, 'expected the F5d-67 photo validation check');
   assert.equal(metadataIndex >= 0, true, 'expected the F5d-69 metadata validation check');
-  assert.equal(byteLimitIndex >= 0, true, 'expected the F5d-67 whole-request byte-limit check');
+  assert.equal(
+    byteLimitIndex >= 0,
+    true,
+    'expected the F5d-67 whole-request byte-limit check'
+  );
   assert.equal(
     photoIndex < metadataIndex,
     true,
@@ -154,7 +181,11 @@ test('validation ordering: an invalid metadata state returns early, never reachi
   const metadataBlock = body.match(
     /const metadataError = serviceIntakeMetadataError\(intake\);\s*\n\s*if \(metadataError\) \{([\s\S]*?)\n {4}\}/
   );
-  assert.notEqual(metadataBlock, null, 'expected an "if (metadataError)" early-return block');
+  assert.notEqual(
+    metadataBlock,
+    null,
+    'expected an "if (metadataError)" early-return block'
+  );
   assert.match(metadataBlock[1], /return;/);
 });
 
@@ -168,12 +199,16 @@ test('F5d-67 request-size protection is preserved: MAX_INTAKE_REQUEST_SAFE_BYTES
 
 // --- 5. Channel re-click deselect (both components) --------------------------
 
-test('intake channel deselect: ContactOrderMetadataSection\'s channel picker supports re-click-to-clear (selecting the already-selected channel sets it back to null)', async () => {
+test("intake channel deselect: ContactOrderMetadataSection's channel picker supports re-click-to-clear (selecting the already-selected channel sets it back to null)", async () => {
   const source = await readSource(
     'src/features/service-jobs/components/ContactOrderMetadataSection.tsx'
   );
   const setChannelCall = source.match(/onClick=\{\(\) => setChannel\(([^)]*)\)\}/);
-  assert.notEqual(setChannelCall, null, 'expected the channel button\'s onClick to call setChannel(...)');
+  assert.notEqual(
+    setChannelCall,
+    null,
+    "expected the channel button's onClick to call setChannel(...)"
+  );
   assert.match(
     setChannelCall[1],
     /isSelected\s*\?\s*null\s*:\s*channel/,
@@ -181,12 +216,16 @@ test('intake channel deselect: ContactOrderMetadataSection\'s channel picker sup
   );
 });
 
-test('details channel deselect: ServiceEventMetadataEditSection\'s channel picker supports the same re-click-to-clear behavior', async () => {
+test("details channel deselect: ServiceEventMetadataEditSection's channel picker supports the same re-click-to-clear behavior", async () => {
   const source = await readSource(
     'src/features/service-jobs/components/ServiceEventMetadataEditSection.tsx'
   );
   const setChannelCall = source.match(/onClick=\{\(\) => setChannel\(([^)]*)\)\}/);
-  assert.notEqual(setChannelCall, null, 'expected the channel button\'s onClick to call setChannel(...)');
+  assert.notEqual(
+    setChannelCall,
+    null,
+    "expected the channel button's onClick to call setChannel(...)"
+  );
   assert.match(
     setChannelCall[1],
     /isSelected\s*\?\s*null\s*:\s*channel/,
@@ -206,7 +245,9 @@ test('both channel pickers clear contactChannelIdentity in the same setChannel h
     'src/features/service-jobs/components/ServiceEventMetadataEditSection.tsx'
   );
   for (const source of [intakeSource, detailsSource]) {
-    const setChannelFn = source.match(/const setChannel = \(channel: ChannelId \| null\) => \{([\s\S]*?)\n  \};/);
+    const setChannelFn = source.match(
+      /const setChannel = \(channel: ChannelId \| null\) => \{([\s\S]*?)\n  \};/
+    );
     assert.notEqual(setChannelFn, null);
     assert.match(setChannelFn[1], /contactChannel: channel,/);
     assert.match(

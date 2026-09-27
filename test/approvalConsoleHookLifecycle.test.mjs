@@ -184,7 +184,11 @@ test('D24: a late Job A response cannot overwrite Job B, and Job A is aborted', 
 
   host.rerender({ jobId: jobB });
   await host.flush();
-  assert.equal(repository.history.length, 2, 'switching Service Job starts its own fetch');
+  assert.equal(
+    repository.history.length,
+    2,
+    'switching Service Job starts its own fetch'
+  );
   assert.equal(repository.history[1].serviceJobId, jobB);
   assert.equal(
     repository.history[0].signal.aborted,
@@ -194,7 +198,10 @@ test('D24: a late Job A response cannot overwrite Job B, and Job A is aborted', 
 
   repository.history[1].resolve([historyRow('report-b', jobB)]);
   await host.flush();
-  assert.deepEqual(host.result().reports.map((report) => report.id), ['report-b']);
+  assert.deepEqual(
+    host.result().reports.map((report) => report.id),
+    ['report-b']
+  );
 
   repository.history[0].resolve([historyRow('report-a', jobA)]);
   await host.flush();
@@ -294,7 +301,10 @@ test('D24: a failed refetch preserves last-known data as stale and errored', asy
   await host.flush();
   repository.history[0].resolve([historyRow('report-known', jobId)]);
   await host.flush();
-  assert.deepEqual(host.result().reports.map((report) => report.id), ['report-known']);
+  assert.deepEqual(
+    host.result().reports.map((report) => report.id),
+    ['report-known']
+  );
 
   host.result().refresh();
   await host.flush();
@@ -485,7 +495,10 @@ test('D25: a failed mutation releases the latch and a valid retry dispatches onc
   await host.flush();
 
   const afterFailure = host.result();
-  assert.ok(afterFailure.error instanceof Error, 'the failure is surfaced, not swallowed');
+  assert.ok(
+    afterFailure.error instanceof Error,
+    'the failure is surfaced, not swallowed'
+  );
   assert.equal(afterFailure.isStale, true);
   assert.equal(afterFailure.isDeciding, false);
   // The latch released: this refusal is staleness, not a stuck in-flight claim.
@@ -530,7 +543,11 @@ test('D25: a committed decision refreshes queue state and marks the review stale
   await host.flush();
 
   assert.equal(committed, 1, 'the queue is told to refresh exactly once');
-  assert.equal(host.result().isStale, true, 'the decided review is no longer authoritative');
+  assert.equal(
+    host.result().isStale,
+    true,
+    'the decided review is no longer authoritative'
+  );
   assert.equal(host.result().decisionEnabled, false);
   host.unmount();
 });
@@ -557,7 +574,10 @@ test('D25: the queue loads its exact request and refreshes on focus and on deman
     nextCursor: null,
   });
   await host.flush();
-  assert.deepEqual(host.result().items.map((item) => item.reportId), ['report-one']);
+  assert.deepEqual(
+    host.result().items.map((item) => item.reportId),
+    ['report-one']
+  );
   assert.equal(host.result().isLoading, false);
 
   globalThis.window.dispatchEvent(new Event('focus'));
@@ -568,7 +588,10 @@ test('D25: the queue loads its exact request and refreshes on focus and on deman
   await host.flush();
   assert.ok(host.result().error instanceof Error);
   assert.equal(host.result().isStale, true, 'the last-known page is kept, marked stale');
-  assert.deepEqual(host.result().items.map((item) => item.reportId), ['report-one']);
+  assert.deepEqual(
+    host.result().items.map((item) => item.reportId),
+    ['report-one']
+  );
   host.unmount();
 });
 
@@ -653,7 +676,10 @@ test('SF-4: a failed refresh keeps hasAuthoritativeData true so retained items s
   assert.ok(host.result().error instanceof Error);
   assert.equal(host.result().hasAuthoritativeData, true);
   assert.equal(host.result().isStale, true);
-  assert.deepEqual(host.result().items.map((item) => item.reportId), ['report-one']);
+  assert.deepEqual(
+    host.result().items.map((item) => item.reportId),
+    ['report-one']
+  );
   host.unmount();
 });
 
@@ -674,13 +700,19 @@ test('SF-4: switching to a new request identity resets authority until that requ
   await host.flush();
   assert.equal(host.result().hasAuthoritativeData, true);
 
-  host.rerender({ request: { mode: 'report-number', reportNo: 'FR-2026-000009', pageSize: 25 } });
+  host.rerender({
+    request: { mode: 'report-number', reportNo: 'FR-2026-000009', pageSize: 25 },
+  });
   assert.equal(
     host.result().hasAuthoritativeData,
     false,
-    'the previous request\'s page says nothing about the new one'
+    "the previous request's page says nothing about the new one"
   );
-  assert.deepEqual(host.result().items, [], 'and its items are not shown under the new identity');
+  assert.deepEqual(
+    host.result().items,
+    [],
+    'and its items are not shown under the new identity'
+  );
   host.unmount();
 });
 
@@ -730,7 +762,11 @@ test('D25: a late decision success cannot overwrite the newly selected review', 
     "the newly selected review's loaded snapshot survives the older completion"
   );
   assert.equal(afterCompletion.review.reportId, 'report-two');
-  assert.equal(afterCompletion.isLoading, false, 'report-two must not be reset to loading');
+  assert.equal(
+    afterCompletion.isLoading,
+    false,
+    'report-two must not be reset to loading'
+  );
   assert.equal(afterCompletion.isStale, false, "report-one's staleness must not leak");
   assert.equal(afterCompletion.error, null);
   assert.equal(afterCompletion.decisionEnabled, true, 'report-two remains actionable');
@@ -814,8 +850,16 @@ test('D25: a decision completing while its own review is selected still publishe
   await host.flush();
 
   const settled = host.result();
-  assert.equal(settled.review.reportId, 'report-one', 'the decided review is retained, not emptied');
-  assert.equal(settled.isStale, true, 'same-identity completion still marks the review stale');
+  assert.equal(
+    settled.review.reportId,
+    'report-one',
+    'the decided review is retained, not emptied'
+  );
+  assert.equal(
+    settled.isStale,
+    true,
+    'same-identity completion still marks the review stale'
+  );
   assert.equal(settled.isLoading, false);
   assert.equal(settled.error, null);
   assert.equal(settled.isDeciding, false);

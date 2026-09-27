@@ -16,8 +16,7 @@ import {
 //   - a stale_catalog rejection, or a brand new wizard session, must burn
 //     the key — reusing it after the classification changes is never safe.
 export type PendingAttemptState =
-  | { kind: 'idle' }
-  | { kind: 'active'; idempotencyKey: string };
+  { kind: 'idle' } | { kind: 'active'; idempotencyKey: string };
 
 export function startAttempt(idempotencyKey: string): PendingAttemptState {
   return { kind: 'active', idempotencyKey };
@@ -145,7 +144,9 @@ export function persistAttempt(
   }
 }
 
-export function clearPersistedAttempt(storage: Storage | undefined = getBrowserStorage()): void {
+export function clearPersistedAttempt(
+  storage: Storage | undefined = getBrowserStorage()
+): void {
   removeStored(storage);
 }
 

@@ -11,7 +11,10 @@ import {
   processPhotoFile,
   wouldExceedAggregate,
 } from '../../../services/imageEvidenceProcessing';
-import { photoProcessingErrorMessage, photoValidationErrorMessage } from '../photoEvidenceErrorMessages';
+import {
+  photoProcessingErrorMessage,
+  photoValidationErrorMessage,
+} from '../photoEvidenceErrorMessages';
 
 // Processes every selected/dropped file through a small bounded-concurrency
 // pool (decode -> resize -> compress, see imageEvidenceProcessing.ts) rather
@@ -66,7 +69,10 @@ export function PhotoEvidenceSection({
     setError(null);
     setIsProcessing(true);
     try {
-      const { photos: processed, errors } = await processFilesAsPhotos(fileList, photos.length);
+      const { photos: processed, errors } = await processFilesAsPhotos(
+        fileList,
+        photos.length
+      );
       const accepted: PhotoEvidence[] = [];
       const rejections: string[] = [...errors];
       let working = photos;

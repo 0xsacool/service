@@ -67,7 +67,8 @@ after(() => {
   globalThis.fetch = originalFetch;
 });
 
-const { createRepositoryRuntimeServer } = await import('./support/repositoryRuntimeServer.mjs');
+const { createRepositoryRuntimeServer } =
+  await import('./support/repositoryRuntimeServer.mjs');
 const vite = await createRepositoryRuntimeServer('attachment-contract');
 after(() => vite.close());
 
@@ -78,12 +79,19 @@ const { createWorkerAttachmentsRepository } = await vite.ssrLoadModule(
   '/src/repositories/workerAttachmentsRepository.ts'
 );
 
-const tokenProvider = { async getIdToken() { return ID_TOKEN; } };
+const tokenProvider = {
+  async getIdToken() {
+    return ID_TOKEN;
+  },
+};
 const serviceJobsStub = { getById: (id) => ({ id, closedAt: null }) };
 
 let workerRepository;
 before(async () => {
-  workerRepository = await createWorkerAttachmentsRepository(serviceJobsStub, tokenProvider);
+  workerRepository = await createWorkerAttachmentsRepository(
+    serviceJobsStub,
+    tokenProvider
+  );
 });
 
 function jsonResponse(body) {
@@ -91,7 +99,9 @@ function jsonResponse(body) {
     ok: true,
     status: 200,
     statusText: 'OK',
-    async json() { return body; },
+    async json() {
+      return body;
+    },
   };
 }
 
@@ -100,7 +110,9 @@ function blobResponse(blob) {
     ok: true,
     status: 200,
     statusText: 'OK',
-    async blob() { return blob; },
+    async blob() {
+      return blob;
+    },
   };
 }
 
@@ -146,7 +158,10 @@ test('mock: the returned URL is never the raw R2 key, path, or any provider URL'
   assert.notEqual(url, attachment.path);
   assert.ok(!url.includes(attachment.path), 'the R2 key is not embedded in the URL');
   assert.ok(!url.includes('service-jobs/'), 'no key-shaped path escapes');
-  assert.ok(!url.startsWith('http:') && !url.startsWith('https:'), 'no provider/public URL');
+  assert.ok(
+    !url.startsWith('http:') && !url.startsWith('https:'),
+    'no provider/public URL'
+  );
 });
 
 test('mock: every call mints a fresh caller-owned URL — the repository retains and revokes nothing', async () => {
@@ -226,9 +241,15 @@ test('worker: the returned URL is never the R2 key or the Worker/provider URL th
   assert.notEqual(url, attachment.id);
   assert.notEqual(url, `${WORKER_BASE_URL}/files/${attachment.id}`);
   assert.ok(!url.includes(attachment.id), 'the R2 key is not embedded in the URL');
-  assert.ok(!url.includes(WORKER_BASE_URL), 'the Worker origin is not embedded in the URL');
+  assert.ok(
+    !url.includes(WORKER_BASE_URL),
+    'the Worker origin is not embedded in the URL'
+  );
   assert.ok(!url.includes('service-jobs/'), 'no key-shaped path escapes');
-  assert.ok(!url.startsWith('http:') && !url.startsWith('https:'), 'no signed/public URL');
+  assert.ok(
+    !url.startsWith('http:') && !url.startsWith('https:'),
+    'no signed/public URL'
+  );
 });
 
 test('worker: every call mints a fresh caller-owned URL — the repository retains and revokes nothing', async () => {
@@ -274,27 +295,46 @@ test('both implementations satisfy the same caller-owned disposable-object-URL c
       'produced by URL.createObjectURL, not string construction'
     );
   }
-  assert.equal(new Set(urls).size, urls.length, 'no URL is shared between implementations');
+  assert.equal(
+    new Set(urls).size,
+    urls.length,
+    'no URL is shared between implementations'
+  );
 });
 
 test('an unknown id rejects in both implementations rather than returning a URL', async () => {
   const created0 = created.length;
-  await assert.rejects(() => attachmentsRepository.getDownloadUrl('service-jobs/nope/before/x.jpg'));
-  await assert.rejects(() => workerRepository.getDownloadUrl('service-jobs/nope/before/x.jpg'));
-  assert.equal(created.length, created0, 'a refused resolution leaks no object URL to revoke');
+  await assert.rejects(() =>
+    attachmentsRepository.getDownloadUrl('service-jobs/nope/before/x.jpg')
+  );
+  await assert.rejects(() =>
+    workerRepository.getDownloadUrl('service-jobs/nope/before/x.jpg')
+  );
+  assert.equal(
+    created.length,
+    created0,
+    'a refused resolution leaks no object URL to revoke'
+  );
 });
 
 // --- regression guard on the canonical wording itself ----------------------
 
 test('the AttachmentsRepository interface states the contract and no longer claims sync/direct-string behavior', async () => {
   const { readFile } = await import('node:fs/promises');
-  const source = await readFile(new URL('../src/repositories/types.ts', import.meta.url), 'utf8');
+  const source = await readFile(
+    new URL('../src/repositories/types.ts', import.meta.url),
+    'utf8'
+  );
   const block = source.slice(
     source.indexOf('export interface AttachmentsRepository'),
     source.indexOf('deleteAttachment(id: string): Promise<void>')
   );
 
-  assert.match(block, /URL\.createObjectURL/, 'the contract names how the URL is produced');
+  assert.match(
+    block,
+    /URL\.createObjectURL/,
+    'the contract names how the URL is produced'
+  );
   assert.match(block, /ownership of it transfers to the CALLER/i);
   assert.match(block, /URL\.revokeObjectURL\(url\)/, 'the caller obligation is explicit');
   // The two false claims Phase 4R.6R found, as claims. (The JSDoc's historical

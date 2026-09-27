@@ -43,7 +43,8 @@ function makeElement(type, config, maybeKey) {
   let ref = null;
   for (const name of Object.keys(config ?? {})) {
     if (name === 'key') {
-      key = config[name] === null || config[name] === undefined ? key : String(config[name]);
+      key =
+        config[name] === null || config[name] === undefined ? key : String(config[name]);
     } else if (name === 'ref') {
       ref = config[name];
     } else {
@@ -208,7 +209,8 @@ function normalizeChildren(children) {
       value.forEach(push);
       return;
     }
-    if (value === null || value === undefined || value === false || value === true) return;
+    if (value === null || value === undefined || value === false || value === true)
+      return;
     flat.push(value);
   };
   push(children);
@@ -244,7 +246,12 @@ function reuse(previous, element) {
 }
 
 function renderElement(element, previous, root) {
-  if (element === null || element === undefined || element === false || element === true) {
+  if (
+    element === null ||
+    element === undefined ||
+    element === false ||
+    element === true
+  ) {
     unmountFiber(previous);
     return null;
   }
@@ -318,7 +325,13 @@ function renderElement(element, previous, root) {
         '(add its package to ssr.noExternal).'
     );
   }
-  const fiber = matched ?? { kind: 'component', type, key: element.key, slots: [], children: [] };
+  const fiber = matched ?? {
+    kind: 'component',
+    type,
+    key: element.key,
+    slots: [],
+    children: [],
+  };
   fiber.props = props;
   fiber.cursor = 0;
   const previousFiber = currentFiber;
@@ -471,7 +484,8 @@ export function mountComponent(element) {
     },
     button(label) {
       return (
-        findAll((node) => node.type === 'button' && nodeText(node).includes(label))[0] ?? null
+        findAll((node) => node.type === 'button' && nodeText(node).includes(label))[0] ??
+        null
       );
     },
     field(tag) {

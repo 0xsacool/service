@@ -71,7 +71,9 @@ export function NewServiceJob() {
   // as committed-but-unknowable). This stays null until staff explicitly
   // click "สร้างรหัสติดตาม" below; only then can the printed QR carry a real
   // credential. Transient component state only — never persisted anywhere.
-  const [savedPublicTrackingCode, setSavedPublicTrackingCode] = useState<string | null>(null);
+  const [savedPublicTrackingCode, setSavedPublicTrackingCode] = useState<string | null>(
+    null
+  );
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const successPreviewRef = useRef<HTMLDivElement>(null);
@@ -136,7 +138,9 @@ export function NewServiceJob() {
     const phone = normalizeCanonicalPhone(customer.phone);
     const priorJob = phone
       ? mostRecentJobWithContactChannel(
-          serviceJobs.filter((job) => normalizeCanonicalPhone(job.customerPhone) === phone)
+          serviceJobs.filter(
+            (job) => normalizeCanonicalPhone(job.customerPhone) === phone
+          )
         )
       : null;
     if (priorJob?.contactChannel) {
@@ -212,7 +216,10 @@ export function NewServiceJob() {
       intake,
     });
     const customerSelector = buildCustomerIntakeSelector(selectedCustomer);
-    if (estimateIntakeRequestBytes(intakePayload, customerSelector) > MAX_INTAKE_REQUEST_SAFE_BYTES) {
+    if (
+      estimateIntakeRequestBytes(intakePayload, customerSelector) >
+      MAX_INTAKE_REQUEST_SAFE_BYTES
+    ) {
       setSaveError(serviceJobIntakeTooLargeMessage());
       return;
     }

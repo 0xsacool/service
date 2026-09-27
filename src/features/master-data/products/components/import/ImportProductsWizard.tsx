@@ -277,9 +277,7 @@ export function ImportProductsWizard({
                 {isBusy ? 'กำลังนำเข้า…' : 'ลองอีกครั้ง'}
               </PrimaryButton>
             )}
-            {state.step === 'error' && (
-              <PrimaryButton onClick={reset}>ปิด</PrimaryButton>
-            )}
+            {state.step === 'error' && <PrimaryButton onClick={reset}>ปิด</PrimaryButton>}
           </div>
         )}
       </div>

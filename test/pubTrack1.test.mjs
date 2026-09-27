@@ -119,7 +119,10 @@ test('public DTO, Delivery Note, and Share message keep code/hash boundaries nar
   // references job.publicTrackingCodeHash for the three-state gate (never
   // displaying the hash value itself) and builds its QR value only through
   // the canonical helper — never a hand-built URL string.
-  assert.match(delivery, /buildPublicTrackingUrl\(window\.location\.origin, job\.id, publicTrackingCode\)/);
+  assert.match(
+    delivery,
+    /buildPublicTrackingUrl\(window\.location\.origin, job\.id, publicTrackingCode\)/
+  );
   assert.match(delivery, /job\.publicTrackingCodeHash !== null/);
   assert.doesNotMatch(delivery, /\{job\.publicTrackingCodeHash\}/);
   assert.doesNotMatch(delivery, /R2/);

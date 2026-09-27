@@ -36,8 +36,7 @@ interface ServiceReportHistoryItemBaseV1 {
   snapshot: ServiceReportSnapshot | null;
 }
 
-export interface ServiceReportHistoryItemLegacyV1
-  extends ServiceReportHistoryItemBaseV1 {
+export interface ServiceReportHistoryItemLegacyV1 extends ServiceReportHistoryItemBaseV1 {
   sourceSchemaVersion: 1;
 }
 
@@ -51,8 +50,7 @@ export interface ServiceReportHistoryItemV2 extends ServiceReportHistoryItemBase
 }
 
 export type ServiceReportHistoryItem =
-  | ServiceReportHistoryItemLegacyV1
-  | ServiceReportHistoryItemV2;
+  ServiceReportHistoryItemLegacyV1 | ServiceReportHistoryItemV2;
 
 export interface ServiceReportHistoryV1 {
   serviceJobId: string;

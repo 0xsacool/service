@@ -85,8 +85,13 @@ test('D25 browser repository and lifecycle bind decisions to a displayed review 
 
 test('read surfaces expose no transaction, mutation, R2, Product Import, or public tracking path', () => {
   for (const forbidden of [
-    'beginTransaction', 'commit(', 'idempotency', 'ATTACHMENTS_BUCKET',
-    'serviceReportApprovals', 'brandApprovalPolicies', 'productImports',
+    'beginTransaction',
+    'commit(',
+    'idempotency',
+    'ATTACHMENTS_BUCKET',
+    'serviceReportApprovals',
+    'brandApprovalPolicies',
+    'productImports',
     '/public/tracking',
   ]) {
     assert.equal(worker.includes(forbidden), false, forbidden);
@@ -100,8 +105,9 @@ test('final Rules deny all report lists and updates while retaining direct GET',
   assert.match(match[1], /allow list: if false/);
   assert.match(match[1], /allow update: if false/);
   assert.deepEqual(
-    [...match[1].matchAll(/allow\s+([^:]+):\s*if\s+([^;]+);/g)]
-      .map(([, operations, condition]) => [operations.trim(), condition.trim()]),
+    [...match[1].matchAll(/allow\s+([^:]+):\s*if\s+([^;]+);/g)].map(
+      ([, operations, condition]) => [operations.trim(), condition.trim()]
+    ),
     [
       ['get', 'staffOwnsServiceReport(resource.data)'],
       ['list', 'false'],
@@ -118,10 +124,21 @@ test('the frozen three indexes remain exact and no fourth index is introduced', 
     indexes.indexes.map((index) => index.fields.map((field) => field.fieldPath)),
     [
       ['brandId', 'schemaVersion', 'approvalState', 'finalizedAt', '__name__'],
-      ['brandId', 'schemaVersion', 'approvalState', 'reportNo', 'finalizedAt', '__name__'],
       [
-        'brandId', 'schemaVersion', 'approvalState',
-        'snapshot.trackingReference', 'finalizedAt', '__name__',
+        'brandId',
+        'schemaVersion',
+        'approvalState',
+        'reportNo',
+        'finalizedAt',
+        '__name__',
+      ],
+      [
+        'brandId',
+        'schemaVersion',
+        'approvalState',
+        'snapshot.trackingReference',
+        'finalizedAt',
+        '__name__',
       ],
     ]
   );
@@ -158,7 +175,11 @@ test('BLOCKER-4R5-1: the approval console is the only decideV2 caller in the bro
     'src/hooks/useServiceReports.ts',
     'src/features/service-jobs/components/ServiceReportsSection.tsx',
   ]) {
-    assert.doesNotMatch(codeOnly(read(path)), /decideV2/, `${path} must not call decideV2`);
+    assert.doesNotMatch(
+      codeOnly(read(path)),
+      /decideV2/,
+      `${path} must not call decideV2`
+    );
   }
   assert.match(codeOnly(read(callers[0])), /repositories\.serviceReports\.decideV2/);
 });
@@ -188,15 +209,23 @@ test('BLOCKER-4R5-1: the decision digest comes from the review, never from a cal
 });
 
 test('BLOCKER-4R5-1: decisionEnabled is derived from the same guard decide() enforces', () => {
-  const enabled = approvalHookCode.slice(approvalHookCode.lastIndexOf('decisionEnabled:'));
+  const enabled = approvalHookCode.slice(
+    approvalHookCode.lastIndexOf('decisionEnabled:')
+  );
   assert.match(enabled.slice(0, 600), /evaluateApprovalDecisionGuard\(/);
 });
 
 test('D24: documentary ordering is ordinal, never locale-sensitive', () => {
   assert.doesNotMatch(serviceReportServiceCode, /localeCompare|Intl\.Collator/);
   assert.match(serviceReportServiceCode, /export function compareOrdinal/);
-  assert.match(serviceReportServiceCode, /export function compareServiceReportDocumentaryOrder/);
-  assert.match(serviceReportServiceCode, /\.sort\(compareServiceReportDocumentaryOrder\)/);
+  assert.match(
+    serviceReportServiceCode,
+    /export function compareServiceReportDocumentaryOrder/
+  );
+  assert.match(
+    serviceReportServiceCode,
+    /\.sort\(compareServiceReportDocumentaryOrder\)/
+  );
 });
 
 test('D24: the 51-row sentinel is decided on row count before any row is parsed', () => {
@@ -245,7 +274,9 @@ const approvalDecisionControls = read(
   'src/features/approval-console/components/ApprovalDecisionControls.tsx'
 );
 const evidenceList = read('src/features/approval-console/components/EvidenceList.tsx');
-const evidencePreviewHook = read('src/features/approval-console/hooks/useEvidencePreview.ts');
+const evidencePreviewHook = read(
+  'src/features/approval-console/hooks/useEvidencePreview.ts'
+);
 const approvalConsoleRouteGuard = read('src/auth/ApprovalConsoleRouteGuard.tsx');
 const approvalConsoleAccess = read('src/services/approvalConsoleAccess.ts');
 
@@ -264,19 +295,20 @@ test('Phase 6R-B: ApprovalConsolePage is the only new useApprovalQueue/useApprov
     'src/features/approval-console/components/EvidenceList.tsx',
   ]) {
     const code = codeOnly(read(path));
-    assert.doesNotMatch(code, /useApprovalQueue\(|useApprovalReview\(/, `${path} must not call the D25 hooks directly`);
+    assert.doesNotMatch(
+      code,
+      /useApprovalQueue\(|useApprovalReview\(/,
+      `${path} must not call the D25 hooks directly`
+    );
   }
 });
 
-test('Phase 6R-B: the page passes the selected queue item\'s own serviceJobId/reportId, and queue.refresh verbatim as onDecisionCommitted', () => {
+test("Phase 6R-B: the page passes the selected queue item's own serviceJobId/reportId, and queue.refresh verbatim as onDecisionCommitted", () => {
   assert.match(
     approvalConsolePageCode,
     /useApprovalReview\(\s*serviceJobId,\s*reportId,\s*onDecisionCommitted\s*\)/
   );
-  assert.match(
-    approvalConsolePageCode,
-    /onDecisionCommitted=\{queue\.refresh\}/
-  );
+  assert.match(approvalConsolePageCode, /onDecisionCommitted=\{queue\.refresh\}/);
   assert.match(
     approvalConsolePageCode,
     /setSelected\(\{\s*serviceJobId:\s*item\.serviceJobId,\s*reportId:\s*item\.reportId\s*\}\)/
@@ -294,7 +326,10 @@ test('Phase 6R-B: ServiceReportsSection (ordinary history) never gains a decisio
 });
 
 test('Phase 6R-B: evidence is only ever rendered via a URL resolved through getDownloadUrl, never a raw R2 key concatenation', () => {
-  assert.match(codeOnly(evidencePreviewHook), /repositories\.attachments\.getDownloadUrl\(/);
+  assert.match(
+    codeOnly(evidencePreviewHook),
+    /repositories\.attachments\.getDownloadUrl\(/
+  );
   // No <a href=...> or <img src=...> may be built directly from the raw key
   // (e.g. `service-jobs/${...}` or the loop variable `key`) — only from the
   // resolved `state.url`.
@@ -303,7 +338,7 @@ test('Phase 6R-B: evidence is only ever rendered via a URL resolved through getD
   assert.match(evidenceListCode, /href=\{state\.url\}/);
 });
 
-test('Phase 6R-B.2 (SF-3): no evidence path anywhere reads a caught error\'s message', () => {
+test("Phase 6R-B.2 (SF-3): no evidence path anywhere reads a caught error's message", () => {
   // The runtime suite proves the safe message is what renders along the paths
   // it drives; this proves there is no OTHER path that could render a raw one.
   const evidencePreviewCode = codeOnly(evidencePreviewHook);
@@ -324,9 +359,9 @@ test('Phase 6R-B.2 (SF-2): every object URL the evidence controller creates is f
 });
 
 test('Phase 6R-B.2 (SF-4): the queue list can only claim emptiness from authoritative data', () => {
-  const queueListCode = codeOnly(read(
-    'src/features/approval-console/components/ApprovalQueueList.tsx'
-  ));
+  const queueListCode = codeOnly(
+    read('src/features/approval-console/components/ApprovalQueueList.tsx')
+  );
   assert.match(queueListCode, /queue\.hasAuthoritativeData/);
   // The empty state must not be reachable from items.length alone.
   assert.doesNotMatch(queueListCode, /queue\.items\.length === 0 \?/);
@@ -344,6 +379,10 @@ test('Phase 6R-B: no direct Firestore Approval Console list is introduced by the
     'src/features/approval-console/components/ApprovalQueueSearchControls.tsx',
   ]) {
     const code = codeOnly(read(path));
-    assert.doesNotMatch(code, /firebase\/firestore|collection\(|onSnapshot\(/, `${path} must not touch Firestore directly`);
+    assert.doesNotMatch(
+      code,
+      /firebase\/firestore|collection\(|onSnapshot\(/,
+      `${path} must not touch Firestore directly`
+    );
   }
 });

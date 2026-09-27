@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { PageContainer, PageHeader } from '../../../shared/components';
-import { useApprovalQueue, useApprovalReview } from '../../../hooks/useApprovalConsoleReads';
+import {
+  useApprovalQueue,
+  useApprovalReview,
+} from '../../../hooks/useApprovalConsoleReads';
 import type {
   ApprovalQueueItemV1,
   ApprovalQueueRequest,
@@ -30,7 +33,10 @@ function SelectedReview({
 }
 
 export function ApprovalConsolePage() {
-  const [request, setRequest] = useState<ApprovalQueueRequest>({ mode: 'queue', pageSize: 25 });
+  const [request, setRequest] = useState<ApprovalQueueRequest>({
+    mode: 'queue',
+    pageSize: 25,
+  });
   const [selected, setSelected] = useState<Selection | null>(null);
 
   const queue = useApprovalQueue(request);

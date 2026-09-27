@@ -1,6 +1,9 @@
 import type { ProductMasterEntry } from '../types';
 import { productMasterRepository } from './productMasterRepository';
-import type { ProductImportRequest, ProductImportRequestRow } from '../services/productImportRequest';
+import type {
+  ProductImportRequest,
+  ProductImportRequestRow,
+} from '../services/productImportRequest';
 import { buildCanonicalRequestString } from '../services/productImportRequest';
 import {
   classifyProductImport,

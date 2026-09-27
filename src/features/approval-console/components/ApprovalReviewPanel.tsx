@@ -7,7 +7,10 @@ import {
   SecondaryButton,
 } from '../../../shared/components';
 import { formatDate } from '../../../utils/formatDate';
-import { warrantyOutcomeColor, warrantyOutcomeLabel } from '../../../services/serviceJobPresentation';
+import {
+  warrantyOutcomeColor,
+  warrantyOutcomeLabel,
+} from '../../../services/serviceJobPresentation';
 import { SERVICE_ACTION_LABELS, RESULT_STATUS_LABELS } from '../approvalConsoleUi';
 import { EvidenceList } from './EvidenceList';
 import { ApprovalDecisionControls } from './ApprovalDecisionControls';
@@ -26,7 +29,9 @@ function ReadOnlySection({ title, value }: { title: string; value: string }) {
 function SummaryValue({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-neutral-400">{label}</dt>
+      <dt className="text-xs font-medium uppercase tracking-wide text-neutral-400">
+        {label}
+      </dt>
       <dd className="mt-1 text-sm font-medium text-ink">{value}</dd>
     </div>
   );
@@ -59,7 +64,9 @@ export function ApprovalReviewPanel({
           description={review.error.message}
           action={
             <SecondaryButton onClick={review.refresh} disabled={review.isLoading}>
-              <RefreshCw className={review.isLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+              <RefreshCw
+                className={review.isLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'}
+              />
               ลองอีกครั้ง
             </SecondaryButton>
           }
@@ -86,7 +93,9 @@ export function ApprovalReviewPanel({
               disabled={review.isLoading}
               className="px-4 py-2.5 text-sm"
             >
-              <RefreshCw className={review.isLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+              <RefreshCw
+                className={review.isLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'}
+              />
               รีเฟรช
             </SecondaryButton>
           </div>
@@ -121,7 +130,10 @@ export function ApprovalReviewPanel({
                 label="รุ่น / SKU"
                 value={review.review.snapshot.modelOrSku ?? 'ไม่มีข้อมูล'}
               />
-              <SummaryValue label="หมายเลขเครื่อง" value={review.review.snapshot.serialNumber} />
+              <SummaryValue
+                label="หมายเลขเครื่อง"
+                value={review.review.snapshot.serialNumber}
+              />
               <SummaryValue
                 label="ช่างผู้ดำเนินการ"
                 value={review.review.finalizedBy.displayName ?? 'ไม่ระบุชื่อ'}
@@ -155,7 +167,9 @@ export function ApprovalReviewPanel({
                   </span>
                 ))
               ) : (
-                <span className="text-sm text-neutral-400">ยังไม่มีการบันทึกการดำเนินการ</span>
+                <span className="text-sm text-neutral-400">
+                  ยังไม่มีการบันทึกการดำเนินการ
+                </span>
               )}
             </div>
           </GlassCard>
@@ -185,7 +199,10 @@ export function ApprovalReviewPanel({
             )}
           </GlassCard>
 
-          <ReadOnlySection title="หมายเหตุจากช่าง" value={review.review.content.technicianRemark} />
+          <ReadOnlySection
+            title="หมายเหตุจากช่าง"
+            value={review.review.content.technicianRemark}
+          />
 
           <GlassCard className="p-6">
             <h3 className="mb-4 font-semibold text-ink">ผลลัพธ์</h3>
@@ -204,7 +221,10 @@ export function ApprovalReviewPanel({
           <GlassCard className="p-6">
             <h3 className="mb-4 font-semibold text-ink">เลขเคลม / โรงงาน</h3>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <SummaryValue label="เลขที่เคลม" value={review.review.content.claimNo ?? '—'} />
+              <SummaryValue
+                label="เลขที่เคลม"
+                value={review.review.content.claimNo ?? '—'}
+              />
               <SummaryValue
                 label="เลขอ้างอิงโรงงาน"
                 value={review.review.content.factoryReference ?? '—'}

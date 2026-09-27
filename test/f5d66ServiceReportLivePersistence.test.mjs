@@ -109,7 +109,9 @@ test('createDraft POSTs to the Worker with a fresh UUID Idempotency-Key and the 
   const calls = [];
   currentHandler = async (input, init) => {
     calls.push({ url: String(input), init });
-    return new Response(JSON.stringify({ report: draftServiceReport() }), { status: 201 });
+    return new Response(JSON.stringify({ report: draftServiceReport() }), {
+      status: 201,
+    });
   };
 
   const repo = await createFirestoreServiceReportsRepository(
@@ -119,7 +121,10 @@ test('createDraft POSTs to the Worker with a fresh UUID Idempotency-Key and the 
   const created = await repo.createDraft(serviceJob.id, { technician: 'QA Tech' });
 
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, `${WORKER_BASE_URL}/service-jobs/${serviceJob.id}/service-reports`);
+  assert.equal(
+    calls[0].url,
+    `${WORKER_BASE_URL}/service-jobs/${serviceJob.id}/service-reports`
+  );
   assert.equal(calls[0].init.method, 'POST');
   assert.match(calls[0].init.headers.Authorization, /^Bearer fake-id-token$/);
   assert.equal(calls[0].init.headers['Content-Type'], 'application/json');
@@ -140,20 +145,27 @@ test('createDraft POSTs to the Worker with a fresh UUID Idempotency-Key and the 
 
 test('createDraft surfaces the Worker error message on failure (e.g. active draft already exists)', async () => {
   currentHandler = async () =>
-    new Response(JSON.stringify({ error: 'Active draft already exists' }), { status: 409 });
+    new Response(JSON.stringify({ error: 'Active draft already exists' }), {
+      status: 409,
+    });
 
   const repo = await createFirestoreServiceReportsRepository(
     fakeServiceJobsRepository(),
     fakeTokenProvider()
   );
-  await assert.rejects(() => repo.createDraft(serviceJob.id), /Active draft already exists/);
+  await assert.rejects(
+    () => repo.createDraft(serviceJob.id),
+    /Active draft already exists/
+  );
 });
 
 test('createDraft fails fast on an unknown Service Job before any Worker call', async () => {
   let called = false;
   currentHandler = async () => {
     called = true;
-    return new Response(JSON.stringify({ report: draftServiceReport() }), { status: 201 });
+    return new Response(JSON.stringify({ report: draftServiceReport() }), {
+      status: 201,
+    });
   };
 
   const repo = await createFirestoreServiceReportsRepository(
@@ -169,7 +181,9 @@ test('finalize resolves the parent Service Job from the just-created draft cache
   currentHandler = async (input, init) => {
     if (String(input).endsWith('/service-reports')) {
       calls.push({ phase: 'create', url: String(input), init });
-      return new Response(JSON.stringify({ report: draftServiceReport() }), { status: 201 });
+      return new Response(JSON.stringify({ report: draftServiceReport() }), {
+        status: 201,
+      });
     }
     calls.push({ phase: 'finalize', url: String(input), init });
     return new Response(
@@ -216,10 +230,14 @@ test('finalize resolves the parent Service Job from the just-created draft cache
 test('finalize surfaces the Worker error message on an incomplete-report rejection', async () => {
   currentHandler = async (input) => {
     if (String(input).endsWith('/service-reports')) {
-      return new Response(JSON.stringify({ report: draftServiceReport() }), { status: 201 });
+      return new Response(JSON.stringify({ report: draftServiceReport() }), {
+        status: 201,
+      });
     }
     return new Response(
-      JSON.stringify({ error: 'Service Report is incomplete: Result status is required' }),
+      JSON.stringify({
+        error: 'Service Report is incomplete: Result status is required',
+      }),
       { status: 400 }
     );
   };
@@ -241,7 +259,9 @@ test('createDraft sends a caller-supplied idempotencyKey verbatim instead of gen
   const headers = [];
   currentHandler = async (_input, init) => {
     headers.push(init.headers['Idempotency-Key']);
-    return new Response(JSON.stringify({ report: draftServiceReport() }), { status: 201 });
+    return new Response(JSON.stringify({ report: draftServiceReport() }), {
+      status: 201,
+    });
   };
 
   const repo = await createFirestoreServiceReportsRepository(
@@ -258,7 +278,9 @@ test('createDraft still generates its own key when no idempotencyKey is supplied
   const headers = [];
   currentHandler = async (_input, init) => {
     headers.push(init.headers['Idempotency-Key']);
-    return new Response(JSON.stringify({ report: draftServiceReport() }), { status: 201 });
+    return new Response(JSON.stringify({ report: draftServiceReport() }), {
+      status: 201,
+    });
   };
 
   const repo = await createFirestoreServiceReportsRepository(

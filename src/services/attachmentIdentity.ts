@@ -45,14 +45,18 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
   const digest = await crypto.subtle.digest('SHA-256', copy.buffer);
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, '0')
+  ).join('');
 }
 
 export function canonicalAttachmentKeyByteLength(value: string): number {
   return encoder.encode(value).byteLength;
 }
 
-export function isCanonicalAttachmentKey(value: unknown): value is CanonicalAttachmentKey {
+export function isCanonicalAttachmentKey(
+  value: unknown
+): value is CanonicalAttachmentKey {
   if (typeof value !== 'string') return false;
   const byteLength = canonicalAttachmentKeyByteLength(value);
   if (byteLength < 1 || byteLength > 1024 || !isPrintableAscii(value)) return false;
@@ -63,7 +67,8 @@ export function isCanonicalAttachmentKey(value: unknown): value is CanonicalAtta
 }
 
 export function assertCanonicalAttachmentKey(value: unknown): CanonicalAttachmentKey {
-  if (!isCanonicalAttachmentKey(value)) throw new Error('Invalid canonical attachment key');
+  if (!isCanonicalAttachmentKey(value))
+    throw new Error('Invalid canonical attachment key');
   return value;
 }
 
@@ -118,14 +123,20 @@ export async function verifyAttachmentMetadataAddress(
   documentId: string,
   storedKey: unknown
 ): Promise<boolean> {
-  return isCanonicalAttachmentKey(storedKey) && documentId === (await attachmentMetadataDocId(storedKey));
+  return (
+    isCanonicalAttachmentKey(storedKey) &&
+    documentId === (await attachmentMetadataDocId(storedKey))
+  );
 }
 
 export async function verifyAttachmentDeletionClaimAddress(
   documentId: string,
   storedKey: unknown
 ): Promise<boolean> {
-  return isCanonicalAttachmentKey(storedKey) && documentId === (await attachmentDeletionClaimDocId(storedKey));
+  return (
+    isCanonicalAttachmentKey(storedKey) &&
+    documentId === (await attachmentDeletionClaimDocId(storedKey))
+  );
 }
 
 export async function verifyAttachmentRetentionHoldAddress(

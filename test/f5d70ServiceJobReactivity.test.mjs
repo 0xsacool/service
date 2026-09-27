@@ -22,9 +22,8 @@ const readSource = async (path) =>
 const vite = await createServer({ appType: 'custom', server: { middlewareMode: true } });
 after(() => vite.close());
 
-const { bumpDataVersion, getDataVersion, subscribeToDataVersion } = await vite.ssrLoadModule(
-  '/src/repositories/dataVersion.ts'
-);
+const { bumpDataVersion, getDataVersion, subscribeToDataVersion } =
+  await vite.ssrLoadModule('/src/repositories/dataVersion.ts');
 
 // --- A: dataVersion is a stable numeric external-store snapshot ------------
 
@@ -90,7 +89,10 @@ test('no new Firestore listener (onSnapshot/collection/query) is introduced in u
 
 test('no polling/interval/forced-reload mechanism was introduced', async () => {
   const source = await useServiceJobsSourcePromise;
-  assert.doesNotMatch(source, /setInterval|setTimeout|window\.location\.reload|useEffect/);
+  assert.doesNotMatch(
+    source,
+    /setInterval|setTimeout|window\.location\.reload|useEffect/
+  );
 });
 
 // --- F/G: Firestore repository direct-write invalidation + existing bump ---
@@ -147,7 +149,9 @@ test('Mock Service Job repository: create/update/issuePublicTrackingCode each bu
   assert.equal(getDataVersion(), beforeUpdate + 1);
 
   const beforeIssue = getDataVersion();
-  const { job: issuedJob } = await serviceJobsRepository.issuePublicTrackingCode(existing.id);
+  const { job: issuedJob } = await serviceJobsRepository.issuePublicTrackingCode(
+    existing.id
+  );
   assert.equal(getDataVersion(), beforeIssue + 1);
   assert.notEqual(issuedJob.publicTrackingCodeHash, null);
 

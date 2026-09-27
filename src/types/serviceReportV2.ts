@@ -149,12 +149,7 @@ export interface AttachmentRetentionHold {
 }
 
 export type AttachmentDeletionClaimState =
-  | 'claimed'
-  | 'deleting'
-  | 'r2-deleted'
-  | 'completed'
-  | 'released'
-  | 'failed';
+  'claimed' | 'deleting' | 'r2-deleted' | 'completed' | 'released' | 'failed';
 
 export interface AttachmentDeletionClaim {
   claimVersion: 1;
@@ -184,4 +179,5 @@ export interface AttachmentDeletionClaim {
   updatedAt: string;
 }
 
-export type ServiceReportDocument = import('./serviceReport').ServiceReport | ServiceReportV2;
+export type ServiceReportDocument =
+  import('./serviceReport').ServiceReport | ServiceReportV2;

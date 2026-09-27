@@ -3,10 +3,15 @@ import { readFileSync } from 'node:fs';
 import { after, test } from 'node:test';
 import { createServer } from 'vite';
 
-const vite = await createServer({ appType: 'custom', server: { middlewareMode: true, hmr: false } });
+const vite = await createServer({
+  appType: 'custom',
+  server: { middlewareMode: true, hmr: false },
+});
 after(() => vite.close());
 
-const attachmentIdentity = await vite.ssrLoadModule('/src/services/attachmentIdentity.ts');
+const attachmentIdentity = await vite.ssrLoadModule(
+  '/src/services/attachmentIdentity.ts'
+);
 const reportContract = await vite.ssrLoadModule('/src/services/serviceReportV2.ts');
 const paths = await vite.ssrLoadModule('/worker/src/paths.ts');
 const evidenceOmission = await vite.ssrLoadModule('/src/services/evidenceOmission.ts');
@@ -38,8 +43,14 @@ const keyB =
 test('canonical attachment key validation is byte-exact and enforces the R2 boundary', () => {
   assert.equal(attachmentIdentity.isCanonicalAttachmentKey(keyA), true);
   assert.equal(attachmentIdentity.isCanonicalAttachmentKey(`${keyA}%2fescape`), false);
-  assert.equal(attachmentIdentity.isCanonicalAttachmentKey(keyA.replace('evidence', 'หลักฐาน')), false);
-  assert.equal(attachmentIdentity.isCanonicalAttachmentKey('service-jobs/BRN-2026-000002/report/.'), false);
+  assert.equal(
+    attachmentIdentity.isCanonicalAttachmentKey(keyA.replace('evidence', 'หลักฐาน')),
+    false
+  );
+  assert.equal(
+    attachmentIdentity.isCanonicalAttachmentKey('service-jobs/BRN-2026-000002/report/.'),
+    false
+  );
   assert.equal(paths.sanitizeFileName(' หลักฐาน 01%.jpg '), '_01_.jpg');
 
   const prefix = 'service-jobs/a/report/';
@@ -136,12 +147,18 @@ function finalReport(evidenceAttachmentIds) {
 test('corrected digest vectors bind canonical raw evidence keys and preserve order', async () => {
   const reportB = finalReport([keyA, keyB]);
   const reportC = finalReport([keyB, keyA]);
-  assert.equal(reportContract.serializeServiceReportFinalDigest(reportB).byteLength, 1738);
+  assert.equal(
+    reportContract.serializeServiceReportFinalDigest(reportB).byteLength,
+    1738
+  );
   assert.equal(
     await reportContract.computeServiceReportFinalDigest(reportB),
     'sha256:v1:f1752e0deb08e828e4a3d156383ff3744ccf0d158936f17c9205fec989dc3b63'
   );
-  assert.equal(reportContract.serializeServiceReportFinalDigest(reportC).byteLength, 1738);
+  assert.equal(
+    reportContract.serializeServiceReportFinalDigest(reportC).byteLength,
+    1738
+  );
   assert.equal(
     await reportContract.computeServiceReportFinalDigest(reportC),
     'sha256:v1:d82f3eca2d9726c85412c33530be652aab1420c86d9207961e5e40155197e684'
@@ -167,7 +184,10 @@ test('content normalization rejects duplicates, unknown fields, and invalid evid
   assert.deepEqual(normalized.serviceActions, ['repair', 'replace-part']);
   assert.equal(normalized.technician, 'ช่าง ก');
   assert.equal(
-    reportContract.normalizeServiceReportV2Content({ ...content, evidenceAttachmentIds: [keyA, keyA] }),
+    reportContract.normalizeServiceReportV2Content({
+      ...content,
+      evidenceAttachmentIds: [keyA, keyA],
+    }),
     null
   );
   assert.equal(
@@ -175,7 +195,10 @@ test('content normalization rejects duplicates, unknown fields, and invalid evid
     null
   );
   assert.equal(
-    reportContract.normalizeServiceReportV2Content({ ...content, evidenceAttachmentIds: ['ak2_deadbeef'] }),
+    reportContract.normalizeServiceReportV2Content({
+      ...content,
+      evidenceAttachmentIds: ['ak2_deadbeef'],
+    }),
     null
   );
 });
@@ -213,8 +236,11 @@ test('every trusted collection denies all client access', () => {
 });
 
 test('canonical omission ordering is byte-based and set-valued', () => {
-  const { canonicalizeEvidenceKeys, compareCanonicalAttachmentKeys, evidenceKeySetsEqual } =
-    evidenceOmission;
+  const {
+    canonicalizeEvidenceKeys,
+    compareCanonicalAttachmentKeys,
+    evidenceKeySetsEqual,
+  } = evidenceOmission;
   assert.deepEqual(canonicalizeEvidenceKeys([keyB, keyA]), [keyA, keyB]);
   assert.deepEqual(canonicalizeEvidenceKeys([keyA, keyB]), [keyA, keyB]);
   assert.ok(compareCanonicalAttachmentKeys('Z', 'a') < 0);
@@ -250,8 +276,15 @@ test('a metadata document id is never accepted where a raw evidence key is requi
   const metadataId = await attachmentIdentity.attachmentMetadataDocId(keyA);
   assert.ok(metadataId.startsWith('ak2_'));
   assert.equal(attachmentIdentity.isCanonicalAttachmentKey(metadataId), false);
-  assert.equal(evidenceOmission.parseConfirmedOmissionSet([metadataId]).reason, 'invalid-key');
-  assert.equal(metadataId.includes('/'), false, 'a document id must never contain a path separator');
+  assert.equal(
+    evidenceOmission.parseConfirmedOmissionSet([metadataId]).reason,
+    'invalid-key'
+  );
+  assert.equal(
+    metadataId.includes('/'),
+    false,
+    'a document id must never contain a path separator'
+  );
 });
 
 test('derived identities are addressable while the raw key stays the evidence identity', async () => {
@@ -259,12 +292,22 @@ test('derived identities are addressable while the raw key stays the evidence id
   const metadataId = await attachmentIdentity.attachmentMetadataDocId(keyA);
   const claimId = await attachmentIdentity.attachmentDeletionClaimDocId(keyA);
   const holdId = await attachmentIdentity.attachmentRetentionHoldDocId('event-1', keyA);
-  for (const [label, id] of [['ak2_', metadataId], ['dc1_', claimId], ['ah1_', holdId]]) {
+  for (const [label, id] of [
+    ['ak2_', metadataId],
+    ['dc1_', claimId],
+    ['ah1_', holdId],
+  ]) {
     assert.ok(id.startsWith(label), `${id} must carry the ${label} prefix`);
     assert.equal(id.includes('/'), false);
   }
-  assert.equal(await attachmentIdentity.verifyAttachmentMetadataAddress(metadataId, keyA), true);
-  assert.equal(await attachmentIdentity.verifyAttachmentMetadataAddress(metadataId, keyB), false);
+  assert.equal(
+    await attachmentIdentity.verifyAttachmentMetadataAddress(metadataId, keyA),
+    true
+  );
+  assert.equal(
+    await attachmentIdentity.verifyAttachmentMetadataAddress(metadataId, keyB),
+    false
+  );
   assert.equal(
     await attachmentIdentity.verifyAttachmentDeletionClaimAddress(claimId, keyA),
     true

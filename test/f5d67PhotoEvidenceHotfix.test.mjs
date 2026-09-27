@@ -185,9 +185,13 @@ test('more than MAX_PHOTO_ITEMS photos fail validation regardless of size', () =
 });
 
 test('wouldExceedAggregate correctly rejects a photo that would push the running total over the safe ceiling', () => {
-  const existing = [{ dataUrl: 'x'.repeat(Math.floor(MAX_PHOTOS_TOTAL_SAFE_BYTES * 0.7)) }];
+  const existing = [
+    { dataUrl: 'x'.repeat(Math.floor(MAX_PHOTOS_TOTAL_SAFE_BYTES * 0.7)) },
+  ];
   const candidateThatFits = 'x'.repeat(10);
-  const candidateThatOverflows = 'x'.repeat(Math.floor(MAX_PHOTOS_TOTAL_SAFE_BYTES * 0.5));
+  const candidateThatOverflows = 'x'.repeat(
+    Math.floor(MAX_PHOTOS_TOTAL_SAFE_BYTES * 0.5)
+  );
   assert.equal(wouldExceedAggregate(existing, candidateThatFits), false);
   assert.equal(wouldExceedAggregate(existing, candidateThatOverflows), true);
 });
@@ -213,7 +217,9 @@ test('known image-processing errors map to specific, safe Thai messages', () => 
 });
 
 test('an unrecognized processing error still falls back to a safe generic message, never the raw error', () => {
-  const message = photoProcessingErrorMessage(new Error('some internal detail: /private/path'));
+  const message = photoProcessingErrorMessage(
+    new Error('some internal detail: /private/path')
+  );
   assert.doesNotMatch(message, /internal|private|path|Error/);
 });
 
@@ -246,7 +252,11 @@ test('REGRESSION: a realistic camera-sized evidence photo no longer produces an 
   const rawCameraPhotoWidth = 4032;
   const rawCameraPhotoHeight = 3024;
 
-  const processed = compressWithLadder(rawCameraPhotoWidth, rawCameraPhotoHeight, simulateEncoder);
+  const processed = compressWithLadder(
+    rawCameraPhotoWidth,
+    rawCameraPhotoHeight,
+    simulateEncoder
+  );
   assert.notEqual(processed, null, 'a realistic camera photo must be processable');
 
   // Below the client's own safe ceiling (with margin)...
@@ -259,10 +269,7 @@ test('REGRESSION: a realistic camera-sized evidence photo no longer produces an 
 
   // A Service Job intake with several such processed photos still respects
   // both the client's aggregate ceiling and the Worker's real aggregate cap.
-  const photos = [
-    processed.dataUrl,
-    processed.dataUrl,
-  ];
+  const photos = [processed.dataUrl, processed.dataUrl];
   const validation = validatePhotosForSubmission(photos.map((dataUrl) => ({ dataUrl })));
   assert.equal(validation.ok, true);
   const totalBytes = photos.reduce((sum, p) => sum + p.length, 0);
@@ -292,7 +299,7 @@ test('MAX_IMAGE_DIMENSION keeps enough resolution for label/serial-number legibi
 
 // --- 1. Three-photo normal workflow (Product, Damaged Area, Serial Number) --
 
-test('RECOMMENDED_PHOTO_COUNT matches the UI\'s own recommended checklist (3)', () => {
+test("RECOMMENDED_PHOTO_COUNT matches the UI's own recommended checklist (3)", () => {
   assert.equal(RECOMMENDED_PHOTO_COUNT, 3);
 });
 
@@ -305,8 +312,17 @@ test('computePerPhotoTargetBytes gives all three photos in a 3-photo batch the s
 });
 
 test('computePerPhotoTargetBytes never exceeds the absolute per-photo ceiling', () => {
-  for (const [existing, batch] of [[0, 1], [0, 3], [0, 10], [5, 1], [9, 1]]) {
-    assert.equal(computePerPhotoTargetBytes(existing, batch) <= MAX_PHOTO_DATA_URL_SAFE_BYTES, true);
+  for (const [existing, batch] of [
+    [0, 1],
+    [0, 3],
+    [0, 10],
+    [5, 1],
+    [9, 1],
+  ]) {
+    assert.equal(
+      computePerPhotoTargetBytes(existing, batch) <= MAX_PHOTO_DATA_URL_SAFE_BYTES,
+      true
+    );
   }
 });
 
@@ -324,7 +340,11 @@ test('REGRESSION: the 3-photo worst-case total leaves meaningful (not 1-byte) he
   const headroom = MAX_PHOTOS_TOTAL_SAFE_BYTES - worstCaseTotal;
   assert.equal(worstCaseTotal <= MAX_PHOTOS_TOTAL_SAFE_BYTES, true);
   assert.equal(headroom, 40 * 1024);
-  assert.equal(headroom >= 32 * 1024, true, `expected meaningful headroom, got ${headroom} bytes`);
+  assert.equal(
+    headroom >= 32 * 1024,
+    true,
+    `expected meaningful headroom, got ${headroom} bytes`
+  );
   // The target budget itself also sits below the hard ceiling, which in
   // turn sits below the Worker's real authoritative aggregate cap.
   assert.equal(PHOTOS_TARGET_AGGREGATE_BYTES < MAX_PHOTOS_TOTAL_SAFE_BYTES, true);
@@ -340,13 +360,19 @@ test('REGRESSION: three realistic camera-sized photos can all be processed and f
   ];
 
   for (const photo of photos) {
-    assert.notEqual(photo, null, 'every one of the three recommended photos must be processable');
+    assert.notEqual(
+      photo,
+      null,
+      'every one of the three recommended photos must be processable'
+    );
     // Within per-photo limits (both the batch target and the absolute ceiling).
     assert.equal(photo.dataUrl.length <= target, true);
     assert.equal(photo.dataUrl.length <= MAX_PHOTO_DATA_URL_SAFE_BYTES, true);
   }
 
-  const validation = validatePhotosForSubmission(photos.map((p) => ({ dataUrl: p.dataUrl })));
+  const validation = validatePhotosForSubmission(
+    photos.map((p) => ({ dataUrl: p.dataUrl }))
+  );
   assert.deepEqual(validation, { ok: true });
 
   const totalBytes = photos.reduce((sum, p) => sum + p.dataUrl.length, 0);
@@ -365,7 +391,11 @@ test('a target reachable via dimension reduction alone does not fall through to 
   const target = computePerPhotoTargetBytes(0, 3);
   const result = compressWithLadder(4032, 3024, simulateEncoder, target);
   assert.notEqual(result, null);
-  assert.equal(result.quality >= 0.55, true, `expected a moderate quality, got ${result.quality}`);
+  assert.equal(
+    result.quality >= 0.55,
+    true,
+    `expected a moderate quality, got ${result.quality}`
+  );
 });
 
 test('a genuinely oversized target still eventually reaches the lowest quality tier rather than failing outright', () => {
@@ -474,7 +504,9 @@ test('REGRESSION: photos individually and aggregately valid, but the complete se
   // Two photos comfortably inside both the per-photo and aggregate photo
   // ceilings (so the photo-only checks alone would pass this intake)...
   const photos = ['x'.repeat(250 * 1024), 'x'.repeat(250 * 1024)];
-  const photoOnlyValidation = validatePhotosForSubmission(photos.map((dataUrl) => ({ dataUrl })));
+  const photoOnlyValidation = validatePhotosForSubmission(
+    photos.map((dataUrl) => ({ dataUrl }))
+  );
   assert.deepEqual(photoOnlyValidation, { ok: true });
 
   // ...but padded with enough non-photo text to push the whole serialized
@@ -489,7 +521,11 @@ test('REGRESSION: photos individually and aggregately valid, but the complete se
     internalNotes: 'y'.repeat(500_000),
   });
   const bytes = estimateIntakeRequestBytes(intake, existingCustomerSelector);
-  assert.equal(bytes > MAX_INTAKE_REQUEST_SAFE_BYTES, true, 'test setup must actually exceed the ceiling');
+  assert.equal(
+    bytes > MAX_INTAKE_REQUEST_SAFE_BYTES,
+    true,
+    'test setup must actually exceed the ceiling'
+  );
 });
 
 test('estimateIntakeRequestBytes measures real UTF-8 bytes, not UTF-16 string length (Thai text)', () => {
@@ -511,7 +547,13 @@ test('a Service Job intake with zero photos and ordinary fields stays far under 
 
 test('buildServiceJobIntakePayload/buildCustomerIntakeSelector output plugs directly into estimateIntakeRequestBytes', () => {
   const intake = buildServiceJobIntakePayload({
-    customer: { kind: 'existing', id: 'c1', name: 'ลูกค้า', phone: '0800000000', email: '' },
+    customer: {
+      kind: 'existing',
+      id: 'c1',
+      name: 'ลูกค้า',
+      phone: '0800000000',
+      email: '',
+    },
     product: {
       id: 'p1',
       customerId: 'c1',
@@ -572,7 +614,9 @@ test('buildServiceJobIntakePayload/buildCustomerIntakeSelector output plugs dire
 test('remove control renders enabled (no `disabled` attribute) in the normal idle state', () => {
   const markup = renderToStaticMarkup(
     createElement(PhotoEvidenceSection, {
-      photos: [{ id: 'one', dataUrl: 'data:image/png;base64,AA==', fileName: 'front.png' }],
+      photos: [
+        { id: 'one', dataUrl: 'data:image/png;base64,AA==', fileName: 'front.png' },
+      ],
       onChange() {},
     })
   );
@@ -590,19 +634,29 @@ test('remove control renders enabled (no `disabled` attribute) in the normal idl
 });
 
 test('REGRESSION: the remove control is wired to the same isProcessing flag that gates the add controls', async () => {
-  const source = await readSource('src/features/service-jobs/components/PhotoEvidenceSection.tsx');
+  const source = await readSource(
+    'src/features/service-jobs/components/PhotoEvidenceSection.tsx'
+  );
   // Whitespace-anchored so this doesn't also match inside
   // `aria-disabled={isProcessing}`, which contains the same substring.
   const gatedControlCount = (source.match(/\sdisabled=\{isProcessing\}/g) ?? []).length;
   // Two add-entry points (empty-state button, "add more" button) plus the
   // per-photo remove button must all be gated — three total.
-  assert.equal(gatedControlCount, 3, `expected 3 controls gated by isProcessing, found ${gatedControlCount}`);
+  assert.equal(
+    gatedControlCount,
+    3,
+    `expected 3 controls gated by isProcessing, found ${gatedControlCount}`
+  );
   assert.match(source, /aria-disabled=\{isProcessing\}/);
 });
 
 test('REGRESSION: removePhoto() itself refuses to run while isProcessing is true (defense-in-depth, not just the disabled button)', async () => {
-  const source = await readSource('src/features/service-jobs/components/PhotoEvidenceSection.tsx');
-  const removePhotoMatch = source.match(/const removePhoto = \(id: string\) => \{([\s\S]*?)\n  \};/);
+  const source = await readSource(
+    'src/features/service-jobs/components/PhotoEvidenceSection.tsx'
+  );
+  const removePhotoMatch = source.match(
+    /const removePhoto = \(id: string\) => \{([\s\S]*?)\n  \};/
+  );
   assert.notEqual(removePhotoMatch, null, 'removePhoto function body must be present');
   const body = removePhotoMatch[1];
   // The guard must be an early return keyed on isProcessing, positioned
@@ -610,7 +664,11 @@ test('REGRESSION: removePhoto() itself refuses to run while isProcessing is true
   assert.match(body, /if\s*\(\s*isProcessing\s*\)\s*return;/);
   const guardIndex = body.search(/if\s*\(\s*isProcessing\s*\)\s*return;/);
   const onChangeIndex = body.search(/onChange\(photos\.filter/);
-  assert.equal(guardIndex >= 0 && onChangeIndex > guardIndex, true, 'guard must run before the removal itself');
+  assert.equal(
+    guardIndex >= 0 && onChangeIndex > guardIndex,
+    true,
+    'guard must run before the removal itself'
+  );
 });
 
 test('REGRESSION: the stale-snapshot scenario cannot execute a removal while an add operation is in flight', async () => {
@@ -621,7 +679,9 @@ test('REGRESSION: the stale-snapshot scenario cannot execute a removal while an 
   // addFiles()'s stale-snapshot window where a removal can execute — the
   // window addFiles() holds `working` stale for is exactly the window
   // removePhoto() is blocked for.
-  const source = await readSource('src/features/service-jobs/components/PhotoEvidenceSection.tsx');
+  const source = await readSource(
+    'src/features/service-jobs/components/PhotoEvidenceSection.tsx'
+  );
   assert.match(source, /setIsProcessing\(true\)/);
   assert.match(source, /\}\s*finally\s*\{\s*setIsProcessing\(false\);\s*\}/);
   assert.match(source, /if\s*\(\s*isProcessing\s*\)\s*return;/);

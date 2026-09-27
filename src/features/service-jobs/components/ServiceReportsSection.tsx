@@ -66,12 +66,18 @@ interface DisplayedServiceReportVersion {
 }
 
 function versionFromReport(report: ServiceReport): DisplayedServiceReportVersion {
-  const sourceSchemaVersion: 1 | 2 = 'sourceSchemaVersion' in report
-    ? report.sourceSchemaVersion === 2 ? 2 : 1
-    : 'schemaVersion' in report ? 2 : 1;
-  const contentRevision = 'contentRevision' in report && typeof report.contentRevision === 'number'
-    ? report.contentRevision
-    : undefined;
+  const sourceSchemaVersion: 1 | 2 =
+    'sourceSchemaVersion' in report
+      ? report.sourceSchemaVersion === 2
+        ? 2
+        : 1
+      : 'schemaVersion' in report
+        ? 2
+        : 1;
+  const contentRevision =
+    'contentRevision' in report && typeof report.contentRevision === 'number'
+      ? report.contentRevision
+      : undefined;
   return {
     sourceSchemaVersion,
     updatedAt: report.updatedAt,
@@ -166,13 +172,15 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
   const history = getReportHistory(reports);
   const clientMode = getServiceReportV2ClientMode();
   const canEditDraft = (report: ServiceReport): boolean => {
-    const schemaVersion = 'sourceSchemaVersion' in report
-      ? report.sourceSchemaVersion
-      : 'schemaVersion' in report
-        ? report.schemaVersion
-        : 1;
-    return report.status === 'draft' &&
-      !(clientMode === 'v2-active' && schemaVersion !== 2);
+    const schemaVersion =
+      'sourceSchemaVersion' in report
+        ? report.sourceSchemaVersion
+        : 'schemaVersion' in report
+          ? report.schemaVersion
+          : 1;
+    return (
+      report.status === 'draft' && !(clientMode === 'v2-active' && schemaVersion !== 2)
+    );
   };
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [mode, setMode] = useState<'edit' | 'view' | null>(null);
@@ -182,7 +190,9 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
 
   const selectedReport = reports.find((report) => report.id === selectedReportId);
   const selectedReportV1ReadOnly = Boolean(
-    selectedReport && clientMode === 'v2-active' && selectedReport.sourceSchemaVersion !== 2
+    selectedReport &&
+    clientMode === 'v2-active' &&
+    selectedReport.sourceSchemaVersion !== 2
   );
 
   const openReport = (
@@ -226,7 +236,8 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
     onDraftSaved: (saved: ServiceReportDocument) => void,
     pendingFinalize: ServiceReportDocument | null
   ) => {
-    const saved = pendingFinalize ?? await updateDraft(reportId, patch, displayedVersion);
+    const saved =
+      pendingFinalize ?? (await updateDraft(reportId, patch, displayedVersion));
     if (!pendingFinalize) onDraftSaved(saved);
     const finalized = await finalize(
       reportId,
@@ -250,9 +261,17 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
           setSelectedReportId(null);
           setMode(null);
         }}
-        onSave={(patch, displayedVersion) => handleSave(selectedReport.id, patch, displayedVersion)}
+        onSave={(patch, displayedVersion) =>
+          handleSave(selectedReport.id, patch, displayedVersion)
+        }
         onFinalize={(patch, displayedVersion, onDraftSaved, pendingFinalize) =>
-          handleFinalize(selectedReport.id, patch, displayedVersion, onDraftSaved, pendingFinalize)
+          handleFinalize(
+            selectedReport.id,
+            patch,
+            displayedVersion,
+            onDraftSaved,
+            pendingFinalize
+          )
         }
       />
     );
@@ -267,16 +286,20 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
         report={selectedReport}
         serviceJob={serviceJob}
         attachments={attachments}
-        readOnlyNotice={selectedReportV1ReadOnly
-          ? 'รายงานรูปแบบเดิมสามารถดูได้เท่านั้นในขณะนี้'
-          : undefined}
+        readOnlyNotice={
+          selectedReportV1ReadOnly
+            ? 'รายงานรูปแบบเดิมสามารถดูได้เท่านั้นในขณะนี้'
+            : undefined
+        }
         onBack={() => {
           setSelectedReportId(null);
           setMode(null);
         }}
-        onEdit={canEditDraft(selectedReport)
-          ? () => openReport(selectedReport.id, 'edit')
-          : undefined}
+        onEdit={
+          canEditDraft(selectedReport)
+            ? () => openReport(selectedReport.id, 'edit')
+            : undefined
+        }
       />
     );
   }
@@ -305,7 +328,9 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
             disabled={isHistoryLoading}
             className="px-4 py-2.5 text-sm"
           >
-            <RefreshCw className={isHistoryLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+            <RefreshCw
+              className={isHistoryLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'}
+            />
             {isHistoryLoading ? 'กำลังรีเฟรช…' : 'รีเฟรช'}
           </SecondaryButton>
           <PrimaryButton
@@ -317,7 +342,9 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
             {isCreating
               ? 'กำลังสร้าง…'
               : activeDraft
-                ? canEditDraft(activeDraft) ? 'ดำเนินการร่างต่อ' : 'ดูร่างเดิม'
+                ? canEditDraft(activeDraft)
+                  ? 'ดำเนินการร่างต่อ'
+                  : 'ดูร่างเดิม'
                 : 'สร้างใบรายงาน'}
           </PrimaryButton>
         </div>
@@ -337,10 +364,9 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
           action={
             activeDraft ? (
               <SecondaryButton
-                onClick={() => openReport(
-                  activeDraft.id,
-                  canEditDraft(activeDraft) ? 'edit' : 'view'
-                )}
+                onClick={() =>
+                  openReport(activeDraft.id, canEditDraft(activeDraft) ? 'edit' : 'view')
+                }
               >
                 {canEditDraft(activeDraft) ? 'ดำเนินการแก้ไขต่อ' : 'ดูร่างเดิม'}
               </SecondaryButton>
@@ -355,7 +381,9 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
           description={historyError.message}
           action={
             <SecondaryButton onClick={refresh} disabled={isHistoryLoading}>
-              <RefreshCw className={isHistoryLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+              <RefreshCw
+                className={isHistoryLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'}
+              />
               ลองอีกครั้ง
             </SecondaryButton>
           }
@@ -384,7 +412,9 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
               disabled={isHistoryLoading}
               className="px-4 py-2.5 text-sm"
             >
-              <RefreshCw className={isHistoryLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+              <RefreshCw
+                className={isHistoryLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'}
+              />
               รีเฟรช
             </SecondaryButton>
           </div>
@@ -471,9 +501,11 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
               serviceJob={serviceJob}
               prominent
               onView={() => openReport(latestReport.id, 'view')}
-              onEdit={canEditDraft(latestReport)
-                ? () => openReport(latestReport.id, 'edit')
-                : undefined}
+              onEdit={
+                canEditDraft(latestReport)
+                  ? () => openReport(latestReport.id, 'edit')
+                  : undefined
+              }
             />
           ) : null}
 
@@ -492,9 +524,11 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
                     report={report}
                     serviceJob={serviceJob}
                     onView={() => openReport(report.id, 'view')}
-                    onEdit={canEditDraft(report)
-                      ? () => openReport(report.id, 'edit')
-                      : undefined}
+                    onEdit={
+                      canEditDraft(report)
+                        ? () => openReport(report.id, 'edit')
+                        : undefined
+                    }
                   />
                 ))}
               </div>
@@ -600,8 +634,12 @@ function ServiceReportEditor({
   const [form, setForm] = useState<DraftFormState>(() => formStateFromReport(report));
   // Keep the version the form was opened against. A background history refresh
   // may update the report prop, but must never pair its new token with old dirty form data.
-  const [displayedVersion, setDisplayedVersion] = useState(() => versionFromReport(report));
-  const [pendingFinalize, setPendingFinalize] = useState<ServiceReportDocument | null>(null);
+  const [displayedVersion, setDisplayedVersion] = useState(() =>
+    versionFromReport(report)
+  );
+  const [pendingFinalize, setPendingFinalize] = useState<ServiceReportDocument | null>(
+    null
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -683,14 +721,20 @@ function ServiceReportEditor({
     setError(null);
     setSuccess(null);
     try {
-      await onFinalize(toPatch(form), displayedVersion, (saved) => {
-        setDisplayedVersion(versionFromReport(saved));
-        setPendingFinalize(saved);
-      }, pendingFinalize);
+      await onFinalize(
+        toPatch(form),
+        displayedVersion,
+        (saved) => {
+          setDisplayedVersion(versionFromReport(saved));
+          setPendingFinalize(saved);
+        },
+        pendingFinalize
+      );
     } catch (finalizeError) {
       if (
         finalizeError instanceof WorkerServiceReportError &&
-        finalizeError.status >= 400 && finalizeError.status < 500
+        finalizeError.status >= 400 &&
+        finalizeError.status < 500
       ) {
         setPendingFinalize(null);
       }
@@ -743,7 +787,10 @@ function ServiceReportEditor({
       </div>
 
       {pendingFinalize && !isFinalizing ? (
-        <div role="status" className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-200">
+        <div
+          role="status"
+          className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-200"
+        >
           ผลการสรุปอาจสำเร็จแล้ว กรุณายืนยันการสรุปผลอีกครั้งเพื่อตรวจผลก่อนแก้ไขร่าง
         </div>
       ) : null}
@@ -1184,7 +1231,9 @@ function ServiceReportReadOnly({
           ) : (
             <div className="flex items-center gap-2 rounded-full bg-neutral-100 px-3 py-2 text-xs font-medium text-neutral-500">
               <LockKeyhole className="h-3.5 w-3.5" />
-              {report.status === 'draft' ? 'อ่านได้อย่างเดียว' : 'สรุปผลแล้ว อ่านได้อย่างเดียว'}
+              {report.status === 'draft'
+                ? 'อ่านได้อย่างเดียว'
+                : 'สรุปผลแล้ว อ่านได้อย่างเดียว'}
             </div>
           )}
           <PrimaryButton

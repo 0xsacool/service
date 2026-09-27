@@ -12,7 +12,10 @@ import {
   normalizeDigits,
 } from './searchMatching';
 import { normalizeCanonicalPhone } from './canonicalPhone';
-import { compareServiceJobsByRecency, mostRecentJobWithContactChannel } from '../services/serviceJobHistory';
+import {
+  compareServiceJobsByRecency,
+  mostRecentJobWithContactChannel,
+} from '../services/serviceJobHistory';
 import { channelLabel } from '../services/serviceJobPresentation';
 
 // Firestore implementation of SearchRepository (F5d-49). Built the same way
@@ -224,7 +227,9 @@ export function createFirestoreSearchRepository(
       for (const c of customerSearchResults) {
         const jobs = jobsFor(c);
         if (jobs.length === 0) continue;
-        const orderMatch = findMostRecentMatch(jobs, (job) => matchesOrderNumber(job.orderNumber, q));
+        const orderMatch = findMostRecentMatch(jobs, (job) =>
+          matchesOrderNumber(job.orderNumber, q)
+        );
         const identityMatch = findMostRecentMatch(jobs, (job) =>
           matchesChannelIdentity(job.contactChannelIdentity, q)
         );
@@ -235,7 +240,10 @@ export function createFirestoreSearchRepository(
           projection.marketplace = channelLabel(identityMatch.contactChannel);
           projection.username = identityMatch.contactChannelIdentity ?? undefined;
         }
-        const existing = results.get(c.id) ?? { ...c, ...fallbackChannelProjection(jobs) };
+        const existing = results.get(c.id) ?? {
+          ...c,
+          ...fallbackChannelProjection(jobs),
+        };
         results.set(c.id, { ...existing, ...projection });
       }
 

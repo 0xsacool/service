@@ -17,11 +17,11 @@ Every service job for Bruno Thailand and Join Lux Club — from drop-off to pick
 
 ## Target Users
 
-| Role | Who they are | What they need |
-|---|---|---|
-| **Admin** | Operations/management overseeing both brands | Full visibility across brands, user/staff management, brand and system settings, reporting |
+| Role              | Who they are                                            | What they need                                                                                          |
+| ----------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Admin**         | Operations/management overseeing both brands            | Full visibility across brands, user/staff management, brand and system settings, reporting              |
 | **Service Staff** | Technicians and front-counter staff at a service center | Fast intake, a manageable service job queue, ability to update status/notes/photos, assignment tracking |
-| **Customer** | The person who dropped off a product for repair | Simple tracking lookup, clear status and timeline, no login friction, pickup/contact info |
+| **Customer**      | The person who dropped off a product for repair         | Simple tracking lookup, clear status and timeline, no login friction, pickup/contact info               |
 
 ## Implemented
 

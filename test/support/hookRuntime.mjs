@@ -23,8 +23,10 @@ function slot() {
 
 function sameDeps(previous, next) {
   if (previous === undefined || next === undefined) return false;
-  return previous.length === next.length &&
-    previous.every((value, index) => Object.is(value, next[index]));
+  return (
+    previous.length === next.length &&
+    previous.every((value, index) => Object.is(value, next[index]))
+  );
 }
 
 export function useState(initial) {

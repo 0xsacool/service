@@ -49,7 +49,7 @@ test('ServiceJobDetailsView holds the issued plaintext code in its own local sta
   );
 });
 
-test('PublicTrackingSection\'s existing onIssued callback is wired to that parent state (was previously unwired)', async () => {
+test("PublicTrackingSection's existing onIssued callback is wired to that parent state (was previously unwired)", async () => {
   const source = await detailsSourcePromise;
   const sectionCall = source.match(/<PublicTrackingSection\s+([\s\S]*?)\/>/);
   assert.notEqual(sectionCall, null, 'expected a PublicTrackingSection render call');
@@ -97,7 +97,7 @@ test('the canonical helper produces the exact expected fixture URL for BRN-2026-
   );
 });
 
-test('the real react-qr-code component, server-rendered with the delivery note\'s exact fixture props, produces a well-formed SVG QR encoding the canonical URL', () => {
+test("the real react-qr-code component, server-rendered with the delivery note's exact fixture props, produces a well-formed SVG QR encoding the canonical URL", () => {
   const html = renderToStaticMarkup(
     React.createElement(QRCodeComponent, { value: EXPECTED_URL, size: 64, level: 'L' })
   );
@@ -111,10 +111,7 @@ test('the real react-qr-code component, server-rendered with the delivery note\'
 
 test('DeliveryNotePrintPreview: credentialed state renders the QR only when a plaintext code is actually present', async () => {
   const source = await noteSourcePromise;
-  assert.match(
-    source,
-    /publicTrackingState === 'credentialed' && trackingUrl && \(/
-  );
+  assert.match(source, /publicTrackingState === 'credentialed' && trackingUrl && \(/);
 });
 
 test('DeliveryNotePrintPreview: active-unavailable state is distinct from inactive — "no code in hand" never prints as "not activated"', async () => {
@@ -159,7 +156,11 @@ test('issuedTrackingCode has no persisted source — every writer either passes 
     /const \[issuedTrackingCode, setIssuedTrackingCode\] = useState<string \| null>\(null\);/
   );
   assert.notEqual(declarationMatch, null, 'expected the useState(null) declaration');
-  assert.match(source, /onIssued=\{setIssuedTrackingCode\}/, 'expected the real onIssued callback wiring');
+  assert.match(
+    source,
+    /onIssued=\{setIssuedTrackingCode\}/,
+    'expected the real onIssued callback wiring'
+  );
   const explicitCalls = source.match(/setIssuedTrackingCode\(([^)]*)\)/g) ?? [];
   for (const call of explicitCalls) {
     assert.doesNotMatch(call, /claim\.|job\.|localStorage|sessionStorage|indexedDB/);
@@ -175,7 +176,9 @@ test('no localStorage/sessionStorage/IndexedDB/cookie persistence was introduced
 });
 
 test('the canonical link never places the credential in a query string or the URL path', () => {
-  const url = new URL(buildPublicTrackingUrl(FIXTURE_ORIGIN, FIXTURE_JOB_ID, FIXTURE_CODE));
+  const url = new URL(
+    buildPublicTrackingUrl(FIXTURE_ORIGIN, FIXTURE_JOB_ID, FIXTURE_CODE)
+  );
   assert.equal(url.search, '');
   assert.equal(url.hash, `#${FIXTURE_CODE}`);
   assert.doesNotMatch(url.pathname, new RegExp(FIXTURE_CODE));

@@ -27,9 +27,14 @@ const contactOrderSourcePromise = readSource(
 
 test('intake: selecting the null/phone channel clears contactChannelIdentity live, in the same handler', async () => {
   const source = await contactOrderSourcePromise;
-  const setChannel = source.match(/const setChannel = \(channel: ChannelId \| null\) => \{([\s\S]*?)\n  \};/);
+  const setChannel = source.match(
+    /const setChannel = \(channel: ChannelId \| null\) => \{([\s\S]*?)\n  \};/
+  );
   assert.notEqual(setChannel, null, 'expected a setChannel handler');
-  assert.match(setChannel[1], /channel === null \|\| channel === 'phone' \? '' : value\.contactChannelIdentity/);
+  assert.match(
+    setChannel[1],
+    /channel === null \|\| channel === 'phone' \? '' : value\.contactChannelIdentity/
+  );
 });
 
 test('intake: contactChannelIdentity input has a 120-character maxLength', async () => {
@@ -104,7 +109,9 @@ test('Details: order verification control is shown only when an order number is 
 
 test('Details: setOrderNumber defaults verification to unverified only when it was previously null, and clears it when order number becomes blank', async () => {
   const source = await detailsSourcePromise;
-  const setOrderNumber = source.match(/const setOrderNumber = \(orderNumber: string\) => \{([\s\S]*?)\n  \};/);
+  const setOrderNumber = source.match(
+    /const setOrderNumber = \(orderNumber: string\) => \{([\s\S]*?)\n  \};/
+  );
   assert.notEqual(setOrderNumber, null, 'expected a setOrderNumber handler');
   assert.match(
     setOrderNumber[1],
@@ -114,9 +121,14 @@ test('Details: setOrderNumber defaults verification to unverified only when it w
 
 test('Details: selecting the null/phone channel clears contactChannelIdentity live, same as intake', async () => {
   const source = await detailsSourcePromise;
-  const setChannel = source.match(/const setChannel = \(channel: ChannelId \| null\) => \{([\s\S]*?)\n  \};/);
+  const setChannel = source.match(
+    /const setChannel = \(channel: ChannelId \| null\) => \{([\s\S]*?)\n  \};/
+  );
   assert.notEqual(setChannel, null, 'expected a setChannel handler');
-  assert.match(setChannel[1], /channel === null \|\| channel === 'phone' \? '' : value\.contactChannelIdentity/);
+  assert.match(
+    setChannel[1],
+    /channel === null \|\| channel === 'phone' \? '' : value\.contactChannelIdentity/
+  );
 });
 
 test('Details: all eight F5d-69 fields have an editable control in the component', async () => {
@@ -135,5 +147,7 @@ test('Details: all eight F5d-69 fields have an editable control in the component
   }
 });
 
-console.log(`\nf5d69Components: ${failures === 0 ? 'ALL PASS' : `${failures} FAILURE(S)`}`);
+console.log(
+  `\nf5d69Components: ${failures === 0 ? 'ALL PASS' : `${failures} FAILURE(S)`}`
+);
 if (failures > 0) process.exit(1);

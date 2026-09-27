@@ -45,7 +45,9 @@ const { deferred, mountHook } = await vite.ssrLoadModule(RUNTIME);
 const { useServiceReportEvidence } = await vite.ssrLoadModule(
   '/src/hooks/useServiceReportEvidence.ts'
 );
-const { repositories } = await vite.ssrLoadModule('/src/repositories/repositoryProvider.ts');
+const { repositories } = await vite.ssrLoadModule(
+  '/src/repositories/repositoryProvider.ts'
+);
 
 const ID_A = 'service-jobs/BRN-2026-000001/before/photo-1.jpg';
 const ID_B = 'service-jobs/BRN-2026-000002/after/photo-2.jpg';
@@ -111,7 +113,10 @@ beforeEach(() => {
 });
 
 const mount = (props = REQUEST_A) =>
-  mountHook((current) => useServiceReportEvidence(current.ids, current.attachments), props);
+  mountHook(
+    (current) => useServiceReportEvidence(current.ids, current.attachments),
+    props
+  );
 
 test('case 1: a resolution that lands before unmount is published, then revoked exactly once on unmount', async () => {
   const hook = mount();
@@ -128,7 +133,11 @@ test('case 1: a resolution that lands before unmount is published, then revoked 
     hook.result().evidence.map((item) => [item.id, item.url, item.status]),
     [[ID_A, 'blob:report-evidence-a', 'ready']]
   );
-  assert.deepEqual(revoked, [], 'a displayed URL is not revoked while its request is current');
+  assert.deepEqual(
+    revoked,
+    [],
+    'a displayed URL is not revoked while its request is current'
+  );
 
   hook.unmount();
   assert.deepEqual(revoked, ['blob:report-evidence-a']);
@@ -141,7 +150,11 @@ test('case 2: a resolution that lands after unmount is revoked immediately and n
   const rendersBeforeUnmount = hook.renders();
 
   hook.unmount();
-  assert.deepEqual(revoked, [], 'the URL does not exist yet at unmount, so there is nothing to revoke');
+  assert.deepEqual(
+    revoked,
+    [],
+    'the URL does not exist yet at unmount, so there is nothing to revoke'
+  );
 
   pending[0].gate.resolve('blob:late-after-unmount');
   await hook.flush();
@@ -151,8 +164,16 @@ test('case 2: a resolution that lands after unmount is revoked immediately and n
     ['blob:late-after-unmount'],
     'the late URL is disposed of by the resolution itself, not left ownerless'
   );
-  assert.equal(hook.renders(), rendersBeforeUnmount, 'no state was published after unmount');
-  assert.deepEqual(hook.result().evidence, [], 'the unmounted hook never received the late URL');
+  assert.equal(
+    hook.renders(),
+    rendersBeforeUnmount,
+    'no state was published after unmount'
+  );
+  assert.deepEqual(
+    hook.result().evidence,
+    [],
+    'the unmounted hook never received the late URL'
+  );
 });
 
 test('case 3: request A pending, request B current, late A — no publish into B and A is revoked', async () => {
@@ -196,7 +217,11 @@ test('case 4: an already-displayed URL is revoked when the request changes to B'
   hook.rerender(REQUEST_B);
   await hook.flush();
 
-  assert.deepEqual(revoked, ['blob:displayed-a'], 'the A URL is released at the ownership change');
+  assert.deepEqual(
+    revoked,
+    ['blob:displayed-a'],
+    'the A URL is released at the ownership change'
+  );
   assert.equal(hook.result().isLoading, true, 'B is loading rather than showing A');
 
   pending[1].gate.resolve('blob:b-after-a');
@@ -262,7 +287,11 @@ test('case 6: a rerender with the same request re-requests nothing and revokes n
 
   assert.equal(pending.length, 1, 'no second download was dispatched');
   assert.deepEqual(revoked, [], 'the current URL was not spuriously revoked');
-  assert.equal(hook.result().isLoading, false, 'the evidence never flickers back to loading');
+  assert.equal(
+    hook.result().isLoading,
+    false,
+    'the evidence never flickers back to loading'
+  );
   assert.equal(hook.result().evidence[0].url, 'blob:stable');
 
   hook.unmount();
@@ -298,7 +327,11 @@ test('case 8: several evidence items are each owned, and a mid-flight unmount le
   // after unmount: one URL is revoked by cleanup, the other by itself.
   pending[0].gate.resolve('blob:multi-first');
   await hook.flush();
-  assert.deepEqual(revoked, [], 'a partially resolved batch publishes and revokes nothing yet');
+  assert.deepEqual(
+    revoked,
+    [],
+    'a partially resolved batch publishes and revokes nothing yet'
+  );
 
   hook.unmount();
   pending[1].gate.resolve('blob:multi-second');
@@ -325,6 +358,10 @@ test('no disposable evidence URL is ever written to persistent browser storage',
   hook.unmount();
   await hook.flush();
 
-  assert.deepEqual(stored, [], 'the ordinary evidence path writes nothing to browser storage');
+  assert.deepEqual(
+    stored,
+    [],
+    'the ordinary evidence path writes nothing to browser storage'
+  );
   assert.deepEqual(revoked, ['blob:persist-probe', 'blob:persist-probe-b']);
 });

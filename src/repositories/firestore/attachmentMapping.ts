@@ -69,7 +69,9 @@ export function toFirestoreFields(entry: Attachment): AttachmentFirestoreFields 
     retentionExtensions: entry.retentionExtensions,
     deletedAt: entry.deletedAt,
     ...(entry.metadataKeyVersion === 2 ? { metadataKeyVersion: 2 as const } : {}),
-    ...(entry.approvalRetainUntil !== undefined ? { approvalRetainUntil: entry.approvalRetainUntil } : {}),
+    ...(entry.approvalRetainUntil !== undefined
+      ? { approvalRetainUntil: entry.approvalRetainUntil }
+      : {}),
   };
 }
 

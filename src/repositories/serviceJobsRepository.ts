@@ -11,7 +11,10 @@ import {
   nextServiceJobSequence,
   serviceJobNumberingYear,
 } from './firestore/serviceJobAllocation';
-import { generatePublicTrackingCode, hashPublicTrackingCode } from '../services/publicTrackingCode';
+import {
+  generatePublicTrackingCode,
+  hashPublicTrackingCode,
+} from '../services/publicTrackingCode';
 import { bumpDataVersion } from './dataVersion';
 
 // Session-only persistence, same pattern as productMasterRepository.ts — a
@@ -110,7 +113,9 @@ export const serviceJobsRepository: ServiceJobsRepository = {
   async issuePublicTrackingCode(id) {
     const existing = jobsById.get(id);
     if (!existing) {
-      throw new Error(`Cannot issue public tracking code for "${id}": no such job exists`);
+      throw new Error(
+        `Cannot issue public tracking code for "${id}": no such job exists`
+      );
     }
     const code = generatePublicTrackingCode(new Date());
     const codeHash = await hashPublicTrackingCode(code);

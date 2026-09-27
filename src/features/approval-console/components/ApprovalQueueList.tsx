@@ -1,7 +1,13 @@
 import { AlertTriangle, ClipboardList, RefreshCw } from 'lucide-react';
 import type { ApprovalQueueState } from '../../../hooks/useApprovalConsoleReads';
 import type { ApprovalQueueItemV1 } from '../../../types/serviceReportWorkerReads';
-import { GlassCard, LoadingState, EmptyState, ErrorState, SecondaryButton } from '../../../shared/components';
+import {
+  GlassCard,
+  LoadingState,
+  EmptyState,
+  ErrorState,
+  SecondaryButton,
+} from '../../../shared/components';
 import { ApprovalQueueRow } from './ApprovalQueueRow';
 
 // Phase 6R-B — the loading/empty/list/error/stale convention this repo
@@ -32,7 +38,9 @@ export function ApprovalQueueList({
           description={queue.error.message}
           action={
             <SecondaryButton onClick={queue.refresh} disabled={queue.isLoading}>
-              <RefreshCw className={queue.isLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+              <RefreshCw
+                className={queue.isLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'}
+              />
               ลองอีกครั้ง
             </SecondaryButton>
           }
@@ -59,7 +67,9 @@ export function ApprovalQueueList({
               disabled={queue.isLoading}
               className="px-4 py-2.5 text-sm"
             >
-              <RefreshCw className={queue.isLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+              <RefreshCw
+                className={queue.isLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'}
+              />
               รีเฟรช
             </SecondaryButton>
           </div>

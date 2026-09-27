@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import type { ApprovalQueueMode, ApprovalQueueRequest } from '../../../types/serviceReportWorkerReads';
+import type {
+  ApprovalQueueMode,
+  ApprovalQueueRequest,
+} from '../../../types/serviceReportWorkerReads';
 import { Field, inputClass } from '../../../shared/components';
 
 const MODE_LABELS: Record<ApprovalQueueMode, string> = {
@@ -41,7 +44,11 @@ export function ApprovalQueueSearchControls({
     if (uiMode === 'report-number') {
       onRequestChange({ mode: 'report-number', reportNo: value, pageSize: PAGE_SIZE });
     } else if (uiMode === 'tracking-reference') {
-      onRequestChange({ mode: 'tracking-reference', trackingReference: value, pageSize: PAGE_SIZE });
+      onRequestChange({
+        mode: 'tracking-reference',
+        trackingReference: value,
+        pageSize: PAGE_SIZE,
+      });
     }
   };
 

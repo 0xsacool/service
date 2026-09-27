@@ -27,7 +27,10 @@ function gitCheckIgnore(relativePath) {
 }
 
 const gitignore = await readFile(new URL('../.gitignore', import.meta.url), 'utf8');
-const envProduction = await readFile(new URL('../.env.production', import.meta.url), 'utf8');
+const envProduction = await readFile(
+  new URL('../.env.production', import.meta.url),
+  'utf8'
+);
 const defaultWorkerConfig = await readFile(
   new URL('../worker/wrangler.toml', import.meta.url),
   'utf8'

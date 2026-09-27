@@ -70,7 +70,8 @@ export function buildServiceJobUpdate(
       edits.contactChannel !== undefined
         ? (edits.contactChannelIdentity ?? null)
         : current.contactChannelIdentity,
-    orderNumber: edits.orderNumber !== undefined ? edits.orderNumber : current.orderNumber,
+    orderNumber:
+      edits.orderNumber !== undefined ? edits.orderNumber : current.orderNumber,
     orderVerification:
       edits.orderNumber !== undefined
         ? (edits.orderVerification ?? null)

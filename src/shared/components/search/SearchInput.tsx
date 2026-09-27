@@ -9,8 +9,10 @@ import { GlassCard } from '../GlassCard';
 // firestoreSearchRepository.ts (DECISIONS.md #041) — the two modes'
 // dimension lists are therefore the same today, so no backendKind branch is
 // needed here anymore.
-const DEFAULT_PLACEHOLDER = 'ค้นหาชื่อผู้ใช้ ออเดอร์ โทรศัพท์ เลขติดตาม หรือหมายเลขเครื่อง…';
-const CAPTION = 'ค้นหาได้จากชื่อ โทรศัพท์ ชื่อผู้ใช้ ออเดอร์ เลขติดตาม หรือหมายเลขเครื่อง';
+const DEFAULT_PLACEHOLDER =
+  'ค้นหาชื่อผู้ใช้ ออเดอร์ โทรศัพท์ เลขติดตาม หรือหมายเลขเครื่อง…';
+const CAPTION =
+  'ค้นหาได้จากชื่อ โทรศัพท์ ชื่อผู้ใช้ ออเดอร์ เลขติดตาม หรือหมายเลขเครื่อง';
 
 export function SearchInput({
   value,

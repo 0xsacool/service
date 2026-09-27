@@ -29,9 +29,16 @@ export interface UseServiceReportsResult {
   updateDraft: (
     reportId: string,
     patch: ServiceReportDraftPatch,
-    displayedVersion?: { sourceSchemaVersion: 1 | 2; updatedAt: string; contentRevision?: number }
+    displayedVersion?: {
+      sourceSchemaVersion: 1 | 2;
+      updatedAt: string;
+      contentRevision?: number;
+    }
   ) => Promise<ServiceReportDocument>;
-  finalize: (reportId: string, expectedContentRevision?: number) => Promise<ServiceReportDocument>;
+  finalize: (
+    reportId: string,
+    expectedContentRevision?: number
+  ) => Promise<ServiceReportDocument>;
   // D25: there is deliberately no decide() here. A terminal approval decision
   // is only legitimate when bound to an exact ApprovalReviewV1 the reviewer
   // actually loaded and saw, so the only decision surface is
@@ -137,9 +144,9 @@ export function projectHistoryState(input: {
 }
 
 export function useServiceReports(serviceJobId: string): UseServiceReportsResult {
-  const [storedReports, setReports] = useState<ServiceReportHistoryItem[]>(() =>
-    [...(historyCache.get(serviceJobId) ?? [])]
-  );
+  const [storedReports, setReports] = useState<ServiceReportHistoryItem[]>(() => [
+    ...(historyCache.get(serviceJobId) ?? []),
+  ]);
   const [reportsJobId, setReportsJobId] = useState(serviceJobId);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [isHistoryStale, setIsHistoryStale] = useState(false);
@@ -156,9 +163,10 @@ export function useServiceReports(serviceJobId: string): UseServiceReportsResult
   const attemptKey = useRef(createServiceReportDraftAttemptKeyController()).current;
   const operationKeys = useRef(new Map<string, string>()).current;
   const draftSaveAttempts = useRef(new Map<string, DraftSaveAttempt>()).current;
-  const reports = reportsJobId === serviceJobId
-    ? storedReports
-    : [...(historyCache.get(serviceJobId) ?? [])];
+  const reports =
+    reportsJobId === serviceJobId
+      ? storedReports
+      : [...(historyCache.get(serviceJobId) ?? [])];
   const refreshHistory = useCallback(async (): Promise<void> => {
     historyAbort.current?.abort();
     const abort = new AbortController();
@@ -182,7 +190,9 @@ export function useServiceReports(serviceJobId: string): UseServiceReportsResult
       setReportsJobId(serviceJobId);
       setReports([...(historyCache.get(serviceJobId) ?? [])]);
       setHistoryError(
-        error instanceof Error ? error : new Error('Service Report history refresh failed')
+        error instanceof Error
+          ? error
+          : new Error('Service Report history refresh failed')
       );
       setIsHistoryStale(true);
     } finally {
@@ -218,9 +228,10 @@ export function useServiceReports(serviceJobId: string): UseServiceReportsResult
   const applyProvisional = (report: ServiceReportDocument): void => {
     setReportsJobId(serviceJobId);
     setReports((current) => {
-      const currentForJob = reportsJobId === serviceJobId
-        ? current
-        : [...(historyCache.get(serviceJobId) ?? [])];
+      const currentForJob =
+        reportsJobId === serviceJobId
+          ? current
+          : [...(historyCache.get(serviceJobId) ?? [])];
       const next = orderServiceReports([
         ...currentForJob.filter((item) => item.id !== report.id),
         projectHistoryItem(report),
@@ -237,27 +248,29 @@ export function useServiceReports(serviceJobId: string): UseServiceReportsResult
     const key = attemptKey.get(serviceJobId);
     try {
       const serviceJob = repositories.serviceJobs.getById(serviceJobId);
-      const report = isServiceReportV2ClientEnabled() && serviceJob
-        ? await repositories.serviceReports.createDraftV2(
-            serviceJobId,
-            {
-              ...defaultContent(),
-              technician: input.technician ?? serviceJob.technician,
-              customerReportedProblem: input.customerReportedProblem ?? serviceJob.issue,
-              inspectionFindings: input.inspectionFindings ?? '',
-              serviceActions: input.serviceActions ?? [],
-              parts: input.parts ?? [],
-              technicianRemark: input.technicianRemark ?? '',
-              resultStatus: input.resultStatus ?? null,
-              resultDetail: input.resultDetail ?? '',
-              evidenceAttachmentIds: input.evidenceAttachmentIds ?? [],
-              claimNo: input.claimNo ?? null,
-              factoryReference: input.factoryReference ?? null,
-              warrantyOutcome: serviceJob.warranty ? 'covered' : 'undetermined',
-            },
-            key
-          )
-        : await repositories.serviceReports.createDraft(serviceJobId, input, key);
+      const report =
+        isServiceReportV2ClientEnabled() && serviceJob
+          ? await repositories.serviceReports.createDraftV2(
+              serviceJobId,
+              {
+                ...defaultContent(),
+                technician: input.technician ?? serviceJob.technician,
+                customerReportedProblem:
+                  input.customerReportedProblem ?? serviceJob.issue,
+                inspectionFindings: input.inspectionFindings ?? '',
+                serviceActions: input.serviceActions ?? [],
+                parts: input.parts ?? [],
+                technicianRemark: input.technicianRemark ?? '',
+                resultStatus: input.resultStatus ?? null,
+                resultDetail: input.resultDetail ?? '',
+                evidenceAttachmentIds: input.evidenceAttachmentIds ?? [],
+                claimNo: input.claimNo ?? null,
+                factoryReference: input.factoryReference ?? null,
+                warrantyOutcome: serviceJob.warranty ? 'covered' : 'undetermined',
+              },
+              key
+            )
+          : await repositories.serviceReports.createDraft(serviceJobId, input, key);
       attemptKey.onSuccess(serviceJobId);
       applyProvisional(report);
       await refreshHistory();
@@ -274,23 +287,44 @@ export function useServiceReports(serviceJobId: string): UseServiceReportsResult
   const updateDraft = async (
     reportId: string,
     patch: ServiceReportDraftPatch,
-    displayedVersion?: { sourceSchemaVersion: 1 | 2; updatedAt: string; contentRevision?: number }
+    displayedVersion?: {
+      sourceSchemaVersion: 1 | 2;
+      updatedAt: string;
+      contentRevision?: number;
+    }
   ) => {
     const current = reports.find((item) => item.id === reportId);
-    if (!current) throw new Error('Cannot save a Service Report that is not in the displayed history');
+    if (!current)
+      throw new Error(
+        'Cannot save a Service Report that is not in the displayed history'
+      );
     const version = displayedVersion ?? {
       sourceSchemaVersion: current.sourceSchemaVersion,
       updatedAt: current.updatedAt,
-      ...(current.sourceSchemaVersion === 2 ? { contentRevision: current.contentRevision } : {}),
+      ...(current.sourceSchemaVersion === 2
+        ? { contentRevision: current.contentRevision }
+        : {}),
     };
     if (version.sourceSchemaVersion !== current.sourceSchemaVersion) {
-      throw new WorkerServiceReportError('The displayed Service Report version is stale', 412, 'stale_revision', 'reload');
+      throw new WorkerServiceReportError(
+        'The displayed Service Report version is stale',
+        412,
+        'stale_revision',
+        'reload'
+      );
     }
-    const expectedContentRevision = version.sourceSchemaVersion === 2
-      ? version.contentRevision ?? (current.sourceSchemaVersion === 2 ? current.contentRevision : undefined)
-      : undefined;
+    const expectedContentRevision =
+      version.sourceSchemaVersion === 2
+        ? (version.contentRevision ??
+          (current.sourceSchemaVersion === 2 ? current.contentRevision : undefined))
+        : undefined;
     if (version.sourceSchemaVersion === 2 && expectedContentRevision === undefined) {
-      throw new WorkerServiceReportError('The displayed V2 revision is unavailable', 412, 'stale_revision', 'reload');
+      throw new WorkerServiceReportError(
+        'The displayed V2 revision is unavailable',
+        412,
+        'stale_revision',
+        'reload'
+      );
     }
     const attemptScope = `draft-save:${reportId}:${stableJson(patch)}`;
     let attempt = draftSaveAttempts.get(attemptScope);
@@ -298,26 +332,39 @@ export function useServiceReports(serviceJobId: string): UseServiceReportsResult
       attempt = {
         sourceSchemaVersion: version.sourceSchemaVersion,
         expectedUpdatedAt: version.updatedAt,
-        ...(version.sourceSchemaVersion === 2 ? {
-          expectedContentRevision,
-        } : {}),
+        ...(version.sourceSchemaVersion === 2
+          ? {
+              expectedContentRevision,
+            }
+          : {}),
         idempotencyKey: crypto.randomUUID(),
       };
       draftSaveAttempts.set(attemptScope, attempt);
     }
     if (attempt.sourceSchemaVersion !== version.sourceSchemaVersion) {
-      throw new WorkerServiceReportError('The pending draft save belongs to a different report version', 412, 'stale_revision', 'reload');
+      throw new WorkerServiceReportError(
+        'The pending draft save belongs to a different report version',
+        412,
+        'stale_revision',
+        'reload'
+      );
     }
     try {
       let report: ServiceReportDocument;
       if (attempt.sourceSchemaVersion === 2) {
         report = await repositories.serviceReports.updateDraftV2(
-          reportId, attempt.expectedContentRevision!, patch, attempt.idempotencyKey
+          reportId,
+          attempt.expectedContentRevision!,
+          patch,
+          attempt.idempotencyKey
         );
       } else {
         assertLegacyMutationAllowed();
         report = await repositories.serviceReports.updateDraft(
-          reportId, patch, attempt.expectedUpdatedAt, attempt.idempotencyKey
+          reportId,
+          patch,
+          attempt.expectedUpdatedAt,
+          attempt.idempotencyKey
         );
       }
       draftSaveAttempts.delete(attemptScope);
@@ -325,7 +372,11 @@ export function useServiceReports(serviceJobId: string): UseServiceReportsResult
       await refreshHistory();
       return report;
     } catch (error) {
-      if (error instanceof WorkerServiceReportError && error.status >= 400 && error.status < 500) {
+      if (
+        error instanceof WorkerServiceReportError &&
+        error.status >= 400 &&
+        error.status < 500
+      ) {
         draftSaveAttempts.delete(attemptScope);
       }
       throw error;
@@ -340,13 +391,20 @@ export function useServiceReports(serviceJobId: string): UseServiceReportsResult
     return created;
   };
 
-  const runIdempotent = async <T>(scope: string, operation: (key: string) => Promise<T>) => {
+  const runIdempotent = async <T>(
+    scope: string,
+    operation: (key: string) => Promise<T>
+  ) => {
     try {
       const result = await operation(operationKey(scope));
       operationKeys.delete(scope);
       return result;
     } catch (error) {
-      if (error instanceof WorkerServiceReportError && error.status >= 400 && error.status < 500) {
+      if (
+        error instanceof WorkerServiceReportError &&
+        error.status >= 400 &&
+        error.status < 500
+      ) {
         operationKeys.delete(scope);
       }
       throw error;
@@ -358,13 +416,14 @@ export function useServiceReports(serviceJobId: string): UseServiceReportsResult
     let report: ServiceReportDocument;
     if (current?.sourceSchemaVersion === 2) {
       report = await runIdempotent(
-          `finalize:${reportId}:${expectedContentRevision ?? current.contentRevision}`,
-          (key) => repositories.serviceReports.finalizeV2(
+        `finalize:${reportId}:${expectedContentRevision ?? current.contentRevision}`,
+        (key) =>
+          repositories.serviceReports.finalizeV2(
             reportId,
             expectedContentRevision ?? current.contentRevision,
             key
           )
-        );
+      );
     } else {
       assertLegacyMutationAllowed();
       report = await repositories.serviceReports.finalize(reportId);
@@ -397,7 +456,10 @@ export function useServiceReports(serviceJobId: string): UseServiceReportsResult
     return report;
   };
 
-  const trustedPrint = async (reportId: string, mode: 'normal' | 'diagnostic' = 'normal') => {
+  const trustedPrint = async (
+    reportId: string,
+    mode: 'normal' | 'diagnostic' = 'normal'
+  ) => {
     const report = reports.find((item) => item.id === reportId);
     return repositories.serviceReports.trustedPrint(
       reportId,

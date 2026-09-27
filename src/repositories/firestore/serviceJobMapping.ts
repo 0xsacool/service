@@ -185,7 +185,9 @@ export function fromFirestoreData(id: string, data: DocumentData): ServiceJob {
         ? null
         : 'other',
     contactChannelIdentity:
-      typeof data.contactChannelIdentity === 'string' ? data.contactChannelIdentity : null,
+      typeof data.contactChannelIdentity === 'string'
+        ? data.contactChannelIdentity
+        : null,
     orderNumber: typeof data.orderNumber === 'string' ? data.orderNumber : null,
     orderVerification: isOrderVerification(data.orderVerification)
       ? data.orderVerification

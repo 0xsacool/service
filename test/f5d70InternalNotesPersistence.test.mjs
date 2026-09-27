@@ -14,9 +14,7 @@ import { test } from 'node:test';
 const readSource = async (path) =>
   await readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 
-const sourcePromise = readSource(
-  'src/features/service-jobs/pages/ServiceJobDetails.tsx'
-);
+const sourcePromise = readSource('src/features/service-jobs/pages/ServiceJobDetails.tsx');
 
 const extractFunction = (source, name) => {
   const start = source.indexOf(`const ${name} = async () => {`);
@@ -126,7 +124,11 @@ test('addNote calls updateServiceJob with ONLY a notes key — no status/technic
   const source = await sourcePromise;
   const body = extractFunction(source, 'addNote');
   const callMatch = body.match(/await updateServiceJob\(claim\.id, (\{[\s\S]*?\})\);/);
-  assert.notEqual(callMatch, null, 'expected an updateServiceJob(claim.id, { ... }) call');
+  assert.notEqual(
+    callMatch,
+    null,
+    'expected an updateServiceJob(claim.id, { ... }) call'
+  );
   const argsLiteral = callMatch[1];
   assert.match(argsLiteral, /^\{\s*notes:\s*nextNotes\s*\}$/);
   for (const forbidden of [
@@ -164,11 +166,14 @@ test('the input is not cleared until persistence has succeeded — setNote("") a
   const body = extractFunction(source, 'addNote');
   const awaitIndex = body.indexOf('await updateServiceJob');
   const clearIndex = body.indexOf("setNote('')");
-  assert.notEqual(clearIndex, -1, 'expected setNote(\'\') to appear');
+  assert.notEqual(clearIndex, -1, "expected setNote('') to appear");
   assert.ok(clearIndex > awaitIndex, 'input must not clear before the await settles');
   // and not inside the catch/finally blocks either
   const catchIndex = body.indexOf('} catch (error) {');
-  assert.ok(clearIndex < catchIndex, "the success-path setNote('') must run before catch, not inside it");
+  assert.ok(
+    clearIndex < catchIndex,
+    "the success-path setNote('') must run before catch, not inside it"
+  );
 });
 
 test('on success, local notes are set to the exact persisted nextNotes value, before the input is cleared', async () => {
@@ -196,7 +201,11 @@ test('setNotes(nextNotes) — the only place the note is added to displayed stat
   const body = extractFunction(source, 'addNote');
   const awaitIndex = body.indexOf('await updateServiceJob');
   const allSetNotesCalls = [...body.matchAll(/setNotes\(/g)];
-  assert.equal(allSetNotesCalls.length, 1, 'expected exactly one setNotes call in addNote');
+  assert.equal(
+    allSetNotesCalls.length,
+    1,
+    'expected exactly one setNotes call in addNote'
+  );
   assert.ok(allSetNotesCalls[0].index > awaitIndex);
 });
 
@@ -262,7 +271,10 @@ test('saveChanges() itself is untouched aside from surrounding context — its o
   const addNoteStart = source.indexOf('const addNote = async () => {');
   assert.ok(saveStart !== -1 && addNoteStart !== -1 && saveStart < addNoteStart);
   const saveBody = source.slice(saveStart, addNoteStart);
-  assert.match(saveBody, /await updateServiceJob\(claim\.id, \{\s*\n\s*\.\.\.\(statusDirty/);
+  assert.match(
+    saveBody,
+    /await updateServiceJob\(claim\.id, \{\s*\n\s*\.\.\.\(statusDirty/
+  );
 });
 
 // --- J: entity-key / Public Tracking contracts unaffected ----------------------
@@ -294,7 +306,9 @@ test('this patch does not touch PublicTrackingSection.tsx or NewServiceJob.tsx s
 test('the persisted note object shape remains exactly {author, date, text} — no new fields introduced', async () => {
   const source = await sourcePromise;
   const body = extractFunction(source, 'addNote');
-  const noteObjectMatch = body.match(/\{\s*\n\s*author: user\?\.email \?\? 'เจ้าหน้าที่',\s*\n\s*date: toIsoDate\(new Date\(\)\),\s*\n\s*text,\s*\n\s*\}/);
+  const noteObjectMatch = body.match(
+    /\{\s*\n\s*author: user\?\.email \?\? 'เจ้าหน้าที่',\s*\n\s*date: toIsoDate\(new Date\(\)\),\s*\n\s*text,\s*\n\s*\}/
+  );
   assert.notEqual(noteObjectMatch, null);
 });
 
@@ -321,7 +335,16 @@ test('the same-job reconciliation effect resolves each field/group independently
   // `previous`) can only ever affect the notes field's own reconciliation
   // branch — every other field's pristine check independently evaluates to
   // "unchanged from previous", which is a no-op regardless of what notes did.
-  assert.match(source, /setStatus\(\(current\) => reconcileField\(current, previous\.status, claim\.status\)\);/);
-  assert.match(source, /setNotes\(\(current\) => reconcileField\(current, previous\.notes, claim\.notes, notesEqual\)\);/);
-  assert.match(source, /setTech\(\(current\) => reconcileField\(current, previous\.technician, claim\.technician\)\);/);
+  assert.match(
+    source,
+    /setStatus\(\(current\) => reconcileField\(current, previous\.status, claim\.status\)\);/
+  );
+  assert.match(
+    source,
+    /setNotes\(\(current\) => reconcileField\(current, previous\.notes, claim\.notes, notesEqual\)\);/
+  );
+  assert.match(
+    source,
+    /setTech\(\(current\) => reconcileField\(current, previous\.technician, claim\.technician\)\);/
+  );
 });

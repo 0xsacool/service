@@ -13,20 +13,20 @@
 
 ## Shared Document Standards
 
-| Attribute | Default |
-|---|---|
-| Paper Size | A4 (210 × 297 mm) |
-| Orientation | Portrait |
-| Print Margins | 15 mm on all sides |
-| Header | Brand logo top-left; document title, tracking number, and QR code top-right; horizontal divider below |
-| Footer | Page X of Y (left), "System-generated document" disclaimer (center), service center contact (right) |
-| QR Code Placement | Top-right of header, beneath/beside the tracking number |
-| QR Code Content | URL to the public tracker for that service job (`/track/{tracking_number}`) |
-| Tracking Number Placement | Top-right of header, bold, large (≥14pt) |
-| Brand Logo Placement | Top-left of header, max height ~18 mm, sourced from `brands.logo_url` |
-| Signature Areas | Bottom of document, boxed, one column per signatory |
-| Date Format | DD/MM/YYYY Gregorian + Buddhist Era on customer-facing documents; Gregorian only on internal/factory documents |
-| Typography | Thai-script-capable font family (final selection pending [DECISIONS.md](DECISIONS.md) #008); title 16–18pt bold, section headers 11–12pt bold, field labels 9–10pt, field values 10–11pt, footer 8pt |
+| Attribute                 | Default                                                                                                                                                                                              |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Paper Size                | A4 (210 × 297 mm)                                                                                                                                                                                    |
+| Orientation               | Portrait                                                                                                                                                                                             |
+| Print Margins             | 15 mm on all sides                                                                                                                                                                                   |
+| Header                    | Brand logo top-left; document title, tracking number, and QR code top-right; horizontal divider below                                                                                                |
+| Footer                    | Page X of Y (left), "System-generated document" disclaimer (center), service center contact (right)                                                                                                  |
+| QR Code Placement         | Top-right of header, beneath/beside the tracking number                                                                                                                                              |
+| QR Code Content           | URL to the public tracker for that service job (`/track/{tracking_number}`)                                                                                                                          |
+| Tracking Number Placement | Top-right of header, bold, large (≥14pt)                                                                                                                                                             |
+| Brand Logo Placement      | Top-left of header, max height ~18 mm, sourced from `brands.logo_url`                                                                                                                                |
+| Signature Areas           | Bottom of document, boxed, one column per signatory                                                                                                                                                  |
+| Date Format               | DD/MM/YYYY Gregorian + Buddhist Era on customer-facing documents; Gregorian only on internal/factory documents                                                                                       |
+| Typography                | Thai-script-capable font family (final selection pending [DECISIONS.md](DECISIONS.md) #008); title 16–18pt bold, section headers 11–12pt bold, field labels 9–10pt, field values 10–11pt, footer 8pt |
 
 Every document type below is specified against: **Purpose, Target User, Paper Size, Orientation, Print Margins, Header, Footer, QR Code Placement, Tracking Number Placement, Brand Logo Placement, Signature Areas, Date Format, Typography.** Where a document matches the Shared Document Standards exactly, its table says so rather than repeating the values.
 
@@ -36,42 +36,42 @@ Every document type below is specified against: **Purpose, Target User, Paper Si
 
 ### 1. Service Request
 
-*Given to the customer when they drop off a product — replaces a handwritten intake slip. Document number: `service_jobs.service_request_number` (`SR-{YYYY}-{SEQUENCE}`), generated at service job creation ([BUSINESS_RULES.md](BUSINESS_RULES.md)).*
+_Given to the customer when they drop off a product — replaces a handwritten intake slip. Document number: `service_jobs.service_request_number` (`SR-{YYYY}-{SEQUENCE}`), generated at service job creation ([BUSINESS_RULES.md](BUSINESS_RULES.md))._
 
-| Attribute | Value |
-|---|---|
-| Purpose | Formal record of intake: what was received, from whom, in what condition, and what the customer authorized |
-| Target User | Customer (receives a copy) and Service Staff (files a copy) |
-| Paper Size / Orientation | A4, portrait |
-| Print Margins / Header / Footer / QR / Tracking Number / Logo | Shared default |
-| Signature Areas | Two columns: **Customer Signature** and **Staff Signature** (name, signature, date each) |
-| Date Format | Customer-facing → DD/MM/YYYY + Buddhist Era |
-| Typography | Shared default |
+| Attribute                                                     | Value                                                                                                      |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Purpose                                                       | Formal record of intake: what was received, from whom, in what condition, and what the customer authorized |
+| Target User                                                   | Customer (receives a copy) and Service Staff (files a copy)                                                |
+| Paper Size / Orientation                                      | A4, portrait                                                                                               |
+| Print Margins / Header / Footer / QR / Tracking Number / Logo | Shared default                                                                                             |
+| Signature Areas                                               | Two columns: **Customer Signature** and **Staff Signature** (name, signature, date each)                   |
+| Date Format                                                   | Customer-facing → DD/MM/YYYY + Buddhist Era                                                                |
+| Typography                                                    | Shared default                                                                                             |
 
 **Included Fields** (all now sourced from real schema entities — see [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md)):
 
-| Field | Source |
-|---|---|
-| Tracking Number | `service_jobs.tracking_number` |
-| Document Number | `service_jobs.service_request_number` |
-| QR Code | derived, not stored |
-| Brand | `service_jobs.brand_id` → `brands` |
-| Customer (name/phone/email) | `service_jobs.customer_id` → `customers` |
-| Marketplace Username | `customers.id` → `customer_channel_contacts` where `purpose = 'purchase'` |
-| Order Number | `service_jobs.product_instance_id` → `product_instances.order_reference` |
-| Purchase Channel | `product_instances.purchase_channel` |
-| Product | `product_instances.model_id` → `models` → `products.name` |
-| Model | `product_instances.model_id` → `models.model_code` (or `product_instances.model_other` if the instance used the free-text escape hatch) |
-| Serial Number | `product_instances.serial_number` |
-| Warranty Type | `product_instances.warranty_type` |
-| Problem Description | `service_jobs.issue_summary` / `service_jobs.description` |
-| Accessories Included | `service_job_accessories` (+ `service_jobs.accessories_other` free text) |
-| Photos Stored in System | `photos` table, filtered to customer-visible |
-| Received Date | `service_jobs.created_at` |
-| Expected Return Date | `service_jobs.estimated_completion_date` |
-| Technician | `service_jobs.technician_id` → `users` (may be "Unassigned" at intake) |
-| Customer Signature | Captured at print/intake time — not a stored data field |
-| Staff Signature | Same as above |
+| Field                       | Source                                                                                                                                  |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Tracking Number             | `service_jobs.tracking_number`                                                                                                          |
+| Document Number             | `service_jobs.service_request_number`                                                                                                   |
+| QR Code                     | derived, not stored                                                                                                                     |
+| Brand                       | `service_jobs.brand_id` → `brands`                                                                                                      |
+| Customer (name/phone/email) | `service_jobs.customer_id` → `customers`                                                                                                |
+| Marketplace Username        | `customers.id` → `customer_channel_contacts` where `purpose = 'purchase'`                                                               |
+| Order Number                | `service_jobs.product_instance_id` → `product_instances.order_reference`                                                                |
+| Purchase Channel            | `product_instances.purchase_channel`                                                                                                    |
+| Product                     | `product_instances.model_id` → `models` → `products.name`                                                                               |
+| Model                       | `product_instances.model_id` → `models.model_code` (or `product_instances.model_other` if the instance used the free-text escape hatch) |
+| Serial Number               | `product_instances.serial_number`                                                                                                       |
+| Warranty Type               | `product_instances.warranty_type`                                                                                                       |
+| Problem Description         | `service_jobs.issue_summary` / `service_jobs.description`                                                                               |
+| Accessories Included        | `service_job_accessories` (+ `service_jobs.accessories_other` free text)                                                                |
+| Photos Stored in System     | `photos` table, filtered to customer-visible                                                                                            |
+| Received Date               | `service_jobs.created_at`                                                                                                               |
+| Expected Return Date        | `service_jobs.estimated_completion_date`                                                                                                |
+| Technician                  | `service_jobs.technician_id` → `users` (may be "Unassigned" at intake)                                                                  |
+| Customer Signature          | Captured at print/intake time — not a stored data field                                                                                 |
+| Staff Signature             | Same as above                                                                                                                           |
 
 No open schema gaps remain for this document — every field maps to an existing entity.
 
@@ -81,35 +81,35 @@ No open schema gaps remain for this document — every field maps to an existing
 
 ### 2. Repair Report
 
-*Internal document, typically sent to or shared with a factory/repair partner. A service job may have multiple Repair Reports over its lifetime ([DECISIONS.md](DECISIONS.md) #012, #016). Document number: `repair_reports.report_number` (`FR-{YYYY}-{SEQUENCE}`), generated per report.*
+_Internal document, typically sent to or shared with a factory/repair partner. A service job may have multiple Repair Reports over its lifetime ([DECISIONS.md](DECISIONS.md) #012, #016). Document number: `repair_reports.report_number` (`FR-{YYYY}-{SEQUENCE}`), generated per report._
 
-| Attribute | Value |
-|---|---|
-| Purpose | Communicate diagnosis and repair work to a factory/repair partner, and record the outcome for internal approval |
-| Target User | Service Staff / Technician (author), Factory/repair partner (recipient), Admin (approver) |
-| Paper Size / Orientation | A4, portrait |
-| Print Margins / Header / Footer / QR / Tracking Number / Logo | Shared default (still applies even for an internal document — it should link back to the service job) |
-| Signature Areas | Two columns: **Technician** and **Approval** (approver name, signature, date) — no customer signature; internal/B2B document |
-| Date Format | **Internal document → Gregorian only** |
-| Typography | Shared default |
+| Attribute                                                     | Value                                                                                                                        |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Purpose                                                       | Communicate diagnosis and repair work to a factory/repair partner, and record the outcome for internal approval              |
+| Target User                                                   | Service Staff / Technician (author), Factory/repair partner (recipient), Admin (approver)                                    |
+| Paper Size / Orientation                                      | A4, portrait                                                                                                                 |
+| Print Margins / Header / Footer / QR / Tracking Number / Logo | Shared default (still applies even for an internal document — it should link back to the service job)                        |
+| Signature Areas                                               | Two columns: **Technician** and **Approval** (approver name, signature, date) — no customer signature; internal/B2B document |
+| Date Format                                                   | **Internal document → Gregorian only**                                                                                       |
+| Typography                                                    | Shared default                                                                                                               |
 
 **Included Fields:**
 
-| Field | Source |
-|---|---|
-| Tracking Number | `service_jobs.tracking_number` (parent job) |
-| Document Number | `repair_reports.report_number` |
-| Attempt Number | `repair_reports.attempt_number` |
-| Product | `product_instances` → `models` → `products` |
-| Problem Summary | `service_jobs.issue_summary` |
-| Diagnosis | `repair_reports.diagnosis` |
-| Repair Action | `repair_reports.repair_action_summary` |
-| Parts Replaced | `repair_parts` (part name / part number / qty / unit cost), joined on this `repair_report_id` |
-| Repair Cost | `repair_reports.cost` |
+| Field             | Source                                                                                                                                   |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Tracking Number   | `service_jobs.tracking_number` (parent job)                                                                                              |
+| Document Number   | `repair_reports.report_number`                                                                                                           |
+| Attempt Number    | `repair_reports.attempt_number`                                                                                                          |
+| Product           | `product_instances` → `models` → `products`                                                                                              |
+| Problem Summary   | `service_jobs.issue_summary`                                                                                                             |
+| Diagnosis         | `repair_reports.diagnosis`                                                                                                               |
+| Repair Action     | `repair_reports.repair_action_summary`                                                                                                   |
+| Parts Replaced    | `repair_parts` (part name / part number / qty / unit cost), joined on this `repair_report_id`                                            |
+| Repair Cost       | `repair_reports.cost`                                                                                                                    |
 | Warranty Decision | `repair_reports.warranty_decision` (covered / chargeable / pending) — distinct from the unit's overall `product_instances.warranty_type` |
-| Photos | `photos`, may include internal-only images via `attachments` |
-| Technician | `repair_reports.created_by` → `users` |
-| Approval | `repair_report_approvals` — latest `decision`/`approver_id`/`decided_at`; full history available if a prior attempt was rejected |
+| Photos            | `photos`, may include internal-only images via `attachments`                                                                             |
+| Technician        | `repair_reports.created_by` → `users`                                                                                                    |
+| Approval          | `repair_report_approvals` — latest `decision`/`approver_id`/`decided_at`; full history available if a prior attempt was rejected         |
 
 No open schema gaps remain for this document.
 
@@ -119,30 +119,30 @@ No open schema gaps remain for this document.
 
 ### 3. Product Return Form
 
-*Given to the customer when they collect the repaired product. Document number: `service_jobs.return_form_number` (`RT-{YYYY}-{SEQUENCE}`), generated at service job completion.*
+_Given to the customer when they collect the repaired product. Document number: `service_jobs.return_form_number` (`RT-{YYYY}-{SEQUENCE}`), generated at service job completion._
 
-| Attribute | Value |
-|---|---|
-| Purpose | Confirm what repair was performed, under what warranty outcome, and that the customer accepted the returned product |
-| Target User | Customer (receives a copy) and Service Staff (files a copy) |
-| Paper Size / Orientation | A4, portrait |
-| Print Margins / Header / Footer / QR / Tracking Number / Logo | Shared default |
-| Signature Areas | **Customer Signature** only, as specified (name, signature, date) — see Open Questions on whether a staff countersignature should also be required |
-| Date Format | Customer-facing → DD/MM/YYYY + Buddhist Era |
-| Typography | Shared default |
+| Attribute                                                     | Value                                                                                                                                              |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Purpose                                                       | Confirm what repair was performed, under what warranty outcome, and that the customer accepted the returned product                                |
+| Target User                                                   | Customer (receives a copy) and Service Staff (files a copy)                                                                                        |
+| Paper Size / Orientation                                      | A4, portrait                                                                                                                                       |
+| Print Margins / Header / Footer / QR / Tracking Number / Logo | Shared default                                                                                                                                     |
+| Signature Areas                                               | **Customer Signature** only, as specified (name, signature, date) — see Open Questions on whether a staff countersignature should also be required |
+| Date Format                                                   | Customer-facing → DD/MM/YYYY + Buddhist Era                                                                                                        |
+| Typography                                                    | Shared default                                                                                                                                     |
 
 **Included Fields:**
 
-| Field | Source |
-|---|---|
-| Tracking Number | `service_jobs.tracking_number` |
-| Document Number | `service_jobs.return_form_number` |
-| Repair Summary | `repair_reports.repair_action_summary` (most recent report for this job) |
-| Replacement Parts | `repair_parts`, joined via the job's `repair_reports` |
-| Warranty Result | `repair_reports.warranty_decision` (most recent report) |
+| Field               | Source                                                                                                                                          |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tracking Number     | `service_jobs.tracking_number`                                                                                                                  |
+| Document Number     | `service_jobs.return_form_number`                                                                                                               |
+| Repair Summary      | `repair_reports.repair_action_summary` (most recent report for this job)                                                                        |
+| Replacement Parts   | `repair_parts`, joined via the job's `repair_reports`                                                                                           |
+| Warranty Result     | `repair_reports.warranty_decision` (most recent report)                                                                                         |
 | Customer Acceptance | `service_jobs.closed_at` marks the job closed; a dedicated acceptance timestamp is a nice-to-have refinement, not blocking (see Open Questions) |
-| Customer Signature | Captured at pickup time — not a stored data field |
-| Return Date | `service_jobs.closed_at` |
+| Customer Signature  | Captured at pickup time — not a stored data field                                                                                               |
+| Return Date         | `service_jobs.closed_at`                                                                                                                        |
 
 No open schema gaps remain for this document.
 
@@ -152,11 +152,11 @@ No open schema gaps remain for this document.
 
 ## Future Document Types (not specified in V1)
 
-| # | Document | Purpose (directional only) |
-|---|---|---|
-| 4 | Replacement Form | Used when a product is replaced outright rather than repaired — would likely link two `product_instances` (old unit retired, new unit issued) rather than needing new modeling beyond what already exists. |
-| 5 | Spare Part Report | Internal parts-inventory reporting — now has a natural data source in `repair_parts`, introduced by the Repair Report relationship model. |
-| 6 | Monthly Service Report | Aggregate/analytics report across service jobs for a period — a reporting document, not a single-job document; different structure from the three above (no tracking number/QR header pattern applies). |
+| #   | Document               | Purpose (directional only)                                                                                                                                                                                 |
+| --- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 4   | Replacement Form       | Used when a product is replaced outright rather than repaired — would likely link two `product_instances` (old unit retired, new unit issued) rather than needing new modeling beyond what already exists. |
+| 5   | Spare Part Report      | Internal parts-inventory reporting — now has a natural data source in `repair_parts`, introduced by the Repair Report relationship model.                                                                  |
+| 6   | Monthly Service Report | Aggregate/analytics report across service jobs for a period — a reporting document, not a single-job document; different structure from the three above (no tracking number/QR header pattern applies).    |
 
 ## General Print Rules
 
@@ -177,10 +177,10 @@ No open schema gaps remain for this document.
 
 Original version of this document flagged 12 schema gaps. [DECISIONS.md](DECISIONS.md) #011–#016 (Customer Master, Product Instance, channel-contact relocation, document numbering, warranty relocation, approval log) resolved all but the two genuinely open items below:
 
-| Field | Status |
-|---|---|
+| Field                                                             | Status                                     |
+| ----------------------------------------------------------------- | ------------------------------------------ |
 | Customer Acceptance (dedicated timestamp vs. reusing `closed_at`) | Minor open refinement — see Open Questions |
-| Return Form staff countersignature | Open question — see below |
+| Return Form staff countersignature                                | Open question — see below                  |
 
 Everything else originally listed (Username, Order Number, Purchase Channel, Model, Warranty Type, Diagnosis, Repair Action, Parts Replaced, Warranty Decision, Approval) now has a concrete source in [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md).
 

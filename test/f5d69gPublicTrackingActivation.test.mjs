@@ -77,7 +77,11 @@ function draft(overrides = {}) {
 
 test('Mock create() returns the ServiceJob itself and mints no tracking credential', async () => {
   const created = await serviceJobsRepository.create(draft());
-  assert.equal(typeof created.id, 'string', 'create() must return the ServiceJob directly');
+  assert.equal(
+    typeof created.id,
+    'string',
+    'create() must return the ServiceJob directly'
+  );
   assert.equal(
     created.publicTrackingCodeHash,
     null,
@@ -91,7 +95,9 @@ test('Mock create() returns the ServiceJob itself and mints no tracking credenti
 });
 
 test('no creation path can produce an SRV bearer secret — so a creation retry cannot lose one', async () => {
-  const created = await serviceJobsRepository.create(draft({ customerPhone: '0899999002' }));
+  const created = await serviceJobsRepository.create(
+    draft({ customerPhone: '0899999002' })
+  );
   assert.doesNotMatch(
     JSON.stringify(created),
     /SRV-\d{4}-\d{4}-[0-9A-Z]{6}/,
@@ -102,7 +108,9 @@ test('no creation path can produce an SRV bearer secret — so a creation retry 
 // --- explicit issuance: inactive -> issue, active -> rotate ----------------
 
 test('explicit issuance activates an inactive job and returns a valid canonical code', async () => {
-  const created = await serviceJobsRepository.create(draft({ customerPhone: '0899999003' }));
+  const created = await serviceJobsRepository.create(
+    draft({ customerPhone: '0899999003' })
+  );
   const issued = await serviceJobsRepository.issuePublicTrackingCode(created.id);
   assert.ok(isValidPublicTrackingCode(issued.code));
   assert.notEqual(issued.job.publicTrackingCodeHash, null);
@@ -110,11 +118,17 @@ test('explicit issuance activates an inactive job and returns a valid canonical 
     serviceJobsRepository.getById(created.id)?.publicTrackingCodeHash,
     issued.job.publicTrackingCodeHash
   );
-  assert.notEqual(issued.code, issued.job.publicTrackingCodeHash, 'the code must never equal its stored hash');
+  assert.notEqual(
+    issued.code,
+    issued.job.publicTrackingCodeHash,
+    'the code must never equal its stored hash'
+  );
 });
 
 test('rotation issues a different code and replaces the stored hash, invalidating the previous one', async () => {
-  const created = await serviceJobsRepository.create(draft({ customerPhone: '0899999004' }));
+  const created = await serviceJobsRepository.create(
+    draft({ customerPhone: '0899999004' })
+  );
   const first = await serviceJobsRepository.issuePublicTrackingCode(created.id);
   const rotated = await serviceJobsRepository.issuePublicTrackingCode(created.id);
   assert.notEqual(rotated.code, first.code);
@@ -127,7 +141,9 @@ test('rotation issues a different code and replaces the stored hash, invalidatin
 });
 
 test('issuance fails closed for a nonexistent Service Job id', async () => {
-  await assert.rejects(() => serviceJobsRepository.issuePublicTrackingCode('NO-SUCH-JOB-ID'));
+  await assert.rejects(() =>
+    serviceJobsRepository.issuePublicTrackingCode('NO-SUCH-JOB-ID')
+  );
 });
 
 // --- ambiguous vs conclusive issuance failure ------------------------------
@@ -139,7 +155,10 @@ test('PublicTrackingIssuanceError distinguishes a conclusive rejection from an a
   // A server-side failure or a total absence of a status leaves the real
   // outcome unknown — the credential may in fact be live.
   assert.equal(new PublicTrackingIssuanceError('server error', 500).isConclusive, false);
-  assert.equal(new PublicTrackingIssuanceError('network failure', null).isConclusive, false);
+  assert.equal(
+    new PublicTrackingIssuanceError('network failure', null).isConclusive,
+    false
+  );
 });
 
 test('the Firestore repository classifies a network failure and a malformed 2xx body as AMBIGUOUS, not as failure', async () => {
@@ -186,7 +205,11 @@ test('STATE C (active, plaintext unknown) is never rendered as inactive', async 
   const source = await sectionSourcePromise;
   // The active branch is selected by isActive alone — NOT by whether a
   // plaintext code happens to be in local state.
-  assert.match(source, /\) : isActive \? \(/, 'expected an isActive branch distinct from the issued-code branch');
+  assert.match(
+    source,
+    /\) : isActive \? \(/,
+    'expected an isActive branch distinct from the issued-code branch'
+  );
   assert.match(source, /รหัสเดิมไม่สามารถแสดงซ้ำได้/);
   assert.match(source, /ออกใหม่/);
 });
@@ -208,8 +231,16 @@ test('an ambiguous issuance failure never auto-retries and never auto-rotates', 
     1,
     'issue() must call the issuance endpoint exactly once — an automatic retry could silently rotate a live credential'
   );
-  assert.doesNotMatch(issueBody[1], /setTimeout|while \(|for \(/, 'no retry loop or scheduled retry is permitted');
-  assert.match(issueBody[1], /isConclusive/, 'the handler must branch on conclusive vs ambiguous');
+  assert.doesNotMatch(
+    issueBody[1],
+    /setTimeout|while \(|for \(/,
+    'no retry loop or scheduled retry is permitted'
+  );
+  assert.match(
+    issueBody[1],
+    /isConclusive/,
+    'the handler must branch on conclusive vs ambiguous'
+  );
 });
 
 test('an ambiguous failure uses neutral wording and re-reads the real persisted job state', async () => {
@@ -229,7 +260,11 @@ test('an ambiguous failure uses neutral wording and re-reads the real persisted 
     /onRefreshJob\?\.\(job\.id\);/,
     'an ambiguous outcome must still re-read the job so a fresh row becomes available'
   );
-  assert.doesNotMatch(issueBody[1], /setIsActive/, 'isActive must not be independently set anymore — it is derived');
+  assert.doesNotMatch(
+    issueBody[1],
+    /setIsActive/,
+    'isActive must not be independently set anymore — it is derived'
+  );
 });
 
 test('the section never attempts plaintext recovery — no scan, no query, no hash-to-code path', async () => {
@@ -238,7 +273,11 @@ test('the section never attempts plaintext recovery — no scan, no query, no ha
   // Code constructs only — deliberately not prose, so an explanatory comment
   // mentioning "scan"/"query" can never trip this guard.
   assert.doesNotMatch(source, /getAll\(\)|\.filter\(|repositories\./);
-  assert.match(source, /setIssuedCode\(result\.code\)/, 'the only source of a displayed code is a fresh issuance result');
+  assert.match(
+    source,
+    /setIssuedCode\(result\.code\)/,
+    'the only source of a displayed code is a fresh issuance result'
+  );
 });
 
 // --- print truthfulness across all three states ----------------------------
@@ -266,7 +305,11 @@ test('STATE C print: an active job with no known code must NOT be printed as ina
   const activeUnavailableBlock = source.match(
     /publicTrackingState === 'active-unavailable' &&[\s\S]*?\)\}/
   );
-  assert.notEqual(activeUnavailableBlock, null, 'expected an active-unavailable print branch');
+  assert.notEqual(
+    activeUnavailableBlock,
+    null,
+    'expected an active-unavailable print branch'
+  );
   assert.doesNotMatch(
     activeUnavailableBlock[0],
     /ยังไม่ได้เปิดใช้งาน/,
@@ -280,7 +323,11 @@ test('STATE A print: a genuinely inactive job prints the truthful inactive messa
   const inactiveBlock = source.match(/publicTrackingState === 'inactive' &&[\s\S]*?\)\}/);
   assert.notEqual(inactiveBlock, null);
   assert.match(inactiveBlock[0], /ยังไม่ได้เปิดใช้งานการติดตามสาธารณะ/);
-  assert.doesNotMatch(inactiveBlock[0], /คิวอาร์โค้ด/, 'no QR placeholder may be printed without a credential');
+  assert.doesNotMatch(
+    inactiveBlock[0],
+    /คิวอาร์โค้ด/,
+    'no QR placeholder may be printed without a credential'
+  );
 });
 
 test('STATE B print: only the credentialed state renders the QR and the real credentialed URL', async () => {
@@ -311,11 +358,19 @@ test('print remains completely side-effect free — no issuance, no rotation, no
 
 test('the credentialed URL carries the secret in the fragment, shared by both surfaces', async () => {
   assert.equal(
-    buildPublicTrackingUrl('https://app.example', 'BRN-2026-000006', 'SRV-2026-0819-K7M2QX'),
+    buildPublicTrackingUrl(
+      'https://app.example',
+      'BRN-2026-000006',
+      'SRV-2026-0819-K7M2QX'
+    ),
     'https://app.example/track/BRN-2026-000006#SRV-2026-0819-K7M2QX'
   );
   const url = new URL(
-    buildPublicTrackingUrl('https://app.example', 'BRN-2026-000006', 'SRV-2026-0819-K7M2QX')
+    buildPublicTrackingUrl(
+      'https://app.example',
+      'BRN-2026-000006',
+      'SRV-2026-0819-K7M2QX'
+    )
   );
   assert.equal(url.search, '', 'the credential must never be placed in a query string');
   assert.equal(url.hash, '#SRV-2026-0819-K7M2QX');
@@ -323,13 +378,21 @@ test('the credentialed URL carries the secret in the fragment, shared by both su
     'src/features/service-jobs/components/PublicTrackingSection.tsx',
     'src/features/service-jobs/components/ServiceRequestPrintPreview.tsx',
   ]) {
-    assert.match(await readSource(path), /buildPublicTrackingUrl\(/, `${path} must use the shared builder`);
+    assert.match(
+      await readSource(path),
+      /buildPublicTrackingUrl\(/,
+      `${path} must use the shared builder`
+    );
   }
 });
 
 test('the credentialed URL is forward-compatible with a future opaque Service Job ID', () => {
   assert.equal(
-    buildPublicTrackingUrl('https://app.example', 'BRN-2026-A7K29Q', 'SRV-2026-0819-K7M2QX'),
+    buildPublicTrackingUrl(
+      'https://app.example',
+      'BRN-2026-A7K29Q',
+      'SRV-2026-0819-K7M2QX'
+    ),
     'https://app.example/track/BRN-2026-A7K29Q#SRV-2026-0819-K7M2QX'
   );
 });
@@ -348,7 +411,10 @@ test('NewServiceJob no longer expects creation to return a credential', async ()
 
 test('NewServiceJob offers explicit issuance after creation and feeds the result to the print preview', async () => {
   const source = await readSource('src/features/service-jobs/pages/NewServiceJob.tsx');
-  assert.match(source, /<PublicTrackingSection[\s\S]*?onIssued=\{setSavedPublicTrackingCode\}/);
+  assert.match(
+    source,
+    /<PublicTrackingSection[\s\S]*?onIssued=\{setSavedPublicTrackingCode\}/
+  );
   assert.match(source, /publicTrackingCode=\{savedPublicTrackingCode\}/);
   // The control must sit inside the print-hidden toolbar so the A4 document
   // geometry is untouched.
@@ -365,13 +431,22 @@ test('the in-session credential is transient only — never persisted to storage
     'src/features/service-jobs/components/PublicTrackingSection.tsx',
   ]) {
     const source = await readSource(path);
-    assert.doesNotMatch(source, /localStorage|sessionStorage|indexedDB/, `${path} must not persist the plaintext code`);
+    assert.doesNotMatch(
+      source,
+      /localStorage|sessionStorage|indexedDB/,
+      `${path} must not persist the plaintext code`
+    );
   }
 });
 
 test('ServiceJobDetails wires both issuance and the ambiguous-failure refresh seam', async () => {
-  const source = await readSource('src/features/service-jobs/pages/ServiceJobDetails.tsx');
-  assert.match(source, /const \{ issuePublicTrackingCode, readServiceJob \} = useIssuePublicTrackingCode\(\)/);
+  const source = await readSource(
+    'src/features/service-jobs/pages/ServiceJobDetails.tsx'
+  );
+  assert.match(
+    source,
+    /const \{ issuePublicTrackingCode, readServiceJob \} = useIssuePublicTrackingCode\(\)/
+  );
   assert.match(source, /onIssue=\{issuePublicTrackingCode\}/);
   assert.match(source, /onRefreshJob=\{readServiceJob\}/);
 });

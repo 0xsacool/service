@@ -97,9 +97,11 @@ export function matchCatalogProduct(
     if (skuMatches.length > 1) return { kind: 'conflict', candidates: skuMatches };
 
     const legacyMatches = catalog.filter(
-      (product) => !hasSku(product.sku) && normalizeIdentityValue(product.model) === target
+      (product) =>
+        !hasSku(product.sku) && normalizeIdentityValue(product.model) === target
     );
-    if (legacyMatches.length === 1) return { kind: 'matched', product: legacyMatches[0]! };
+    if (legacyMatches.length === 1)
+      return { kind: 'matched', product: legacyMatches[0]! };
     if (legacyMatches.length > 1) return { kind: 'conflict', candidates: legacyMatches };
 
     return { kind: 'new' };
@@ -109,7 +111,8 @@ export function matchCatalogProduct(
   if (modelTarget.length === 0) return { kind: 'new' };
 
   const modelMatches = catalog.filter(
-    (product) => !hasSku(product.sku) && normalizeIdentityValue(product.model) === modelTarget
+    (product) =>
+      !hasSku(product.sku) && normalizeIdentityValue(product.model) === modelTarget
   );
   if (modelMatches.length === 1) return { kind: 'matched', product: modelMatches[0]! };
   if (modelMatches.length > 1) return { kind: 'conflict', candidates: modelMatches };

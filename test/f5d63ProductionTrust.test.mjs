@@ -71,7 +71,10 @@ test('production technician reassignment is read-only and omitted from save edit
   // one, but canReassignTechnician is still a hard, unconditional gate —
   // in production (canReassignTechnician === false) techDirty can never be
   // true, so technician can never enter the save patch, exactly as before.
-  assert.match(source, /const techDirty = canReassignTechnician && tech !== claim\.technician;/);
+  assert.match(
+    source,
+    /const techDirty = canReassignTechnician && tech !== claim\.technician;/
+  );
   assert.match(source, /techDirty \? \{ technician: tech \} : \{\}/);
   assert.match(source, /การเปลี่ยนช่างผู้รับผิดชอบยังไม่พร้อมใช้งานในระบบจริง/);
   assert.doesNotMatch(source, /แก้ไขการมอบหมาย|<Pencil/);

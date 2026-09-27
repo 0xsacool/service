@@ -138,7 +138,12 @@ test('search by order number returns the owning customer with the matched order 
 test('search by channel identity returns the owning customer with matched channel + identity projected', () => {
   const repo = makeRepo(
     [customer('c1', 'Somchai', '0812345678')],
-    [job('BRN-2026-000001', '0812345678', { contactChannel: 'line', contactChannelIdentity: 'somchai_line' })]
+    [
+      job('BRN-2026-000001', '0812345678', {
+        contactChannel: 'line',
+        contactChannelIdentity: 'somchai_line',
+      }),
+    ]
   );
   const results = repo.search('@somchai_line');
   assert.equal(results.length, 1);
@@ -150,8 +155,16 @@ test('name/phone/tracking/serial match projects the most recent non-null contact
   const repo = makeRepo(
     [customer('c1', 'Somchai Deterministic', '0812345678')],
     [
-      job('BRN-2026-000001', '0812345678', { createdAt: '2026-07-01', contactChannel: 'shopee', contactChannelIdentity: 'old' }),
-      job('BRN-2026-000002', '0812345678', { createdAt: '2026-08-01', contactChannel: 'line', contactChannelIdentity: 'new_id' }),
+      job('BRN-2026-000001', '0812345678', {
+        createdAt: '2026-07-01',
+        contactChannel: 'shopee',
+        contactChannelIdentity: 'old',
+      }),
+      job('BRN-2026-000002', '0812345678', {
+        createdAt: '2026-08-01',
+        contactChannel: 'line',
+        contactChannelIdentity: 'new_id',
+      }),
     ]
   );
   const results = repo.search('Somchai Deterministic');
@@ -167,9 +180,21 @@ test('deterministic projection: job ordering is createdAt DESC then job id DESC,
       // Deliberately inserted out of chronological order to prove the
       // repository doesn't just pick whichever job happens to be last in
       // the array.
-      job('BRN-2026-000005', '0812345678', { createdAt: '2026-08-01', contactChannel: 'shopee', contactChannelIdentity: 'later_same_day_lower_id' }),
-      job('BRN-2026-000009', '0812345678', { createdAt: '2026-08-01', contactChannel: 'line', contactChannelIdentity: 'later_same_day_higher_id' }),
-      job('BRN-2026-000001', '0812345678', { createdAt: '2026-07-01', contactChannel: 'other', contactChannelIdentity: 'earliest' }),
+      job('BRN-2026-000005', '0812345678', {
+        createdAt: '2026-08-01',
+        contactChannel: 'shopee',
+        contactChannelIdentity: 'later_same_day_lower_id',
+      }),
+      job('BRN-2026-000009', '0812345678', {
+        createdAt: '2026-08-01',
+        contactChannel: 'line',
+        contactChannelIdentity: 'later_same_day_higher_id',
+      }),
+      job('BRN-2026-000001', '0812345678', {
+        createdAt: '2026-07-01',
+        contactChannel: 'other',
+        contactChannelIdentity: 'earliest',
+      }),
     ]
   );
   const results = repo.search('Somchai');
@@ -181,13 +206,19 @@ test('a customer can project both an order-number match and a channel-identity m
     [customer('c1', 'Somchai', '0812345678')],
     [
       job('BRN-2026-000001', '0812345678', { orderNumber: 'ORDMATCH-1' }),
-      job('BRN-2026-000002', '0812345678', { contactChannel: 'shopee', contactChannelIdentity: 'idmatch_shared_token' }),
+      job('BRN-2026-000002', '0812345678', {
+        contactChannel: 'shopee',
+        contactChannelIdentity: 'idmatch_shared_token',
+      }),
     ]
   );
   // Query text must appear in both fields to trigger both projections in one search.
   const jobsShared = [
     job('BRN-2026-000001', '0812345678', { orderNumber: 'SHAREDTOKEN-1' }),
-    job('BRN-2026-000002', '0812345678', { contactChannel: 'shopee', contactChannelIdentity: 'sharedtoken_user' }),
+    job('BRN-2026-000002', '0812345678', {
+      contactChannel: 'shopee',
+      contactChannelIdentity: 'sharedtoken_user',
+    }),
   ];
   const repo2 = makeRepo([customer('c1', 'Somchai', '0812345678')], jobsShared);
   const results = repo2.search('sharedtoken');
@@ -199,32 +230,47 @@ test('a customer can project both an order-number match and a channel-identity m
 // --- existing dimensions unaffected (regression) -----------------------------
 
 test('existing name search still works unchanged', () => {
-  const repo = makeRepo([customer('c1', 'Existing Name Regression', '0812345678')], [job('BRN-2026-000001', '0812345678')]);
+  const repo = makeRepo(
+    [customer('c1', 'Existing Name Regression', '0812345678')],
+    [job('BRN-2026-000001', '0812345678')]
+  );
   const results = repo.search('Existing Name Regression');
   assert.equal(results.length, 1);
   assert.equal(results[0].id, 'c1');
 });
 
 test('existing phone search still works unchanged', () => {
-  const repo = makeRepo([customer('c1', 'X', '0899998888')], [job('BRN-2026-000001', '0899998888')]);
+  const repo = makeRepo(
+    [customer('c1', 'X', '0899998888')],
+    [job('BRN-2026-000001', '0899998888')]
+  );
   const results = repo.search('0899998888');
   assert.equal(results.length, 1);
 });
 
 test('existing tracking-number search still works unchanged', () => {
-  const repo = makeRepo([customer('c1', 'X', '0812345678')], [job('BRN-2026-000042', '0812345678')]);
+  const repo = makeRepo(
+    [customer('c1', 'X', '0812345678')],
+    [job('BRN-2026-000042', '0812345678')]
+  );
   const results = repo.search('BRN-2026-000042');
   assert.equal(results.length, 1);
 });
 
 test('existing serial-number search still works unchanged', () => {
-  const repo = makeRepo([customer('c1', 'X', '0812345678')], [job('BRN-2026-000001', '0812345678')]);
+  const repo = makeRepo(
+    [customer('c1', 'X', '0812345678')],
+    [job('BRN-2026-000001', '0812345678')]
+  );
   const results = repo.search('SN-BRN-2026-000001');
   assert.equal(results.length, 1);
 });
 
 test('a customer with no matching job or field returns no results', () => {
-  const repo = makeRepo([customer('c1', 'X', '0812345678')], [job('BRN-2026-000001', '0812345678')]);
+  const repo = makeRepo(
+    [customer('c1', 'X', '0812345678')],
+    [job('BRN-2026-000001', '0812345678')]
+  );
   assert.equal(repo.search('completely-unrelated-query').length, 0);
 });
 

@@ -9,7 +9,8 @@ import { GlassCard } from '../GlassCard';
 // removed for the button itself. The search-dimension wording split
 // (marketplace/order only in Mock) no longer applies either — F5d-69 added
 // real Firestore-mode support for both (DECISIONS.md #041).
-const RETRY_HINT = 'ลองค้นหาด้วยชื่อ โทรศัพท์ ชื่อผู้ใช้ ออเดอร์ เลขติดตาม หรือหมายเลขเครื่องอื่น';
+const RETRY_HINT =
+  'ลองค้นหาด้วยชื่อ โทรศัพท์ ชื่อผู้ใช้ ออเดอร์ เลขติดตาม หรือหมายเลขเครื่องอื่น';
 
 export function SearchNoResults({
   query,

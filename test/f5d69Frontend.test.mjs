@@ -12,13 +12,20 @@ import { createServer } from 'vite';
 const vite = await createServer({ appType: 'custom', server: { middlewareMode: true } });
 after(() => vite.close());
 
-const { buildServiceJobIntakePayload, estimateIntakeRequestBytes, buildCustomerIntakeSelector } =
-  await vite.ssrLoadModule('/src/services/serviceJobCreation.ts');
-const { createEmptyServiceIntake } = await vite.ssrLoadModule('/src/constants/serviceIntake.ts');
+const {
+  buildServiceJobIntakePayload,
+  estimateIntakeRequestBytes,
+  buildCustomerIntakeSelector,
+} = await vite.ssrLoadModule('/src/services/serviceJobCreation.ts');
+const { createEmptyServiceIntake } = await vite.ssrLoadModule(
+  '/src/constants/serviceIntake.ts'
+);
 const { resolveServiceEventMetadataInvariants } = await vite.ssrLoadModule(
   '/src/services/serviceEventMetadataInvariants.ts'
 );
-const { buildServiceJobUpdate } = await vite.ssrLoadModule('/src/services/serviceJobUpdate.ts');
+const { buildServiceJobUpdate } = await vite.ssrLoadModule(
+  '/src/services/serviceJobUpdate.ts'
+);
 const {
   isServiceIntakeComplete,
   serviceIntakeMetadataError,
@@ -27,14 +34,21 @@ const {
 const { isValidCalendarDate, isValidHttpsUrl } = await vite.ssrLoadModule(
   '/src/utils/serviceEventValidation.ts'
 );
-const { mostRecentJobWithContactChannel, compareServiceJobsByRecency } = await vite.ssrLoadModule(
-  '/src/services/serviceJobHistory.ts'
-);
+const { mostRecentJobWithContactChannel, compareServiceJobsByRecency } =
+  await vite.ssrLoadModule('/src/services/serviceJobHistory.ts');
 const { channelLabel, orderVerificationLabel } = await vite.ssrLoadModule(
   '/src/services/serviceJobPresentation.ts'
 );
 
-const baseCustomer = { kind: 'existing', id: 'cust-1', name: 'QA Customer', phone: '0812345678', email: 'qa@example.com', previousServiceJobs: 0, lastVisit: '2026-08-01' };
+const baseCustomer = {
+  kind: 'existing',
+  id: 'cust-1',
+  name: 'QA Customer',
+  phone: '0812345678',
+  email: 'qa@example.com',
+  previousServiceJobs: 0,
+  lastVisit: '2026-08-01',
+};
 const baseProduct = {
   id: 'prod-1',
   brand: 'Bruno',
@@ -112,7 +126,11 @@ test('F5d-69 fields never gate isServiceIntakeComplete (recommended, not require
     contactChannel: null,
   };
   assert.equal(isServiceIntakeComplete(intake), true);
-  const withoutProblem = { ...createEmptyServiceIntake(), contactChannel: 'shopee', contactChannelIdentity: 'x' };
+  const withoutProblem = {
+    ...createEmptyServiceIntake(),
+    contactChannel: 'shopee',
+    contactChannelIdentity: 'x',
+  };
   assert.equal(isServiceIntakeComplete(withoutProblem), false);
 });
 
@@ -125,7 +143,11 @@ test('new customer + Shopee username + order number: payload carries all resolve
     contactChannelIdentity: '  shop_user  ',
     orderNumber: '  250731SHP04821  ',
   };
-  const payload = buildServiceJobIntakePayload({ customer: baseCustomer, product: baseProduct, intake });
+  const payload = buildServiceJobIntakePayload({
+    customer: baseCustomer,
+    product: baseProduct,
+    intake,
+  });
   assert.equal(payload.contactChannel, 'shopee');
   assert.equal(payload.contactChannelIdentity, 'shop_user');
   assert.equal(payload.orderNumber, '250731SHP04821');
@@ -136,8 +158,18 @@ test('new customer + Shopee username + order number: payload carries all resolve
 
 test('existing customer + derived prior channel: most recent job with a channel wins', () => {
   const jobs = [
-    baseServiceJob({ id: 'BRN-2026-000001', createdAt: '2026-07-01', contactChannel: 'shopee', contactChannelIdentity: 'old_user' }),
-    baseServiceJob({ id: 'BRN-2026-000002', createdAt: '2026-08-01', contactChannel: 'line', contactChannelIdentity: 'new_line_id' }),
+    baseServiceJob({
+      id: 'BRN-2026-000001',
+      createdAt: '2026-07-01',
+      contactChannel: 'shopee',
+      contactChannelIdentity: 'old_user',
+    }),
+    baseServiceJob({
+      id: 'BRN-2026-000002',
+      createdAt: '2026-08-01',
+      contactChannel: 'line',
+      contactChannelIdentity: 'new_line_id',
+    }),
   ];
   const recent = mostRecentJobWithContactChannel(jobs);
   check('most recent job by createdAt is selected', recent.id === 'BRN-2026-000002');
@@ -146,12 +178,23 @@ test('existing customer + derived prior channel: most recent job with a channel 
 
 test('existing customer later contacts via LINE: same-day tiebreak uses job id DESC', () => {
   const jobs = [
-    baseServiceJob({ id: 'BRN-2026-000001', createdAt: '2026-08-01', contactChannel: 'shopee' }),
-    baseServiceJob({ id: 'BRN-2026-000002', createdAt: '2026-08-01', contactChannel: 'line' }),
+    baseServiceJob({
+      id: 'BRN-2026-000001',
+      createdAt: '2026-08-01',
+      contactChannel: 'shopee',
+    }),
+    baseServiceJob({
+      id: 'BRN-2026-000002',
+      createdAt: '2026-08-01',
+      contactChannel: 'line',
+    }),
   ];
   const recent = mostRecentJobWithContactChannel(jobs);
   check('same-day tie broken by higher job id', recent.id === 'BRN-2026-000002');
-  check('compareServiceJobsByRecency orders id DESC on a createdAt tie', compareServiceJobsByRecency(jobs[1], jobs[0]) < 0);
+  check(
+    'compareServiceJobsByRecency orders id DESC on a createdAt tie',
+    compareServiceJobsByRecency(jobs[1], jobs[0]) < 0
+  );
 });
 
 test('a job with no contact channel is never selected as the recent one', () => {
@@ -178,14 +221,30 @@ test('change customer resets metadata: a fresh empty intake carries no leaked ch
 // --- INTAKE: phone channel clears identity / clearing channel clears identity
 
 test('phone channel clears identity at payload build, even if client state was not cleared', () => {
-  const intake = { ...createEmptyServiceIntake(), contactChannel: 'phone', contactChannelIdentity: 'stale' };
-  const payload = buildServiceJobIntakePayload({ customer: baseCustomer, product: baseProduct, intake });
+  const intake = {
+    ...createEmptyServiceIntake(),
+    contactChannel: 'phone',
+    contactChannelIdentity: 'stale',
+  };
+  const payload = buildServiceJobIntakePayload({
+    customer: baseCustomer,
+    product: baseProduct,
+    intake,
+  });
   assert.equal(payload.contactChannelIdentity, null);
 });
 
 test('clearing channel to null clears identity at payload build too', () => {
-  const intake = { ...createEmptyServiceIntake(), contactChannel: null, contactChannelIdentity: 'stale' };
-  const payload = buildServiceJobIntakePayload({ customer: baseCustomer, product: baseProduct, intake });
+  const intake = {
+    ...createEmptyServiceIntake(),
+    contactChannel: null,
+    contactChannelIdentity: 'stale',
+  };
+  const payload = buildServiceJobIntakePayload({
+    customer: baseCustomer,
+    product: baseProduct,
+    intake,
+  });
   assert.equal(payload.contactChannelIdentity, null);
 });
 
@@ -193,13 +252,21 @@ test('clearing channel to null clears identity at payload build too', () => {
 
 test('order number present defaults verification to unverified', () => {
   const intake = { ...createEmptyServiceIntake(), orderNumber: 'ABC-1' };
-  const payload = buildServiceJobIntakePayload({ customer: baseCustomer, product: baseProduct, intake });
+  const payload = buildServiceJobIntakePayload({
+    customer: baseCustomer,
+    product: baseProduct,
+    intake,
+  });
   assert.equal(payload.orderVerification, 'unverified');
 });
 
 test('clearing order number to blank clears verification to null', () => {
   const intake = { ...createEmptyServiceIntake(), orderNumber: '   ' };
-  const payload = buildServiceJobIntakePayload({ customer: baseCustomer, product: baseProduct, intake });
+  const payload = buildServiceJobIntakePayload({
+    customer: baseCustomer,
+    product: baseProduct,
+    intake,
+  });
   assert.equal(payload.orderNumber, null);
   assert.equal(payload.orderVerification, null);
 });
@@ -238,14 +305,24 @@ test('isValidCalendarDate rejects month 13 and day 32', () => {
 // --- INTAKE: external evidence -----------------------------------------------
 
 test('a valid https evidence URL passes validation and round-trips through payload build', () => {
-  const intake = { ...createEmptyServiceIntake(), externalEvidenceUrl: 'https://drive.google.com/x' };
+  const intake = {
+    ...createEmptyServiceIntake(),
+    externalEvidenceUrl: 'https://drive.google.com/x',
+  };
   assert.equal(serviceIntakeMetadataError(intake), null);
-  const payload = buildServiceJobIntakePayload({ customer: baseCustomer, product: baseProduct, intake });
+  const payload = buildServiceJobIntakePayload({
+    customer: baseCustomer,
+    product: baseProduct,
+    intake,
+  });
   assert.equal(payload.externalEvidenceUrl, 'https://drive.google.com/x');
 });
 
 test('an http evidence URL is rejected by client-side validation', () => {
-  const intake = { ...createEmptyServiceIntake(), externalEvidenceUrl: 'http://example.com/a' };
+  const intake = {
+    ...createEmptyServiceIntake(),
+    externalEvidenceUrl: 'http://example.com/a',
+  };
   assert.notEqual(serviceIntakeMetadataError(intake), null);
 });
 
@@ -257,7 +334,11 @@ test('a malformed evidence URL is rejected by client-side validation', () => {
 test('no external evidence entered: payload carries null for both fields, no error', () => {
   const intake = createEmptyServiceIntake();
   assert.equal(serviceIntakeMetadataError(intake), null);
-  const payload = buildServiceJobIntakePayload({ customer: baseCustomer, product: baseProduct, intake });
+  const payload = buildServiceJobIntakePayload({
+    customer: baseCustomer,
+    product: baseProduct,
+    intake,
+  });
   assert.equal(payload.externalEvidenceUrl, null);
   assert.equal(payload.externalEvidenceNote, null);
 });
@@ -272,23 +353,48 @@ test('isValidHttpsUrl rejects javascript: and data: schemes', () => {
 test('a large orderNumber measurably increases the estimated request byte count', () => {
   const shortIntake = { ...createEmptyServiceIntake(), orderNumber: 'A' };
   const longIntake = { ...createEmptyServiceIntake(), orderNumber: 'B'.repeat(64) };
-  const shortPayload = buildServiceJobIntakePayload({ customer: baseCustomer, product: baseProduct, intake: shortIntake });
-  const longPayload = buildServiceJobIntakePayload({ customer: baseCustomer, product: baseProduct, intake: longIntake });
+  const shortPayload = buildServiceJobIntakePayload({
+    customer: baseCustomer,
+    product: baseProduct,
+    intake: shortIntake,
+  });
+  const longPayload = buildServiceJobIntakePayload({
+    customer: baseCustomer,
+    product: baseProduct,
+    intake: longIntake,
+  });
   const selector = buildCustomerIntakeSelector(baseCustomer);
   const shortBytes = estimateIntakeRequestBytes(shortPayload, selector);
   const longBytes = estimateIntakeRequestBytes(longPayload, selector);
-  check('longer orderNumber increases the measured byte count', longBytes > shortBytes + 50);
+  check(
+    'longer orderNumber increases the measured byte count',
+    longBytes > shortBytes + 50
+  );
 });
 
 test('a large externalEvidenceNote measurably increases the estimated request byte count', () => {
   const shortIntake = { ...createEmptyServiceIntake(), externalEvidenceNote: 'x' };
-  const longIntake = { ...createEmptyServiceIntake(), externalEvidenceNote: 'เครื่องดับหลังใช้งาน'.repeat(20) };
-  const shortPayload = buildServiceJobIntakePayload({ customer: baseCustomer, product: baseProduct, intake: shortIntake });
-  const longPayload = buildServiceJobIntakePayload({ customer: baseCustomer, product: baseProduct, intake: longIntake });
+  const longIntake = {
+    ...createEmptyServiceIntake(),
+    externalEvidenceNote: 'เครื่องดับหลังใช้งาน'.repeat(20),
+  };
+  const shortPayload = buildServiceJobIntakePayload({
+    customer: baseCustomer,
+    product: baseProduct,
+    intake: shortIntake,
+  });
+  const longPayload = buildServiceJobIntakePayload({
+    customer: baseCustomer,
+    product: baseProduct,
+    intake: longIntake,
+  });
   const selector = buildCustomerIntakeSelector(baseCustomer);
   const shortBytes = estimateIntakeRequestBytes(shortPayload, selector);
   const longBytes = estimateIntakeRequestBytes(longPayload, selector);
-  check('longer Thai note increases the measured byte count', longBytes > shortBytes + 100);
+  check(
+    'longer Thai note increases the measured byte count',
+    longBytes > shortBytes + 100
+  );
 });
 
 test('the byte estimate measures the ACTUAL payload buildServiceJobIntakePayload returns, not a separate shape', () => {
@@ -302,9 +408,15 @@ test('the byte estimate measures the ACTUAL payload buildServiceJobIntakePayload
     externalEvidenceUrl: 'https://drive.google.com/x',
     externalEvidenceNote: 'note',
   };
-  const payload = buildServiceJobIntakePayload({ customer: baseCustomer, product: baseProduct, intake });
+  const payload = buildServiceJobIntakePayload({
+    customer: baseCustomer,
+    product: baseProduct,
+    intake,
+  });
   const selector = buildCustomerIntakeSelector(baseCustomer);
-  const expectedBytes = new TextEncoder().encode(JSON.stringify({ intake: payload, customer: selector })).length;
+  const expectedBytes = new TextEncoder().encode(
+    JSON.stringify({ intake: payload, customer: selector })
+  ).length;
   assert.equal(estimateIntakeRequestBytes(payload, selector), expectedBytes);
 });
 
@@ -388,7 +500,12 @@ test('buildServiceJobUpdate omits metadata keys entirely when contactChannel is 
 });
 
 test('buildServiceJobUpdate: clearing to null on all metadata fields is preserved verbatim', () => {
-  const current = baseServiceJob({ contactChannel: 'shopee', contactChannelIdentity: 'x', orderNumber: 'ABC', orderVerification: 'verified' });
+  const current = baseServiceJob({
+    contactChannel: 'shopee',
+    contactChannelIdentity: 'x',
+    orderNumber: 'ABC',
+    orderVerification: 'verified',
+  });
   const patch = buildServiceJobUpdate(
     {
       status: 'Received',
@@ -412,7 +529,10 @@ test('buildServiceJobUpdate: clearing to null on all metadata fields is preserve
 });
 
 test('buildServiceJobUpdate: verification transition from unverified to verified is preserved, order number unchanged', () => {
-  const current = baseServiceJob({ orderNumber: 'ABC-1', orderVerification: 'unverified' });
+  const current = baseServiceJob({
+    orderNumber: 'ABC-1',
+    orderVerification: 'unverified',
+  });
   const patch = buildServiceJobUpdate(
     {
       status: 'Received',
@@ -477,13 +597,26 @@ test('serviceEventMetadataDraftError blocks an invalid URL for a Details-shaped 
 // --- presentation labels ------------------------------------------------------
 
 test('channelLabel covers all seven approved channels with a non-empty label', () => {
-  for (const channel of ['shopee', 'lazada', 'line', 'store', 'website', 'phone', 'other']) {
-    check(`channelLabel('${channel}') is non-empty`, typeof channelLabel(channel) === 'string' && channelLabel(channel).length > 0);
+  for (const channel of [
+    'shopee',
+    'lazada',
+    'line',
+    'store',
+    'website',
+    'phone',
+    'other',
+  ]) {
+    check(
+      `channelLabel('${channel}') is non-empty`,
+      typeof channelLabel(channel) === 'string' && channelLabel(channel).length > 0
+    );
   }
 });
 
 test('orderVerificationLabel covers all three states with distinct labels', () => {
-  const labels = new Set(['unverified', 'verified', 'not_found'].map(orderVerificationLabel));
+  const labels = new Set(
+    ['unverified', 'verified', 'not_found'].map(orderVerificationLabel)
+  );
   assert.equal(labels.size, 3);
 });
 

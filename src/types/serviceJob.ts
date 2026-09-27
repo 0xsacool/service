@@ -40,7 +40,8 @@ export type OrderVerification = (typeof ORDER_VERIFICATIONS)[number];
 
 export function isOrderVerification(value: unknown): value is OrderVerification {
   return (
-    typeof value === 'string' && (ORDER_VERIFICATIONS as readonly string[]).includes(value)
+    typeof value === 'string' &&
+    (ORDER_VERIFICATIONS as readonly string[]).includes(value)
   );
 }
 

@@ -63,9 +63,7 @@ function compareCodepoints(a: string, b: string): number {
 // meaningful catalog change for matching purposes); the human-facing fields
 // keep their display form, since changing "abc" to "ABC" in a product name
 // genuinely is a change a preview should be re-run against.
-export function buildCanonicalCatalogString(
-  catalog: readonly CatalogProduct[]
-): string {
+export function buildCanonicalCatalogString(catalog: readonly CatalogProduct[]): string {
   const rows = catalog
     .map((product) => [
       product.id,

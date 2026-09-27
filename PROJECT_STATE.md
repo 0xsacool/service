@@ -93,6 +93,36 @@ configuration gate must make that candidate state verifiable by removing the
 legacy secret binding or replacing it with visible plain-text `false`. Do not
 weaken or bypass the guard to work around this prerequisite.
 
+## N6 clean baseline certification (2026-09-27)
+
+N6 certifies the post-N5 source baseline from commit `acd52f1`. The first
+root certification run found a real repository formatting debt: build and
+ESLint passed, but Prettier failed broadly. Because this Windows host has
+`core.autocrlf=true`, N6 first separated line-ending noise from real style
+drift; even with automatic EOL handling, 101 tracked files still needed
+mechanical Prettier normalization. The repository Prettier policy now sets
+`endOfLine: "auto"` so the checked-in `format:check` gate works consistently
+on the Windows development host without forcing an unrelated line-ending
+rewrite.
+
+After the formatting correction, the production app build, ESLint,
+`format:check`, every documented deterministic root test group, Worker
+TypeScript check, full Worker test suite, and the Firestore Rules emulator suite
+all pass. The Rules suite completed 34/34 tests with no failures or skips.
+Worker validation reused the already-installed main Worker dependencies through
+a local-only junction; no package install or dependency version change was
+performed.
+
+N6 is source/tooling certification only. It performs no Worker upload/deploy,
+traffic change, Firebase/Cloudflare/IAM/Rules/index production mutation,
+business-data write, Public Tracking enablement, or destructive Git operation.
+Independent GPT-6 Astra read-only review passed with `REQUIRED_FIXES: NONE`:
+all 90 staged source/test files matched mechanical Prettier output, AST checks
+confirmed semantic equivalence (including JSX), and no hidden route/auth/Rules/
+Worker/Public Tracking behavior change was found. See
+`reports/Service-Tech-N6-Clean-Baseline-Certification-20260927.txt` for the
+detailed evidence.
+
 ## Historical production D24/D25 + Public Tracking state (2026-09-26)
 
 The reviewed production source checkpoint is
@@ -106,8 +136,7 @@ Cloudflare Worker `service-tech-files-worker` serves version
 `476a137c-181d-45b1-a8a1-3054973b23bc` at 100% traffic.
 `SERVICE_REPORT_V2_MODE=compatibility` is live. Public Tracking remains
 disabled; production probes return HTTP 404 for both public lookup shapes.
-Worker health returns 200, and unauthenticated D24/D25 reads fail closed with
-401.
+Worker health returns 200, and unauthenticated D24/D25 reads fail closed with 401.
 
 All three required `serviceReports` compound indexes are `READY`. The
 old-client retirement gate completed before final Rules activation: the sole
@@ -187,18 +216,18 @@ today:
 
 ## Current Architecture
 
-| Layer             | Current implementation                                                                                                                                                                                                                                                                                                                                                                |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Framework         | React 19 + TypeScript, built with Vite 8                                                                                                                                                                                                                                                                                                                                              |
-| Routing           | `react-router-dom` (`BrowserRouter`), route table in [src/app/App.tsx](src/app/App.tsx), patterns centralized in `src/constants` — real deep links, working back/forward                                                                                                                                                                                                              |
-| Styling           | Tailwind CSS v4 (via `@tailwindcss/vite`), design tokens in [src/index.css](src/index.css)                                                                                                                                                                                                                                                                                            |
-| Icons             | `lucide-react`                                                                                                                                                                                                                                                                                                                                                                        |
-| Data access       | Typed repository interfaces (`src/repositories/types.ts`) resolved through the **Repository Provider** (`src/repositories/repositoryProvider.ts`), consumed by hooks (`useServiceJobs`, `useCustomers`, `useUniversalSearch`, `useCustomerProducts`, `useCreateServiceJob`, `useProductMaster`, `useProductDetail`) — components never import a repository or mock data file directly |
-| Backend (development) | **Mock** — static fixtures under `src/repositories/mockData/`, wrapped by in-memory repository implementations                                                                                                                                                                                                                                                                  |
-| Backend (production)  | **Firestore + Worker**, selected explicitly by production environment and guarded fail-closed before the app mounts — see Backend & Repository Architecture below                                                                                                                                                                                                              |
-| State             | Local `useState`/hooks per page/component; no global store; no React Context for repositories (deliberate — see [DECISIONS.md](DECISIONS.md) #017)                                                                                                                                                                                                                                    |
-| Auth              | Live Firebase Email/Password staff session provider with own-profile validation, brand scope, staff guard, and Worker token refresh handling. `@supabase/supabase-js` is an unused, orphaned dependency                                                                                                                                                                             |
-| Folder structure  | Feature-based (`src/features/`, `src/shared/`, `src/repositories/`, `src/imports/`, `src/types/`, `src/constants/`, `src/validation/`, `src/services/`, `src/utils/`, `src/lib/`, `src/config/`) — see Folder Structure below                                                                                                                                                         |
+| Layer                 | Current implementation                                                                                                                                                                                                                                                                                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework             | React 19 + TypeScript, built with Vite 8                                                                                                                                                                                                                                                                                                                                              |
+| Routing               | `react-router-dom` (`BrowserRouter`), route table in [src/app/App.tsx](src/app/App.tsx), patterns centralized in `src/constants` — real deep links, working back/forward                                                                                                                                                                                                              |
+| Styling               | Tailwind CSS v4 (via `@tailwindcss/vite`), design tokens in [src/index.css](src/index.css)                                                                                                                                                                                                                                                                                            |
+| Icons                 | `lucide-react`                                                                                                                                                                                                                                                                                                                                                                        |
+| Data access           | Typed repository interfaces (`src/repositories/types.ts`) resolved through the **Repository Provider** (`src/repositories/repositoryProvider.ts`), consumed by hooks (`useServiceJobs`, `useCustomers`, `useUniversalSearch`, `useCustomerProducts`, `useCreateServiceJob`, `useProductMaster`, `useProductDetail`) — components never import a repository or mock data file directly |
+| Backend (development) | **Mock** — static fixtures under `src/repositories/mockData/`, wrapped by in-memory repository implementations                                                                                                                                                                                                                                                                        |
+| Backend (production)  | **Firestore + Worker**, selected explicitly by production environment and guarded fail-closed before the app mounts — see Backend & Repository Architecture below                                                                                                                                                                                                                     |
+| State                 | Local `useState`/hooks per page/component; no global store; no React Context for repositories (deliberate — see [DECISIONS.md](DECISIONS.md) #017)                                                                                                                                                                                                                                    |
+| Auth                  | Live Firebase Email/Password staff session provider with own-profile validation, brand scope, staff guard, and Worker token refresh handling. `@supabase/supabase-js` is an unused, orphaned dependency                                                                                                                                                                               |
+| Folder structure      | Feature-based (`src/features/`, `src/shared/`, `src/repositories/`, `src/imports/`, `src/types/`, `src/constants/`, `src/validation/`, `src/services/`, `src/utils/`, `src/lib/`, `src/config/`) — see Folder Structure below                                                                                                                                                         |
 
 ## Backend & Repository Architecture
 
@@ -268,10 +297,10 @@ This differs from the CLAUDE.md target in small naming details only (e.g. `maste
 
 | Route                       | File                                                                           | Audience    | Purpose                                                                                                                                      |
 | --------------------------- | ------------------------------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/`                         | [TrackHome.tsx](src/features/tracking/pages/TrackHome.tsx)                     | Customer    | Tracking UI; production lookup remains unavailable while Public Tracking is disabled                                                        |
-| `/track/:trackingNumber`    | [TrackResult.tsx](src/features/tracking/pages/TrackResult.tsx)                 | Customer    | Tracking result UI; production lookup remains unavailable while Public Tracking is disabled                                                 |
+| `/`                         | [TrackHome.tsx](src/features/tracking/pages/TrackHome.tsx)                     | Customer    | Tracking UI; production lookup remains unavailable while Public Tracking is disabled                                                         |
+| `/track/:trackingNumber`    | [TrackResult.tsx](src/features/tracking/pages/TrackResult.tsx)                 | Customer    | Tracking result UI; production lookup remains unavailable while Public Tracking is disabled                                                  |
 | `/login`                    | [Login.tsx](src/features/auth/pages/Login.tsx)                                 | Staff/Admin | Firebase Email/Password staff sign-in                                                                                                        |
-| `/dashboard`                | [Dashboard.tsx](src/features/dashboard/pages/Dashboard.tsx)                    | Staff/Admin | Truthful current-status counts and breakdown, recent activity, and awaiting-parts callout                                                     |
+| `/dashboard`                | [Dashboard.tsx](src/features/dashboard/pages/Dashboard.tsx)                    | Staff/Admin | Truthful current-status counts and breakdown, recent activity, and awaiting-parts callout                                                    |
 | `/service-jobs`             | [ServiceJobsList.tsx](src/features/service-jobs/pages/ServiceJobsList.tsx)     | Staff/Admin | Filterable/searchable list of all service jobs                                                                                               |
 | `/service-jobs/new`         | [NewServiceJob.tsx](src/features/service-jobs/pages/NewServiceJob.tsx)         | Staff/Admin | Full intake flow: universal customer/product search → product identity → problem/accessories → service intake → save & print Service Request |
 | `/service-jobs/:id`         | [ServiceJobDetails.tsx](src/features/service-jobs/pages/ServiceJobDetails.tsx) | Staff/Admin | Single record view — status, timeline, notes, photos, customer/product/assignment info                                                       |
@@ -3147,6 +3176,7 @@ mobile memory.
 Three layered client-side ceilings, each with real, documented margin under
 the Worker's authoritative caps (unchanged: 300 KiB/photo, 700 KiB
 aggregate, 900 KiB whole intake — see `worker/src/serviceJobCreation.ts`):
+
 - **Per-photo absolute ceiling: 260 KiB** (`MAX_PHOTO_DATA_URL_SAFE_BYTES`).
 - **Compression TARGET aggregate: 600 KiB** (`PHOTOS_TARGET_AGGREGATE_BYTES`)
   — divided evenly across the UI's own recommended 3-photo checklist
@@ -3403,7 +3433,7 @@ elsewhere, without a manual refresh. Source checkpoint: commit
 Approved conflict policy: **LOCAL LAST WRITE WINS — DIRTY FIELDS ONLY**
 (single-user product; deliberately not multi-user optimistic-locking/merge
 UX — see [DECISIONS.md](DECISIONS.md) #042). A local draft field/group
-rebases onto the freshest persisted value only while it remains *pristine*
+rebases onto the freshest persisted value only while it remains _pristine_
 (unchanged since it was last shown); once a staff member has diverged from
 it, an unrelated incoming update never overwrites their in-progress edit.
 `saveChanges()` sends only dirty fields/groups, relying on the repositories'
@@ -3568,8 +3598,9 @@ shared-module convenience. The Worker's
 `POST /products/import` (`worker/src/index.ts`) is transactional, all-or-
 nothing, idempotent (`productImports` audit collection, caller-owned
 `Idempotency-Key`), stale-catalog-detecting (`productCatalogState` revision
-+ fingerprint), and gated on a dedicated `canImportProducts` staff
-permission (`worker/src/staffAuthorization.ts`) — not merely on being staff.
+
+- fingerprint), and gated on a dedicated `canImportProducts` staff
+  permission (`worker/src/staffAuthorization.ts`) — not merely on being staff.
 
 **Slice 2 (browser integration) + reconciliation pass.** `ProductImportRepository`
 seam (`src/repositories/types.ts`) with mock (`mockProductImportRepository.ts`)
@@ -3643,7 +3674,7 @@ source-only:
 1. **Authoritative display normalization was trim-only, not NFC.** A forged
    NFD (decomposed) request could persist a noncanonical display string.
    `productImportRequest.ts`'s `boundedText` now normalizes every field to
-   NFC *before* the control-character/formula-injection/length checks run,
+   NFC _before_ the control-character/formula-injection/length checks run,
    so a check never validates a different string than the one actually
    persisted. Identity normalization (NFKC + fold + lowercase,
    `productIdentity.ts`) is unchanged and stays a separate, downstream
@@ -3658,7 +3689,7 @@ source-only:
    only the parser's own canonical output; requires a strict UUIDv4
    idempotency key; enforces an exact outer key set
    (`schemaVersion`/`idempotencyKey`/`request`, nothing else); enforces a
-   hard maximum serialized length *before* `JSON.parse` is ever attempted;
+   hard maximum serialized length _before_ `JSON.parse` is ever attempted;
    and on read, ANY failure at any of these checks **actively removes** the
    stored value (`sessionStorage.removeItem`) rather than merely ignoring
    it — a rejected entry can never be re-encountered.
@@ -3684,7 +3715,7 @@ source-only:
    button and backdrop read `preventClose` directly from the render
    closure (never stale), but Escape's handler is registered once in a
    stable-callback effect and read a ref that was only synced via a
-   *passive* `useEffect` — which flushes after paint, leaving a real window
+   _passive_ `useEffect` — which flushes after paint, leaving a real window
    where a physical Escape keypress could fire before the sync ran.
    `onCloseRef`/`preventCloseRef` now sync via `useLayoutEffect`, which
    flushes synchronously in the same browser turn as the commit, before any
@@ -3701,7 +3732,7 @@ source-only:
    the Worker independently re-derives its own classification and never
    trusts the browser's, which is the real safety boundary).
 7. **The plain root test harness was nondeterministic.** `node --test
-   test/*.test.mjs` previously attempted a live connection to the Firestore
+test/*.test.mjs` previously attempted a live connection to the Firestore
    emulator unconditionally and failed/hung when none was running.
    `test/firestoreRules.test.mjs` now performs a short, bounded TCP
    reachability probe against the emulator's own host/port before doing
@@ -3712,7 +3743,7 @@ source-only:
    canonical `npm run test:firestore-rules` path, which starts the emulator
    first), every assertion runs and must pass exactly as before — verified
    still 26/26 there, and separately verified `node --test
-   test/*.test.mjs` now exits 0 deterministically without the emulator.
+test/*.test.mjs` now exits 0 deterministically without the emulator.
 
 **Validation after PI-3C:** focused Product Import/wizard tests, product
 identity tests, repository/auth/backend tests, Worker Product Import route,
@@ -3876,7 +3907,6 @@ during PI-8, claiming the Worker "has never been deployed") remains
 uncorrected — a documentation-only staleness inside a config file's comment,
 out of scope for a docs-only closeout pass and deliberately left for a
 future source-touching change.
-
 
 ## Phase 3R.4B — Worker-mediated Repair Report reads (source only)
 

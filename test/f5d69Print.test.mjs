@@ -35,7 +35,10 @@ function check(name, value) {
 
 test('the customer/order metadata grid renders contactChannel via channelLabel', async () => {
   const source = await previewSourcePromise;
-  assert.match(source, /job\.contactChannel &&[\s\S]{0,80}channelLabel\(job\.contactChannel\)/);
+  assert.match(
+    source,
+    /job\.contactChannel &&[\s\S]{0,80}channelLabel\(job\.contactChannel\)/
+  );
 });
 
 test('the customer/order metadata grid renders contactChannelIdentity when present', async () => {
@@ -50,12 +53,18 @@ test('the customer/order metadata grid renders orderNumber when present', async 
 
 test('the customer/order metadata grid renders purchaseDate via formatThaiDate when present', async () => {
   const source = await previewSourcePromise;
-  assert.match(source, /job\.purchaseDate &&[\s\S]{0,80}formatThaiDate\(job\.purchaseDate\)/);
+  assert.match(
+    source,
+    /job\.purchaseDate &&[\s\S]{0,80}formatThaiDate\(job\.purchaseDate\)/
+  );
 });
 
 test('the customer/order metadata grid renders orderDeliveredDate via formatThaiDate when present', async () => {
   const source = await previewSourcePromise;
-  assert.match(source, /job\.orderDeliveredDate &&[\s\S]{0,120}formatThaiDate\(job\.orderDeliveredDate\)/);
+  assert.match(
+    source,
+    /job\.orderDeliveredDate &&[\s\S]{0,120}formatThaiDate\(job\.orderDeliveredDate\)/
+  );
 });
 
 test('the metadata grid uses print:grid-cols-3 for the compact print layout', async () => {
@@ -91,7 +100,11 @@ test('no QR code is rendered for the evidence link (only the one tracking QR rem
   // updates to match the real component.
   const source = await previewSourcePromise;
   const qrOccurrences = (source.match(/<QRCode\s/g) ?? []).length;
-  assert.equal(qrOccurrences, 1, 'expected exactly the one tracking QR element, no separate one for evidence');
+  assert.equal(
+    qrOccurrences,
+    1,
+    'expected exactly the one tracking QR element, no separate one for evidence'
+  );
 });
 
 // --- three photos remain supported on the same physical page ----------------
@@ -122,7 +135,10 @@ test('every new print field is conditionally rendered, so a legacy job (all fiel
     'job.orderDeliveredDate',
     'job.externalEvidenceUrl',
   ]) {
-    check(`${field} is conditionally guarded, not unconditionally rendered`, source.includes(`${field} &&`));
+    check(
+      `${field} is conditionally guarded, not unconditionally rendered`,
+      source.includes(`${field} &&`)
+    );
   }
 });
 
@@ -135,7 +151,13 @@ test('REGRESSION: existing unconditional customer fields (name/phone/email) are 
 
 test('REGRESSION: no document content was removed — every pre-existing section header is still present', async () => {
   const source = await previewSourcePromise;
-  for (const heading of ['ลูกค้า', 'สินค้า', 'รายละเอียดอาการ', 'อุปกรณ์ที่นำมาด้วย', 'รูปถ่ายที่บันทึกไว้']) {
+  for (const heading of [
+    'ลูกค้า',
+    'สินค้า',
+    'รายละเอียดอาการ',
+    'อุปกรณ์ที่นำมาด้วย',
+    'รูปถ่ายที่บันทึกไว้',
+  ]) {
     check(`heading "${heading}" still present`, source.includes(heading));
   }
 });

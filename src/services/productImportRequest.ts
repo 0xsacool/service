@@ -315,7 +315,10 @@ export function parseProductImportRequest(
     fingerprint.length !== PRODUCT_IMPORT_LIMITS.fingerprintLength ||
     !/^[0-9a-f]+$/.test(fingerprint)
   ) {
-    return invalid('invalid_field', 'body.catalogFingerprint must be a SHA-256 hex digest');
+    return invalid(
+      'invalid_field',
+      'body.catalogFingerprint must be a SHA-256 hex digest'
+    );
   }
 
   if (!Array.isArray(body.rows)) {

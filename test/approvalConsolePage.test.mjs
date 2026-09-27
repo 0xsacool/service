@@ -37,7 +37,9 @@ const { ApprovalReviewPanel } = await vite.ssrLoadModule(
 const { ApprovalQueueSearchControls } = await vite.ssrLoadModule(
   '/src/features/approval-console/components/ApprovalQueueSearchControls.tsx'
 );
-const { repositories } = await vite.ssrLoadModule('/src/repositories/repositoryProvider.ts');
+const { repositories } = await vite.ssrLoadModule(
+  '/src/repositories/repositoryProvider.ts'
+);
 
 const DIGEST = `sha256:v1:${'a'.repeat(64)}`;
 const EVIDENCE_KEY = 'service-jobs/BRN-2026-000001/before/photo-1.jpg';
@@ -208,7 +210,10 @@ test('queue: empty state renders only for an authoritative, non-failing empty pa
 test('queue: an authoritative empty page that then fails to refresh drops the empty claim', () => {
   const markup = render(
     createElement(ApprovalQueueList, {
-      queue: baseQueueState({ error: new Error('refresh failed'), hasAuthoritativeData: true }),
+      queue: baseQueueState({
+        error: new Error('refresh failed'),
+        hasAuthoritativeData: true,
+      }),
       onSelect() {},
     })
   );
@@ -220,7 +225,12 @@ test('queue: an authoritative empty page that then fails to refresh drops the em
 test('queue: populated state renders one row per item and no empty state', () => {
   const markup = render(
     createElement(ApprovalQueueList, {
-      queue: baseQueueState({ items: [queueItem(), queueItem({ reportId: 'report-2', reportNo: 'FR-2026-000002' })] }),
+      queue: baseQueueState({
+        items: [
+          queueItem(),
+          queueItem({ reportId: 'report-2', reportNo: 'FR-2026-000002' }),
+        ],
+      }),
       onSelect() {},
     })
   );
@@ -233,7 +243,10 @@ test('queue: populated state renders one row per item and no empty state', () =>
 test('queue: error state renders as a separate block, not replacing already-loaded items', () => {
   const markup = render(
     createElement(ApprovalQueueList, {
-      queue: baseQueueState({ items: [queueItem()], error: new Error('เครือข่ายขัดข้อง') }),
+      queue: baseQueueState({
+        items: [queueItem()],
+        error: new Error('เครือข่ายขัดข้อง'),
+      }),
       onSelect() {},
     })
   );
@@ -253,7 +266,11 @@ test('queue: stale banner renders only when not also in an error state', () => {
 
   const errorAndStaleMarkup = render(
     createElement(ApprovalQueueList, {
-      queue: baseQueueState({ items: [queueItem()], isStale: true, error: new Error('x') }),
+      queue: baseQueueState({
+        items: [queueItem()],
+        isStale: true,
+        error: new Error('x'),
+      }),
       onSelect() {},
     })
   );
@@ -359,7 +376,15 @@ test('review: evidence names come from attachment metadata, never the raw R2 key
     ...repositories.attachments,
     getForJob(jobId) {
       return jobId === 'BRN-2026-000001'
-        ? [{ id: EVIDENCE_KEY, name: 'รูปก่อนซ่อม.jpg', category: 'before', size: 1024, contentType: 'image/jpeg' }]
+        ? [
+            {
+              id: EVIDENCE_KEY,
+              name: 'รูปก่อนซ่อม.jpg',
+              category: 'before',
+              size: 1024,
+              contentType: 'image/jpeg',
+            },
+          ]
         : [];
     },
   };
