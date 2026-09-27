@@ -18,11 +18,11 @@
 // never synchronously inside a state setter — because that is what reproduces
 // the same-tick races the production latches have to defeat.
 //
-// There is no DOM. Refs to host elements stay null, which is deliberate: it is
-// also what makes Modal's focus-trap effect bail out at its own `if (!overlay
-// || !dialog) return` guard instead of touching document APIs that do not
-// exist here. Tests that need focus/inert behavior are not in scope for this
-// harness and are not claimed anywhere in this phase.
+// This harness deliberately has no DOM. Refs to host elements stay null, so it
+// remains useful for deterministic component-state/lifecycle tests without
+// browser behavior. N7.3 adds a separate jsdom-based harness for focus, inert,
+// portal, drawer, and route-focus interaction coverage; do not treat this
+// purpose-built renderer as evidence for those browser-like behaviors.
 
 const ELEMENT = Symbol.for('test.element');
 const FORWARD_REF = Symbol.for('test.forwardRef');

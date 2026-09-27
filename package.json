@@ -21,6 +21,7 @@
     "test:auth-readiness": "node --test --test-concurrency=1 test/authSession.test.mjs test/workerTokenProvider.test.mjs test/firestoreReadiness.test.mjs",
     "test:backend-configuration": "node --test test/backendConfiguration.test.mjs",
     "test:approval-console": "node --test test/approvalConsoleAccess.test.mjs test/approvalConsolePage.test.mjs test/approvalConsoleHookLifecycle.test.mjs test/approvalConsoleLifecycle.test.mjs test/approvalConsoleEvidenceRuntime.test.mjs test/approvalConsoleInteractionRuntime.test.mjs test/serviceReportReadsArchitecture.test.mjs",
+    "test:dom-accessibility": "node --test --test-concurrency=1 test/domAccessibilityRuntime.test.mjs",
     "test:firestore-rules": "firebase emulators:exec --config firebase.rules-test.json --only firestore \"node --test test/firestoreRules.test.mjs\""
   },
   "dependencies": {
@@ -46,6 +47,7 @@
     "eslint-plugin-react-refresh": "^0.5.3",
     "firebase-tools": "^15.26.0",
     "globals": "^17.9.0",
+    "jsdom": "^30.1.1",
     "prettier": "^3.9.6",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",

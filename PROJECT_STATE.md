@@ -163,6 +163,39 @@ source-documentation only: no Worker upload/deploy, traffic change,
 Firebase/Cloudflare/IAM/Rules mutation, production business-data write, or
 Public Tracking enablement is part of it.
 
+## N7.3 browser-like DOM test foundation (2026-09-27)
+
+N7.3 adds a test-only browser-like interaction layer without changing
+application or Worker runtime source. `jsdom@30.1.1` is a development
+dependency and `test/support/domTestEnvironment.mjs` installs an isolated DOM,
+inert fallback, deterministic visible-layout shim, requestAnimationFrame, and
+controllable matchMedia surface for Node tests. The existing dependency-free
+custom hook/component runtimes remain intact for deterministic lifecycle/race
+coverage and are explicitly not treated as DOM evidence.
+
+`test/domAccessibilityRuntime.test.mjs` mounts the real React/ReactDOM
+components and verifies five browser-like interaction contracts: Modal portals
+to `document.body`, isolates background with inert, manages initial/trapped/
+restored focus and preventClose timing; StaffShell's mobile drawer applies its
+modal boundary, traps focus, restores the opener on Escape, focuses main on
+current-route/desktop close; and RouteAccessibility focuses detail routes while
+preserving the New Service Job form-focus exception. The pre-existing F5d-64
+accessibility source suite was made line-ending-neutral and passes 19/19.
+
+Validation for this phase: app build PASS, ESLint PASS, Prettier PASS, focused
+DOM suite 6/6 PASS (including a passive-effect negative control), F5d-64
+accessibility suite 19/19 PASS, and all documented root deterministic groups
+including the new DOM group PASS (261 tests total).
+The known non-failing Vite Approval Console WebSocket port warning remains
+unchanged. Dependency audit counts are unchanged from the N7.2 baseline
+(15 dev/tooling findings: 12 moderate, 3 high), while
+`npm audit --omit=dev` reports 0 production-dependency vulnerabilities; no
+automatic audit fix or unrelated dependency upgrade was performed. This is not
+a claim of real-browser layout, rendering, device, or print-pagination coverage;
+those remain separate verification concerns. No Worker upload/deploy, traffic
+change, Firebase/Cloudflare/IAM/Rules/index mutation, production business-data
+write, Public Tracking change, or N3 business-write replay is part of N7.3.
+
 ## Historical production D24/D25 + Public Tracking state (2026-09-26)
 
 The reviewed production source checkpoint is
@@ -404,15 +437,13 @@ Grouped by what shipped, not by exact sprint label (many sprints predate a forma
   `PUBLIC_TRACKING_ENABLED` binding is still opaque `secret_text`; future
   Worker promotion must satisfy the N5 guard by making the candidate state
   verifiably absent or plain-text `false`, never by weakening the guard.
-- **Browser-like UI test coverage remains incomplete.** The repository now has
-  dependency-free mounted hook/component runtimes
-  (`test/support/hookRuntime.mjs` and `componentRuntime.mjs`) that execute real
-  project hooks/components and rerender them in Node, plus SSR/source-structural
-  tests and deterministic Node suites. Those custom runtimes deliberately have
-  no browser DOM: host refs remain null, so focus trapping/restoration, inert
-  backgrounds, portal behavior, and similar DOM interactions are not proven.
-  No jsdom/React Testing Library dependency exists today; bounded browser-like
-  DOM coverage remains active backlog work.
+- **Browser-like UI coverage is now bounded rather than absent.** N7.3 adds a
+  jsdom-based real React/ReactDOM interaction suite for Modal portal/inert/focus,
+  StaffShell drawer focus/modal-boundary behavior, and route-focus policy. The
+  older custom hook/component runtimes remain intentionally DOM-free for
+  deterministic lifecycle/race tests. jsdom still does not provide real layout
+  or browser rendering; cross-device behavior and print pagination therefore
+  remain real-browser verification concerns.
 - ~~**Known bug, tracked as F5d-68: Service Request print/PDF spills to 2 physical pages.**~~ **Resolved in production by F5d-68** (2026-08-17) — the root cause was that this print flow, unlike its two sibling print documents, never activated a print-mode body class, so the staff shell, page heading, and on-screen success card/actions all printed alongside the document. Verified one physical page by a real production Print → Save as PDF. See the F5d-68 entry below.
 - ~~**Known bug: Internal Notes quick-add ("เพิ่ม") on Service Job Details did not persist.**~~ **Resolved in production by F5d-70 Phase 6F.2–6F.11** (2026-08-20) — the button appended to local React state and cleared the input, looking completed, but performed no repository write; a reload/navigation before the separate page-level "บันทึกการเปลี่ยนแปลง" silently destroyed the note. "เพิ่ม" now performs its own immediate, notes-only persistence write. See the F5d-70 entry below.
 

@@ -7,7 +7,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { createServer } from 'vite';
 
 const readSource = async (path) =>
-  await readFile(new URL(`../${path}`, import.meta.url), 'utf8');
+  (await readFile(new URL(`../${path}`, import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 
 const vite = await createServer({
   appType: 'custom',

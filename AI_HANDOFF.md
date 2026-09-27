@@ -516,7 +516,7 @@ subsystem:
 
 ## 8. Test Status
 
-N6 is the current clean-baseline certification. At source commit
+N6 remains the clean-baseline certification. At source commit
 `bc510e8fd46ba287c5fe5e0152367a5518706de1`, the production app build,
 ESLint, Prettier format check, documented deterministic root test groups,
 Worker TypeScript check, full Worker test suite, and Firestore Rules emulator
@@ -524,10 +524,17 @@ suite all passed; the Rules suite completed 34/34. N6 also removed the
 repository-wide Prettier debt and added `endOfLine: "auto"` for the Windows
 host. See `reports/Service-Tech-N6-Clean-Baseline-Certification-20260927.txt`.
 
-The root app uses Node-based deterministic tests, SSR/source-structural checks,
-and targeted custom mounted hook/component runtimes. Those custom runtimes are
-not a browser DOM; bounded DOM interaction coverage remains an active backlog
-item in `BACKLOG.md`.
+N7.3 adds a separate test-only browser-like interaction layer:
+`jsdom@30.1.1` plus `test/support/domTestEnvironment.mjs` and
+`test/domAccessibilityRuntime.test.mjs`. It mounts real React/ReactDOM and
+covers Modal portal/inert/focus/preventClose behavior, StaffShell mobile-drawer
+focus/modal-boundary behavior, and RouteAccessibility focus policy. The
+dependency-free custom hook/component runtimes remain intentionally DOM-free
+for deterministic lifecycle/race tests. N7.3 validation passes app
+build/lint/format, the DOM suite 6/6 (including a passive-effect negative
+control), the F5d-64 accessibility suite 19/19, and all documented root
+deterministic groups including DOM (261 tests total).
+jsdom is not real-browser layout/device/print-pagination evidence.
 
 ---
 
@@ -571,12 +578,12 @@ Use [BACKLOG.md](BACKLOG.md) as the authoritative active-work index. The
 F5d-23 Worker authorization foundation and later attachment/auth milestones in
 older handoff text are historical and already superseded by production work.
 
-Current recommended source sequence is documentation truth maintenance,
-bounded browser-like DOM interaction coverage, then V2 trusted-print UI
-integration. Public Tracking activation, legacy opaque flag cleanup,
-automatic deletion/Cron, staff role administration, automatic notifications,
-durable Product Instance identity, and the other deferred items stay gated as
-listed in `BACKLOG.md`.
+Current recommended source sequence starts with V2 trusted-print UI
+integration, followed by Product Return Form and the remaining P2/P3
+accessibility/content work according to owner priority. Public Tracking
+activation, legacy opaque flag cleanup, automatic deletion/Cron, staff role
+administration, automatic notifications, durable Product Instance identity,
+and the other deferred items stay gated as listed in `BACKLOG.md`.
 
 ---
 

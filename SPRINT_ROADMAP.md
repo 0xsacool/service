@@ -498,11 +498,13 @@ separate future scope and is not implied by Approval Console access.
 ### QA Hardening & Launch Readiness _(partly delivered; active gaps remain)_
 
 Service Request, Delivery Note, and basic Service Report print previews exist.
-The distinct Product Return Form does not. The repository has deterministic
-Node suites plus custom mounted hook/component runtimes, but still lacks a
-browser-like DOM harness for focus/inert/portal behavior. Remaining QA work
-therefore includes bounded DOM interaction coverage, trusted-print UI coverage,
-Return Form verification, cross-device/real-browser print checks, and the
-explicitly deferred P2/P3 accessibility/content pass.
+The distinct Product Return Form does not. N7.3 adds a jsdom-based real
+React/ReactDOM interaction harness covering Modal portal/inert/focus behavior,
+StaffShell mobile-drawer focus/modal-boundary behavior, and route-focus policy,
+while retaining the custom mounted hook/component runtimes for deterministic
+lifecycle/race tests. Remaining QA work therefore centers on trusted-print UI
+coverage, Return Form verification, cross-device/real-browser layout and print
+checks, and the explicitly deferred P2/P3 accessibility/content pass. jsdom is
+not treated as proof of real browser layout or print pagination.
 
 **Estimated Scope:** M

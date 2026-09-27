@@ -1,9 +1,9 @@
 // Phase 6R-A.2 — a minimal React-hooks dispatcher used ONLY by tests, aliased
 // over the `react` specifier so the real, unmodified D24/D25 hooks can be
-// mounted and driven in Node. This project has no DOM shim, no
-// react-test-renderer, and no testing-library, and the phase forbids installing
-// one; this is the narrowest seam that still exercises the hooks themselves
-// rather than a projection of them.
+// mounted and driven in Node. This harness itself has no DOM and remains the
+// narrowest seam for hook lifecycle/race coverage. N7.3 later added a separate
+// jsdom-based browser-like test environment for interactions that genuinely
+// depend on DOM focus, inert state, portals, or native event dispatch.
 //
 // It is a purpose-built test double for React's dispatcher, NOT React. It
 // implements exactly the five hooks the D24/D25 hooks use, and it deliberately
