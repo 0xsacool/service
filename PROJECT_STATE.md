@@ -23,7 +23,48 @@ Platform: responsive web application (mobile through desktop), Thai-first for
 Version 1 (see [DECISIONS.md](DECISIONS.md) #003). The authenticated staff app
 is live at `https://luxace-service.web.app` on the Firestore + Worker runtime.
 
-## Current production D24/D25 + Public Tracking state (2026-09-26)
+## Current production D24 V1 history hotfix override (2026-09-27)
+
+This section supersedes the 2026-09-26 D24/D25 Worker version details below.
+Production source for the D24 V1-history compatibility correction is commit
+`cff31a0` (tag `d24-v1-history-hotfix-20260927`), published from the clean
+isolated worktree `C:\service\.d24-history-fix-20260927`.
+
+Cloudflare Worker `service-tech-files-worker` is now at 100% traffic on
+version `b2534996-977d-45d3-96f7-641599d66f1c`. `versions view` confirms
+`SERVICE_REPORT_V2_MODE=compatibility`; Public Tracking remains disabled and
+both public lookup shapes return 404. Production health is 200 and
+unauthenticated D24/D25 reads remain 401.
+
+The hotfix corrects one legacy V1 read-compatibility defect: inventoried
+production V1 `serviceReports` persist an `id` field, while the D24 exact-key
+parser previously accepted only the historical shape without that persisted
+field. The parser now accepts either the historical V1 shape or the exact
+V1-plus-`id` shape only when persisted `id` exactly matches the Firestore
+document ID. Mismatches and unrelated extra fields still fail closed. No V2,
+authentication, brand, Rules, IAM, mutation, R2, or Public Tracking boundary
+was broadened.
+
+Credentialed production acceptance after the final corrected deploy passed:
+`BRN-2026-000003` renders finalized report `FR-2026-000001`; D25 Approval
+Console loads for the approver role with zero pending items; direct browser
+`serviceReports` list and update probes both return `permission-denied`;
+Public Tracking remains 404/404. No Production Remediation write was rerun.
+
+One deployment incident occurred and is part of the closeout evidence: the
+first hotfix candidate was promoted without `--keep-vars`, which removed the
+undeclared plain `SERVICE_REPORT_V2_MODE` binding. Production was immediately
+rolled back to `bc7db060-f190-48aa-8a24-00ea2e85cdb9`. A second candidate
+using only `--keep-vars` was not promoted because the var had already been
+removed from remote plain-var state. The final candidate was uploaded with
+`--keep-vars --var SERVICE_REPORT_V2_MODE:compatibility`, its exact bindings
+were inspected before traffic, and only then was it promoted. Future Worker
+publication must inspect `wrangler versions view` on the exact candidate and
+must not promote unless `SERVICE_REPORT_V2_MODE=compatibility` is present.
+See `reports/Service-Tech-D24-V1-History-Hotfix-Production-Closeout-20260927.txt`
+for the full evidence record.
+
+## Historical production D24/D25 + Public Tracking state (2026-09-26)
 
 The reviewed production source checkpoint is
 `9b87f12f84b8d57c0e28955216d14221f4843ec3`, tag

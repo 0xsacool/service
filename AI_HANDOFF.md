@@ -8,7 +8,37 @@
 
 ---
 
-## Current production override (2026-09-26)
+## Current production override (2026-09-27)
+
+The D24 V1-history compatibility hotfix is live from source commit `cff31a0`
+(tag `d24-v1-history-hotfix-20260927`). Cloudflare Worker
+`service-tech-files-worker` is at 100% traffic on version
+`b2534996-977d-45d3-96f7-641599d66f1c`. Exact version inspection confirms
+`SERVICE_REPORT_V2_MODE=compatibility`; Public Tracking remains disabled.
+
+The hotfix exists because inventoried production V1 Service Reports persist an
+`id` field equal to the Firestore document ID, while the D24 strict parser
+previously accepted only the historical no-`id` shape. It now accepts the
+historical shape or exact V1+`id` only when the persisted ID matches the
+document ID. Mismatches and unrelated extra fields still fail closed.
+
+Final credentialed acceptance passed: `BRN-2026-000003` loads
+`FR-2026-000001`; D25 Approval Console loads with zero pending items; browser
+`serviceReports` list and update probes are both permission-denied; Public
+Tracking returns 404/404. No Production Remediation write was rerun.
+
+Deployment guardrail: Wrangler 4.120.0 `versions upload` deletes undeclared
+plain vars unless `--keep-vars` is used. During this hotfix the first candidate
+was promoted without it, `SERVICE_REPORT_V2_MODE` disappeared, and Production
+was immediately rolled back to the prior version. Because the remote plain-var
+state had then been removed, a second `--keep-vars`-only candidate still lacked
+the mode and was never promoted. The final candidate was uploaded with
+`--keep-vars --var SERVICE_REPORT_V2_MODE:compatibility` and inspected with
+`wrangler versions view` before promotion. Do not promote any future Worker
+candidate unless the exact candidate shows `SERVICE_REPORT_V2_MODE=compatibility`.
+See the 2026-09-27 closeout report in `reports/`.
+
+## Historical production override (2026-09-26)
 
 RRC-2A/D24/D25 source checkpoint
 `9b87f12f84b8d57c0e28955216d14221f4843ec3` (tag

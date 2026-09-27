@@ -1,0 +1,73 @@
+Service Tech — D24 V1 History Compatibility Hotfix Production Closeout
+Date: 2026-09-27
+Verdict: PASS — HOTFIX DEPLOYED AND PRODUCTION ACCEPTANCE CLOSED
+
+SOURCE / RELEASE
+- Production source commit: cff31a0 (fix(worker): accept persisted V1 report identity)
+- Source tag: d24-v1-history-hotfix-20260927
+- origin/master advanced by fast-forward from 320990c to cff31a0.
+- Deployment source: clean isolated worktree C:\service\.d24-history-fix-20260927.
+- Tracked hotfix diff: worker/src/serviceReportReadRoutes.ts and worker/test/serviceReportReads.test.mts only.
+- Review/validation helper directories remained untracked and were not published.
+
+INCIDENT / ROOT CAUSE
+- Credentialed D24 history for inventoried remediated V1 Service Reports returned history_integrity_incident.
+- Production V1 Service Report documents A-E each persist an id field equal to their Firestore document ID.
+- D24 parseLegacyReport used an exact-key V1 inventory that omitted persisted id, so a legitimate production V1 shape was rejected.
+- D25 Approval Console and browser Rules-denial behavior were not the cause.
+
+SOURCE CORRECTION
+- Historical V1 shape without persisted id remains accepted.
+- Production V1 shape with persisted id is accepted only when data.id exactly equals the Firestore document ID.
+- A mismatched persisted id remains an integrity failure.
+- Unrelated unexpected fields remain rejected.
+- V2 parsing, authentication, brand checks, mutation routes, Firestore Rules, IAM, R2, and Public Tracking behavior were not broadened.
+
+VALIDATION BEFORE DEPLOY
+- Focused D24/D25 Service Report read/security contracts: PASS.
+- New matching persisted-id positive regression: PASS.
+- New mismatched persisted-id negative regression: PASS.
+- Worker TypeScript tsc --noEmit: PASS.
+- Eight relevant Service Report test groups: PASS.
+- git diff --check: PASS.
+- Independent read-only Codex review: VERDICT PASS / REQUIRED_FIXES NONE.
+- Full Worker npm chain still contains the pre-existing stale Public Tracking containment expectation that assumes production tracking is enabled; current production intentionally keeps Public Tracking disabled.
+
+DEPLOYMENT CHRONOLOGY
+1. Candidate 18c3dfeb-cfd0-4123-99b8-2e3552357755 was uploaded and preview checks passed.
+2. It was promoted to 100%, then versions view showed SERVICE_REPORT_V2_MODE was missing because the upload had not used --keep-vars. This was treated as a production config regression.
+3. Production was immediately rolled back to known-good version bc7db060-f190-48aa-8a24-00ea2e85cdb9 at 100%.
+4. Candidate ae958bb8-a784-4953-834d-e5b88c7b906d was uploaded with --keep-vars but was NOT promoted because SERVICE_REPORT_V2_MODE was still absent; the first upload had already removed the remote plain-var state.
+5. Final candidate b2534996-977d-45d3-96f7-641599d66f1c was uploaded with --keep-vars plus explicit SERVICE_REPORT_V2_MODE:compatibility.
+6. versions view confirmed the final candidate carried SERVICE_REPORT_V2_MODE=compatibility together with the existing R2/plain bindings and secret bindings.
+7. Final candidate preview: /health 200; unauthenticated D24 401; unauthenticated D25 401; both Public Tracking lookup shapes 404.
+8. Final candidate was deployed at 100% traffic at 2026-09-27T12:24:37.323Z with deployment message "D24 V1 history hotfix; compatibility preserved".
+
+CURRENT PRODUCTION WORKER
+- Version: b2534996-977d-45d3-96f7-641599d66f1c
+- Traffic: 100%
+- SERVICE_REPORT_V2_MODE: compatibility
+- Public Tracking: disabled; both lookup shapes return 404
+- /health: 200
+- Unauthenticated D24: 401
+- Unauthenticated D25 Approval Queue: 401
+- Firestore Rules were not changed.
+- IAM was not changed.
+- No production business-data remediation write was rerun.
+
+FINAL CREDENTIALED ACCEPTANCE
+- Used the owner's existing normal authenticated browser session; no password/session token was printed or exported.
+- D24 BRN-2026-000003: PASS. FR-2026-000001 renders as the latest finalized report.
+- D25 Approval Console: PASS. Approver access succeeds; queue contains zero pending items, so review drill-in is not applicable.
+- Direct browser serviceReports collection list: permission-denied — PASS.
+- Direct browser update against nonexistent d24d25-final-denial-probe-20260927: permission-denied — PASS; no document was created or mutated.
+- Public Tracking remains disabled: 404 / 404 — PASS.
+
+DEPLOYMENT GUARDRAIL
+- Never promote a Worker candidate for this production state until wrangler versions view confirms SERVICE_REPORT_V2_MODE=compatibility on that exact version.
+- Wrangler 4.120.0 versions upload defaults to deleting undeclared plain vars unless --keep-vars is used.
+- If the remote plain-var state has already been lost, --keep-vars alone cannot restore it; the upload must explicitly supply SERVICE_REPORT_V2_MODE:compatibility (or an equivalent separately reviewed configuration source) and then re-verify the exact candidate bindings before traffic.
+- Secrets are not deleted by version uploads, but Public Tracking must still be verified disabled by live 404 probes.
+
+FINAL
+D24 V1 history compatibility hotfix is live and accepted in Production. D24/D25 read behavior, browser deny boundaries, compatibility mutation mode, and Public Tracking-disabled state are all verified. Production Remediation Writes 1-7 remain CLOSED and were not rerun.

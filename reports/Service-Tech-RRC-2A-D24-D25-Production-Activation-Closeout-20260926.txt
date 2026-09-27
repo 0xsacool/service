@@ -75,3 +75,8 @@ CLEANUP
 
 FINAL
 RRC-2A / D24-D25 production activation is closed. Existing F3 business-write gates remain separate.
+
+POST-CLOSEOUT CORRECTION — 2026-09-27
+A later credentialed acceptance against the inventoried remediated V1 Service Reports exposed a legacy D24 history compatibility defect that the synthetic 2026-09-26 acceptance did not cover: production V1 documents persist an id field that the strict history parser did not include in its exact-key inventory. Therefore the 2026-09-26 closure was incomplete specifically for inventoried legacy V1 history.
+
+The defect was corrected, independently reviewed, published, deployed, and re-accepted in Production on 2026-09-27. Current Worker version is b2534996-977d-45d3-96f7-641599d66f1c at 100% with SERVICE_REPORT_V2_MODE=compatibility and Public Tracking disabled. See reports/Service-Tech-D24-V1-History-Hotfix-Production-Closeout-20260927.txt for the authoritative follow-up record.
