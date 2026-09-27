@@ -227,6 +227,31 @@ remains unchanged. No Worker upload/deploy, traffic change,
 Firebase/Cloudflare/IAM/Rules/index mutation, production business-data write,
 Public Tracking change, or N3 business-write replay is part of N7.4.
 
+## N7.5 Product Return Form contract reconciliation (2026-09-28)
+
+N7.5 is source-of-truth/business-contract work only. Decision #049 resolves the
+remaining Product Return Form semantics before implementation: Return Form is
+eligible only for a `Completed` Service Job; `Cancelled`/`Rejected` remain
+terminal for closure/retention but do not allocate or authorize an RT document.
+The first trusted Completed transition must allocate one immutable,
+brand-scoped `RT-{YYYY}-{SEQUENCE}` number in the same trusted backend
+operation that establishes the completion timestamp, using the Asia/Bangkok
+numbering year.
+
+For V1, `closedAt` on a Completed job is the pickup/acceptance/return
+timestamp. Customer and staff both receive physical signature areas; no digital
+signature persistence is introduced. The latest Service Report in documentary
+order must pass normal trusted print as `v2-approved`; legacy V1, draft,
+pending, rejected, and integrity-incident states fail closed. V1 Return Form
+does not print quote, repair cost, amount due, or payment status, and printing
+must never issue/rotate Public Tracking credentials.
+
+The current application source still has no `returnFormNumber` field or Return
+Form UI; N7.5 therefore resolves the implementation contract rather than
+claiming the feature exists. No runtime source, Worker route, Rules/index,
+deployment, production data, Cloudflare/Firebase configuration, Public Tracking
+state, or N3 remediation data was changed by this phase.
+
 ## Historical production D24/D25 + Public Tracking state (2026-09-26)
 
 The reviewed production source checkpoint is

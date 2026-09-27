@@ -91,9 +91,9 @@ Not yet built. Listed in roughly the order the current sprint trajectory (F-seri
   broader presentation and any customer-visible attachment policy remain.
 - **Quote & warranty approval flow** — customer approves/declines a repair quote before work proceeds.
 - **Remaining print work** — basic Service Request, Delivery Note, and Service
-  Report/Repair Report previews exist. Remaining work is the V2 trusted-print
-  UI integration (verified approval/warranty/integrity states) plus the distinct
-  Product Return Form defined in `PRINT_SPECIFICATIONS.md`.
+  Report/Repair Report previews exist, and N7.4 completed the V2 trusted-print
+  UI integration. N7.5 resolved the Product Return Form contract in Decision
+  #049; the distinct Return Form implementation is now the remaining print item.
 - **Remaining localization & accessibility work** — F5d-63's bounded
   Thai-first production trust slice and F5d-64's audited P0/P1 keyboard, focus,
   dialog, route, form, and screen-reader hardening are live. F5d-64 production

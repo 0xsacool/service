@@ -506,9 +506,11 @@ StaffShell mobile-drawer focus/modal-boundary behavior, and route-focus policy,
 while retaining the custom mounted hook/component runtimes for deterministic
 lifecycle/race tests. N7.4 adds trusted-print contract/UI regression coverage,
 including runtime payload validation and fail-closed integrity printing, on top
-of that foundation. Remaining QA work therefore centers on Product Return Form
-verification, cross-device/real-browser layout and print checks, and the
-explicitly deferred P2/P3 accessibility/content pass. jsdom is not treated as
-proof of real browser layout or print pagination.
+of that foundation. N7.5 resolves Product Return Form numbering, eligibility,
+acceptance/signature, trusted-report, and cost semantics in Decision #049;
+source implementation still remains. Remaining QA work therefore centers on
+Product Return Form implementation/verification, cross-device/real-browser
+layout and print checks, and the explicitly deferred P2/P3 accessibility/content
+pass. jsdom is not treated as proof of real browser layout or print pagination.
 
 **Estimated Scope:** M

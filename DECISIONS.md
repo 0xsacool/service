@@ -1087,3 +1087,46 @@ rejection. The direct browser PATCH negative control was blocked before dispatch
 by the host safety layer; update denial is closed by deterministic live Rules
 hash equivalence plus the unconditional `allow update: if false` rule and the
 pre-deploy Rules Emulator suite.
+
+---
+
+## 049 - Product Return Form is a Completed-only, trusted-approved handover document
+
+**Reason:** The historical print/schema documents defined an `RT-` Return Form
+but left three semantics unresolved: whether `closedAt` really means customer
+acceptance, whether staff must countersign, and whether quote/final cost belongs
+on the document. The current application also has stronger Service Report V2
+approval/integrity guarantees than the old relational print spec, while the
+current Service Job source does not yet implement `returnFormNumber`.
+
+**Decision:** V1 Product Return Form is generated only for a Service Job whose
+status is `Completed`. `Cancelled` and `Rejected` remain terminal for
+closure/retention but do not authorize or allocate a Return Form. The first
+trusted transition to `Completed` must atomically allocate one immutable,
+brand-scoped `RT-{YYYY}-{SEQUENCE}` number and the trusted completion time;
+the numbering year is the Asia/Bangkok calendar year of that timestamp.
+Retry/replay returns the same logical allocation.
+
+For V1, `closedAt` on a `Completed` job is the pickup, customer-acceptance,
+and return timestamp. Customer and staff each receive a physical signature
+area; no digital signature field is introduced.
+
+Customer-facing repair content must use the latest Service Report in D24
+documentary order, and that report must pass the normal trusted-print contract
+as `v2-approved`. The same trusted report supplies repair summary, parts,
+warranty outcome, and approval verification. Legacy V1, V2 draft, pending,
+rejected, and integrity-incident states fail closed for Return Form generation.
+
+No quote, repair cost, amount due, or payment status is printed in V1. Financial
+documents remain a separate future contract. Printing also must not issue,
+rotate, or reactivate Public Tracking credentials.
+
+**Impact:** Product Return Form implementation needs a trusted backend
+completion/RT-number allocation path plus a distinct print UI; it must not reuse
+Delivery Note semantics or browser-allocate sequence numbers. Existing
+production behavior is unchanged until a separately reviewed implementation
+and deployment phase.
+
+**Status:** Decided in N7.5 source-of-truth reconciliation. Source
+implementation is still pending; no production mutation is authorized by this
+decision.

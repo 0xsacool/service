@@ -544,6 +544,15 @@ build/lint/format, Service Report print 15/15, Service Report UI 9/9,
 trusted-print contract/UI 19/19, all documented root deterministic groups
 280/280, Worker TypeScript, and the full Worker regression suite.
 
+N7.5 resolves Product Return Form semantics in Decision #049 without runtime or
+production mutation. Return Form is Completed-only; the first trusted Completed
+transition owns immutable RT-number allocation and `closedAt`; the latest
+documentary report must be normal trusted-print `v2-approved`; customer and
+staff both sign the paper document; financial amounts are excluded from V1;
+legacy/draft/pending/rejected/integrity states fail closed. The current source
+still has no `returnFormNumber` or Return Form UI, so implementation is the
+next source phase rather than something N7.5 claims delivered.
+
 ---
 
 ## 9. What Is Intentionally Not Enabled
@@ -586,9 +595,9 @@ Use [BACKLOG.md](BACKLOG.md) as the authoritative active-work index. The
 F5d-23 Worker authorization foundation and later attachment/auth milestones in
 older handoff text are historical and already superseded by production work.
 
-Current recommended source sequence starts with Product Return Form,
-followed by the remaining P2/P3 accessibility/content work according to owner
-priority. Public Tracking activation, legacy opaque flag cleanup, automatic
+Current recommended source sequence starts with Product Return Form implementation
+under Decision #049, followed by the remaining P2/P3 accessibility/content work
+according to owner priority. Public Tracking activation, legacy opaque flag cleanup, automatic
 deletion/Cron, staff role administration, automatic notifications, durable
 Product Instance identity, and the other deferred items stay gated as listed
 in `BACKLOG.md`.

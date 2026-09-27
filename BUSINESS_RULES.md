@@ -28,9 +28,21 @@ Distinct from the tracking number — see [DECISIONS.md](DECISIONS.md) #014. Eac
 | ---------------------- | ------ | ---------------------- | ----------------------------------------------------------------- |
 | Service Request        | `SR`   | `SR-{YYYY}-{SEQUENCE}` | at service job creation                                           |
 | Factory Service Report | `FR`   | `FR-{YYYY}-{SEQUENCE}` | each time a repair report is created (a job may generate several) |
-| Product Return Form    | `RT`   | `RT-{YYYY}-{SEQUENCE}` | at service job completion/return                                  |
+| Product Return Form    | `RT`   | `RT-{YYYY}-{SEQUENCE}` | atomically on the first transition to `Completed`                 |
 
 Document numbers **do not** carry the brand code — only the tracking number does. Brand separation for document numbering is still enforced internally (each brand has its own counter per document type per year, avoiding cross-brand collisions and supporting per-brand reporting); it's simply not part of the printed prefix, since every document already carries its parent service job's brand-coded tracking number for cross-reference.
+
+### Product Return Form V1 contract
+
+- A Product Return Form is a customer pickup/acceptance document and is eligible only when the Service Job reaches **Completed**. `Cancelled` and `Rejected` are terminal for closure/retention but do not authorize a Product Return Form.
+- The first transition to `Completed` must allocate one immutable `RT-{YYYY}-{SEQUENCE}` number through a trusted backend transaction using the brand-scoped `return_form` counter. The numbering year is the Asia/Bangkok calendar year of the trusted completion time. Retry/replay must return the same allocated number, never consume a second logical Return Form number.
+- For V1, the same trusted completion timestamp stored as `closedAt` is the pickup/acceptance timestamp and printed return date. A separate `customerAcceptedAt` field is not required unless the business later allows pickup, acceptance, and closure to occur at different times.
+- Customer-facing repair/warranty content must come from the **latest Service Report in documentary order**, and that report must pass the normal trusted-print contract as `v2-approved`. Legacy V1, V2 draft, pending, rejected, and integrity-incident states fail closed for Return Form generation.
+- Both **Customer Signature** and **Staff Handover Signature** are required physical signature areas on the paper/PDF form. They are not persisted as digital signature fields in V1.
+- V1 Product Return Form does **not** print quote, repair cost, amount due, or payment status. Financial reconciliation belongs to a separately defined receipt/invoice/quote flow and must not be inferred from `quote` or report cost fields.
+- Printing must never issue, rotate, or reactivate a Public Tracking credential. A QR/link may be shown only when an already-issued raw credential is legitimately available to the current browser flow; otherwise the form must render a safe unavailable/inactive tracking notice.
+
+See `DECISIONS.md` #049 and `PRINT_SPECIFICATIONS.md` for the document-level contract.
 
 ## Service Job Status Flow
 

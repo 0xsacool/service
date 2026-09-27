@@ -4,7 +4,7 @@
 
 ## Baseline
 
-- Source baseline entering N7.4: `30d39ae3a7d4da5f56813412a09f961bdd793ba1` (`n7-3-dom-test-foundation-20260927`). N6 remains the underlying full clean-baseline certification.
+- Source baseline entering N7.5: `e5d9ab840942117ecf567844aff27462bfbfcd1d` (`n7-4-trusted-print-ui-20260927`). N6 remains the underlying full clean-baseline certification.
 - Accepted production Worker: D24 V1-history hotfix source `cff31a0`, version `b2534996-977d-45d3-96f7-641599d66f1c`.
 - Production `SERVICE_REPORT_V2_MODE=compatibility`.
 - Production Public Tracking is disabled and must remain disabled until a separately approved activation phase.
@@ -23,16 +23,17 @@
 - **N7.2 source-of-truth documentation reconciliation.** Current-state documentation and the authoritative backlog were reconciled against source, deterministic evidence, and accepted production state; historical decisions were preserved with supersession notes rather than rewritten.
 - **N7.3 browser-like DOM test foundation.** A test-only jsdom environment now mounts real React/ReactDOM components for behaviors the custom renderer cannot prove. Focused coverage verifies Modal portal/background inert/focus trap/restoration/preventClose timing, StaffShell mobile-drawer inert/focus trap/Escape/current-route/desktop-transition focus, and RouteAccessibility detail-vs-New-Service-Job focus policy. The older custom hook/component runtimes remain for deterministic lifecycle/race coverage. This is browser-like DOM coverage, not real-browser layout/print proof.
 - **N7.4 V2 trusted-print UI integration.** Service Report preview now calls the existing Worker-backed trusted-print contract before opening the printable view. All six states remain distinct (legacy V1, V2 draft, pending, approved, rejected, integrity incident); approval/warranty/evidence verification is displayed from the trusted server result, normal mode is always attempted first, diagnostic mode is used only after the fail-closed evidence-integrity error, and integrity incidents cannot invoke `window.print()`. The browser now validates trusted-print report/event/evidence/verification-time coherence at runtime instead of trusting a TypeScript cast, and UI error mapping never renders raw provider/internal error text. The printable UI exposes display-name/business decision data only, not raw UIDs or digests.
+- **N7.5 Product Return Form contract reconciliation.** Decision #049 fixes the implementation contract before source work: Return Forms are for `Completed` jobs only; `closedAt` is the V1 pickup/acceptance timestamp only in that state; `RT-{YYYY}-{SEQUENCE}` is allocated exactly once by a trusted backend boundary during the first Completed transition; the latest report must be a normal trusted-print `v2-approved` result; customer and staff both countersign the paper form; no price/cost is printed in V1; legacy V1/draft/pending/rejected/integrity-incident reports fail closed for Return Form generation.
 
 ## ACTIVE
 
 ### A1 — Product Return Form implementation
 
-**What remains:** implement the distinct Product Return Form from `PRINT_SPECIFICATIONS.md`, including the accepted numbering/data contract and customer acceptance/signature semantics.
+**What remains:** implement the distinct Product Return Form from `PRINT_SPECIFICATIONS.md` and Decision #049, including trusted RT-number allocation, eligible-report selection, customer/staff paper signatures, and fail-closed print gating.
 
-**Why active:** `DeliveryNotePrintPreview.tsx` is a delivery/handover note, not the Return Form. No Return Form UI was found.
+**Why active:** `DeliveryNotePrintPreview.tsx` is a delivery/handover note, not the Return Form. No Return Form UI or `returnFormNumber` field exists in the current application source.
 
-**Dependencies:** resolve any still-open Return Form numbering/acceptance/cost semantics before implementation.
+**Dependencies:** business/document semantics are resolved by N7.5 / Decision #049. Implementation still needs a trusted Worker-mediated completion/number-allocation path and source/UI/test work; production deployment remains separate.
 
 **Risk:** medium; document identity and customer acceptance must not be conflated with the Delivery Note.
 

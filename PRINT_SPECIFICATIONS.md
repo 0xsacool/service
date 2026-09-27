@@ -130,34 +130,47 @@ does not constitute a production deployment.
 
 ### 3. Product Return Form
 
-_Given to the customer when they collect the repaired product. Document number: `service_jobs.return_form_number` (`RT-{YYYY}-{SEQUENCE}`), generated at service job completion._
+_Given to the customer when a repaired product is physically returned and the Service Job completes. Decision #049 is the authoritative V1 contract. The current application source has not implemented this document or `returnFormNumber` yet._
 
-| Attribute                                                     | Value                                                                                                                                              |
-| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Purpose                                                       | Confirm what repair was performed, under what warranty outcome, and that the customer accepted the returned product                                |
-| Target User                                                   | Customer (receives a copy) and Service Staff (files a copy)                                                                                        |
-| Paper Size / Orientation                                      | A4, portrait                                                                                                                                       |
-| Print Margins / Header / Footer / QR / Tracking Number / Logo | Shared default                                                                                                                                     |
-| Signature Areas                                               | **Customer Signature** only, as specified (name, signature, date) — see Open Questions on whether a staff countersignature should also be required |
-| Date Format                                                   | Customer-facing → DD/MM/YYYY + Buddhist Era                                                                                                        |
-| Typography                                                    | Shared default                                                                                                                                     |
+| Attribute                                                | Value                                                                                                                                                                                                        |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Purpose                                                  | Confirm what repair was performed, the trusted warranty outcome, the handover date, and that customer and staff acknowledged the returned product                                                            |
+| Target User                                              | Customer (receives a copy) and Service Staff (files a copy)                                                                                                                                                  |
+| Eligibility                                              | Service Job status must be **Completed** and the latest Service Report in documentary order must pass the normal trusted-print contract as **`v2-approved`**                                                 |
+| Paper Size / Orientation                                 | A4, portrait                                                                                                                                                                                                 |
+| Print Margins / Header / Footer / Tracking Number / Logo | Shared default                                                                                                                                                                                               |
+| QR Code                                                  | Never issued/rotated by printing. Show only when an already-issued raw Public Tracking credential is legitimately available to the current browser flow; otherwise render a safe unavailable/inactive notice |
+| Signature Areas                                          | Two columns: **Customer Signature** and **Staff Handover Signature** (name, signature, date each). These are physical capture areas and are not persisted as digital signatures in V1                        |
+| Date Format                                              | Customer-facing → DD/MM/YYYY + Buddhist Era                                                                                                                                                                  |
+| Typography                                               | Shared default                                                                                                                                                                                               |
+
+**Numbering and completion contract:**
+
+- Document number is `RT-{YYYY}-{SEQUENCE}`, stored as the target `service_jobs.return_form_number` / application `returnFormNumber`.
+- Allocate exactly once on the **first trusted transition to Completed**, in the same backend transaction that establishes the trusted completion timestamp. The year is the Asia/Bangkok calendar year of that timestamp.
+- The allocation uses the brand-scoped `return_form` sequence and is immutable. Retry/replay returns the already-allocated number instead of consuming a second logical number.
+- `Cancelled` and `Rejected` also close a Service Job for retention purposes, but **must not** allocate or authorize a Product Return Form.
 
 **Included Fields:**
 
-| Field               | Source                                                                                                                                          |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tracking Number     | `service_jobs.tracking_number`                                                                                                                  |
-| Document Number     | `service_jobs.return_form_number`                                                                                                               |
-| Repair Summary      | `repair_reports.repair_action_summary` (most recent report for this job)                                                                        |
-| Replacement Parts   | `repair_parts`, joined via the job's `repair_reports`                                                                                           |
-| Warranty Result     | `repair_reports.warranty_decision` (most recent report)                                                                                         |
-| Customer Acceptance | `service_jobs.closed_at` marks the job closed; a dedicated acceptance timestamp is a nice-to-have refinement, not blocking (see Open Questions) |
-| Customer Signature  | Captured at pickup time — not a stored data field                                                                                               |
-| Return Date         | `service_jobs.closed_at`                                                                                                                        |
+| Field                    | Source / rule                                                                                                                                                                                                    |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tracking Number          | Current Service Job tracking reference                                                                                                                                                                           |
+| Document Number          | Trusted `returnFormNumber` allocated by the completion transaction                                                                                                                                               |
+| Customer / Product       | Current Service Job identity fields used for the handover                                                                                                                                                        |
+| Repair Summary           | Latest eligible trusted V2 report: `inspectionFindings`, `serviceActions`, `resultStatus`, and `resultDetail`; the UI may present these compactly but must not invent content                                    |
+| Replacement Parts        | `parts` from that same trusted V2 report                                                                                                                                                                         |
+| Warranty Result          | `warrantyOutcome` from that same trusted V2 report                                                                                                                                                               |
+| Approval / Verification  | Normal trusted-print result must be `v2-approved`; its verified approval metadata may be displayed in business-safe form. Raw UIDs, digests, canonical R2 keys, and provider/internal error text must not appear |
+| Customer Acceptance Time | Trusted Service Job `closedAt`, but only when the job is `Completed`. In V1 this same event means pickup/acceptance/closure                                                                                      |
+| Customer Signature       | Physical signature area on the printed/PDF document; not stored                                                                                                                                                  |
+| Staff Handover Signature | Physical signature area on the printed/PDF document; not stored                                                                                                                                                  |
+| Return Date              | Same trusted Completed `closedAt`, formatted customer-facing with Buddhist Era                                                                                                                                   |
+| Price / Cost             | **Not printed in V1.** Do not infer a financial amount from quote or report fields                                                                                                                               |
 
-No open schema gaps remain for this document.
+**Fail-closed cases:** no Return Form preview/print for legacy V1 reports, V2 drafts, pending approval, rejected approval, integrity incidents, a missing/invalid RT number, a non-Completed Service Job, or a latest report that differs from the trusted server result.
 
-**Layout notes:** Header → Repair summary → Replacement parts table (if any) → Warranty result statement → Customer acceptance statement + signature + return date — single column, shorter than the other two documents.
+**Layout notes:** Header → customer/product identity → compact repair summary → replacement parts table (if any) → warranty/approval verification → customer acceptance statement + return date → two-column customer/staff signatures. Keep the document distinct from `DeliveryNotePrintPreview.tsx`, which is a general handover note rather than proof of a completed approved repair.
 
 ---
 
@@ -186,17 +199,19 @@ No open schema gaps remain for this document.
 
 ## Data Requirements Introduced By This Spec
 
-Original version of this document flagged 12 schema gaps. [DECISIONS.md](DECISIONS.md) #011–#016 (Customer Master, Product Instance, channel-contact relocation, document numbering, warranty relocation, approval log) resolved all but the two genuinely open items below:
+The historical relational design established the intended document families and counters, while the current Firestore application source has since evolved to a Worker-backed Service Report V2 approval model. N7.5 / Decision #049 closes the remaining Product Return Form semantics before implementation:
 
-| Field                                                             | Status                                     |
-| ----------------------------------------------------------------- | ------------------------------------------ |
-| Customer Acceptance (dedicated timestamp vs. reusing `closed_at`) | Minor open refinement — see Open Questions |
-| Return Form staff countersignature                                | Open question — see below                  |
+| Item                          | V1 decision                                                                                                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Customer acceptance timestamp | Reuse the trusted `closedAt` only when the Service Job is `Completed`; pickup, acceptance, and closure are one V1 event                                            |
+| Staff countersignature        | Required as a physical signature area beside the Customer Signature; neither signature is stored digitally in V1                                                   |
+| Repair/warranty source        | Latest documentary Service Report must be normal trusted-print `v2-approved`; use that same trusted report for summary, parts, warranty, and approval verification |
+| Financial amount              | Not part of the V1 Product Return Form; no quote/final-cost reconciliation is performed or printed                                                                 |
+| RT document number            | Trusted backend allocation on first Completed transition; immutable and replay-safe; current application source still needs implementation                         |
+| Legacy/unsafe report states   | Legacy V1, draft, pending, rejected, and integrity-incident reports are not Return Form eligible                                                                   |
 
-Everything else originally listed (Username, Order Number, Purchase Channel, Model, Warranty Type, Diagnosis, Repair Action, Parts Replaced, Warranty Decision, Approval) now has a concrete source in [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md).
+There are therefore **no unresolved Product Return Form business semantics blocking source implementation**. A future business decision is required only if pickup and formal acceptance later become separate events, if a legacy-report exception is desired, or if money/payment information is added to this document family.
 
 ## Open Questions
 
-- **Return Form staff countersignature** — the source requirements list only a Customer Signature for the Return Form, unlike the Service Request's dual signature. Worth confirming this is intentional (staff accountability already captured via `service_jobs.closed_at`/system audit) rather than an oversight.
-- **Customer Acceptance as a dedicated field** — currently reusing `service_jobs.closed_at` as "the return happened." A dedicated `customer_accepted_at` would be more semantically precise if acceptance and closing can ever diverge in practice (e.g. customer takes the product but disputes something before formally "accepting" it) — flagged as a possible future refinement, not blocking.
-- **Repair cost: quoted vs. final** — `service_jobs.quote_amount` (the initial estimate) vs. `repair_reports.cost` (the actual/final cost per report) may need reconciliation logic if they can diverge — not resolved here.
+No V1 Product Return Form question remains open after Decision #049. Broader future print questions (brand-specific templates, receipt/invoice/payment documents, replacement documents, real-browser print-pagination certification) remain separate scopes and must not be silently folded into Return Form implementation.
