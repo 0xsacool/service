@@ -1,6 +1,6 @@
 # UI Guidelines
 
-> Documents the design system **as it currently exists** in [src/index.css](src/index.css) and [src/components/ui.tsx](src/components/ui.tsx). These are Apple-support-styled placeholder values inherited from the Bolt.new generation — they are the working baseline until the Sprint 2 brand identity pass replaces them with real Bruno Thailand / Join Lux Club visuals. Treat this file as "what's true today," and update it when the brand pass lands.
+> Documents the design system **as it currently exists** in [src/index.css](src/index.css) and the shared primitives under `src/shared/components/`. The palette still carries Apple-support-style placeholder roots from the Bolt.new generation, while later phases added Thai-first and accessibility hardening. Treat this file as current UI truth and keep brand-identity work distinct from already-delivered Thai/script support.
 
 ## Colors
 
@@ -28,7 +28,7 @@ Defined as Tailwind v4 theme tokens in `src/index.css`.
 
 ## Typography
 
-- Font stack: `-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif` — **placeholder, does not include a Thai-script font**. Must be replaced with a stack that renders Thai correctly (e.g. a Thai-supporting webfont or system stack including Thai glyphs) before the Thai-first pass ships — flagged as required, not optional, given [DECISIONS.md](DECISIONS.md).
+- Font stack: current `src/index.css` includes `Noto Sans Thai` and Tahoma fallbacks (plus Latin/Japanese/Chinese fallbacks where relevant), so the earlier "no Thai-script font" blocker is resolved at the fallback-stack level. A branded/bundled typeface is still an open visual-identity decision; cross-platform visual consistency should be verified rather than inferred from fallback declarations alone.
 - Letter spacing: `-0.01em` globally (`body` in `index.css`) — an Apple-style tightening that may not suit Thai script; re-evaluate during the brand pass.
 - Headings: `text-3xl`/`text-4xl` semibold tracking-tight for page titles; `text-lg` semibold for section headers.
 - Body: default weight, `text-neutral-500`/`600` for secondary text.
@@ -47,11 +47,11 @@ Defined as Tailwind v4 theme tokens in `src/index.css`.
 
 - `inputClass()` helper: white/80% background, 2xl radius, 1px black/10% ring, focus ring in brand color, neutral-400 placeholder text.
 - `Field`: label + input + optional hint, consistent vertical rhythm (`mb-2` label, `mt-1.5` hint).
-- **Gap identified in Sprint 2 scope:** no error/invalid state is currently styled — needs a defined error variant (border/text color, message placement) before `NewClaim` validation ships.
+- Error/invalid presentation exists in current forms, but broader ProductFieldsForm semantics and accessibility remain in the deferred P2/P3 backlog; use `BACKLOG.md` rather than the original Sprint 2 prototype note as the current scope.
 
 ## Tables
 
-- Desktop service job table (`ClaimsList` in current code — see [PROJECT_STATE.md](PROJECT_STATE.md) Terminology Note): plain `<table>`, uppercase tracked-letter-spacing header row, row hover highlight, divider lines between rows via `divide-black/5`.
+- Desktop Service Job list uses the current Service Job feature components; do not reintroduce prototype-era `ClaimsList` naming. Preserve the established responsive table/card behavior when modifying list presentation.
 - Below `lg:` breakpoint, tables convert to a card list rather than becoming horizontally scrollable — this is the established pattern; follow it for any future tabular data rather than introducing horizontal scroll on mobile.
 
 ## Forms

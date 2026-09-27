@@ -27,11 +27,12 @@ Every service job for Bruno Thailand and Join Lux Club — from drop-off to pick
 
 Features that exist and work in the running app today, not just on paper — see [PROJECT_STATE.md](PROJECT_STATE.md) "Completed Milestones" for the sprint-by-sprint history behind each:
 
-- **Customer-facing tracking UI** — no-login lookup UX, safe "not found"
-  states, and production Public Tracking are all live (F5d-69G): staff
-  explicitly issue/rotate a plaintext SRV tracking code per Service Job,
-  which exists only in the issuing browser session and is never persisted
-  in plaintext anywhere.
+- **Customer-facing tracking implementation** — no-login lookup UX, safe
+  "not found" states, credential issuance/rotation, rate limiting and the
+  Worker public routes were delivered in F5d-69G. **Production Public Tracking
+  is currently disabled** (since 2026-09-25), so the customer lookup routes
+  return 404 until a separately approved re-activation phase. Plaintext SRV
+  credentials remain browser-session-only and are never persisted in plaintext.
 - **Service Job event metadata** — contact channel, order number/verification,
   purchase/delivery dates, and an external evidence link are captured as an
   authoritative per-service-event snapshot (F5d-69), with a derived
@@ -67,11 +68,13 @@ Features that exist and work in the running app today, not just on paper — see
   registration rather than inferring ownership from a shared phone number.
   Server-side serial-conflict enforcement remains an accepted P2 hardening
   item, not solved here.
-- **Service Report live persistence** — F5d-66 is live in production: staff
-  can create, edit, and finalize Service Reports against real Firestore data.
-  Draft creation and finalize are Worker-mediated privileged transactions;
-  ordinary draft edits are direct-client and Rules-protected. Only one active
-  draft is allowed per Service Job; finalized reports are immutable.
+- **Service Report live persistence** — F5d-66 and later RRC/D24/D25 work are
+  live in production: staff can create, edit, finalize, review, and approve
+  Service Reports against real Firestore data. Current V1/V2 draft-save,
+  create/finalize, history, and approval mutation paths are Worker-mediated;
+  browser Rules deny direct `serviceReports` create/update/list. Only one
+  active draft is allowed per Service Job; finalized reports are immutable
+  except through the explicitly modeled V2 successor/approval workflow.
 
 ## Planned
 
@@ -79,11 +82,18 @@ Not yet built. Listed in roughly the order the current sprint trajectory (F-seri
 
 - **Auth and administration expansion** — staff Auth is live; broader Admin
   and Customer roles, user lifecycle, and administration remain future work.
-- **Notifications** — automatic customer updates on status change, delivered to a customer's registered contact channel (SMS/LINE/email are the realistic channels for the Thai market; exact channel choice is a future decision, not yet made — the `customer_channel_contacts` entity already anticipates this).
+- **Automatic notifications** — a manual staff-initiated Web Share/clipboard
+  status message is already implemented, but automatic status-change delivery
+  is not. SMS/LINE/email channel choice, canonical customer contact/consent,
+  retries, and delivery auditing remain future decisions; the historical
+  `customer_channel_contacts` design is not a deployed collection today.
 - **Attachment experience expansion** — private Worker/R2 storage is live;
   broader presentation and any customer-visible attachment policy remain.
 - **Quote & warranty approval flow** — customer approves/declines a repair quote before work proceeds.
-- **Remaining printable documents** — Repair Report and Return Form (Service Request printing is already implemented — see Implemented above).
+- **Remaining print work** — basic Service Request, Delivery Note, and Service
+  Report/Repair Report previews exist. Remaining work is the V2 trusted-print
+  UI integration (verified approval/warranty/integrity states) plus the distinct
+  Product Return Form defined in `PRINT_SPECIFICATIONS.md`.
 - **Remaining localization & accessibility work** — F5d-63's bounded
   Thai-first production trust slice and F5d-64's audited P0/P1 keyboard, focus,
   dialog, route, form, and screen-reader hardening are live. F5d-64 production

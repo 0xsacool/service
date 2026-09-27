@@ -470,27 +470,39 @@ Firebase Storage is not the selected production design.
 
 ---
 
-### Notifications _(not yet scoped)_
+### Notifications _(manual share delivered; automatic delivery deferred)_
 
-Customer status-change notifications via SMS/LINE/email — channel choice still undecided (see `PRODUCT_ROADMAP.md`).
+Service Job Details now provides a staff-initiated Thai status message through
+Web Share with clipboard fallback. Automatic SMS/LINE/email delivery remains
+unscoped: channel choice, canonical customer contact/consent, retry behavior,
+and delivery auditing need separate decisions.
 
-**Estimated Scope:** M (pending channel decision)
-
----
-
-### Repair Reports, Approvals & Admin Console _(not yet scoped)_
-
-Factory-facing Repair Report workflow (multiple reports per service job, parts, append-only approval log — [DECISIONS.md](DECISIONS.md) #016) and brand/user/settings management for Admins.
-
-**Estimated Scope:** L
+**Estimated Scope:** M (automatic delivery, pending channel/contact decisions)
 
 ---
 
-### QA Hardening & Launch Readiness _(not yet scoped)_
+### Repair Reports, Approvals & Approval Console _(core delivered; trusted print remains)_
 
-Print-layout implementation for all three V1 documents (per
-`PRINT_SPECIFICATIONS.md` — Service Request print preview already exists,
-Repair Report and Return Form don't yet), expanded automated coverage,
-cross-device QA, and performance/error-state review.
+Service Report persistence, V2 compatibility infrastructure, append-only
+approval decisions, D24 per-job history, and the D25 Approval Console are
+implemented and activated in production. Basic Repair Report printing also
+exists. Remaining report work is the UI integration with the existing
+trusted-print contract so printed V2 output reflects verified
+approval/warranty/integrity state. Brand/user/settings administration is a
+separate future scope and is not implied by Approval Console access.
+
+**Estimated Scope:** M for trusted-print UI; Admin lifecycle remains separately deferred
+
+---
+
+### QA Hardening & Launch Readiness _(partly delivered; active gaps remain)_
+
+Service Request, Delivery Note, and basic Service Report print previews exist.
+The distinct Product Return Form does not. The repository has deterministic
+Node suites plus custom mounted hook/component runtimes, but still lacks a
+browser-like DOM harness for focus/inert/portal behavior. Remaining QA work
+therefore includes bounded DOM interaction coverage, trusted-print UI coverage,
+Return Form verification, cross-device/real-browser print checks, and the
+explicitly deferred P2/P3 accessibility/content pass.
 
 **Estimated Scope:** M

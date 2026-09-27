@@ -123,6 +123,46 @@ Worker/Public Tracking behavior change was found. See
 `reports/Service-Tech-N6-Clean-Baseline-Certification-20260927.txt` for the
 detailed evidence.
 
+## N7.1 product backlog reconciliation (2026-09-27)
+
+N7.1 performed a read-only source/document/test audit after N3–N6 and produced
+the authoritative active-work classification now maintained in
+`BACKLOG.md`. Deterministic focused search validation passed 25/25 and an
+independent GPT-6 Astra bounded review returned `VERDICT: PASS` /
+`REQUIRED_CORRECTIONS: NONE`.
+
+Important corrections established by N7.1:
+
+- marketplace/contact identity and order-number Firestore search are already
+  implemented from Service Job event snapshots; older F5d-49 limitation text
+  is historical;
+- custom mounted hook/component runtimes exist, but browser-like DOM coverage
+  remains incomplete;
+- basic Service Report printing exists, while trusted V2 approval/warranty
+  print integration remains active work;
+- Delivery Note is not the Product Return Form;
+- Approval Console/D24/D25 are delivered; staff role lifecycle administration
+  is a separate deferred scope;
+- Public Tracking remains disabled, and the opaque legacy
+  `PUBLIC_TRACKING_ENABLED` state is a separate production-config prerequisite
+  for any future Worker promotion;
+- the deployed backend direction is Firebase Auth + Firestore + Worker/R2, so
+  prototype-era Supabase/current-backend claims are not authoritative.
+
+## N7.2 source-of-truth documentation reconciliation (2026-09-27)
+
+N7.2 reconciles current-state documentation with the N7.1 evidence without
+changing application/Worker behavior. `PROJECT_STATE.md`,
+`DATABASE_SCHEMA.md`, `PRODUCT_ROADMAP.md`, `SPRINT_ROADMAP.md`,
+`AI_HANDOFF.md`, `AGENTS.md`, `UI_GUIDELINES.md`, and targeted
+supersession notes in `DECISIONS.md` are now reconciled against
+`BACKLOG.md` and distinguish historical decisions from current
+implementation/runtime state. `AGENTS.md` and `AI_HANDOFF.md` link directly
+to the backlog as the active-work index. This phase is
+source-documentation only: no Worker upload/deploy, traffic change,
+Firebase/Cloudflare/IAM/Rules mutation, production business-data write, or
+Public Tracking enablement is part of it.
+
 ## Historical production D24/D25 + Public Tracking state (2026-09-26)
 
 The reviewed production source checkpoint is
@@ -195,9 +235,11 @@ today:
   Local development may use Mock; the production artifact fails closed unless
   it selects Firestore for business data and the Worker for files.
 - **Product Master, Customers, Service Jobs, Registered Products, and Universal
-  Search use the Firestore production path.** Firestore-mode search supports
-  name/phone/tracking-number/serial-number only; marketplace username and order
-  number remain unsupported (see Current Limitations, F5d-49).
+  Search use the Firestore production path.** Firestore-mode Universal Search
+  matches name, phone, tracking number, serial number, marketplace/contact
+  identity, and order number. Marketplace/contact identity and order number are
+  derived from authoritative Service Job event snapshots; canonical
+  customer-level channel storage remains separately deferred (DECISIONS.md #041).
 - `@supabase/supabase-js` is still an installed dependency but is **not used anywhere in the code** — it predates the Firebase/Firestore direction taken in Sprint F0–F2.1 and is effectively orphaned (see Current Limitations).
 - Firebase Email/Password Auth, staff-profile allowlisting, brand scoping, and
   restrictive Firestore Rules are live. The production Login requires a valid
@@ -334,11 +376,13 @@ Grouped by what shipped, not by exact sprint label (many sprints predate a forma
 
 - **Role scope is intentionally narrow** — staff authentication and brand scope
   are live; broader Admin and Customer role models and administration remain.
-- **Firestore search scope is incomplete** — name, phone, tracking number, and
-  serial number are supported. Marketplace username and order number have no
-  Firestore collection to search (`customer_channel_contacts`/
-  `product_instances` were never migrated — DECISIONS.md #038) and return no
-  match rather than fabricated data.
+- **Canonical customer contact storage remains deferred, but Universal Search
+  coverage is no longer blocked by it.** Firestore search now matches
+  marketplace/contact identity and order number from existing Service Job event
+  snapshots in addition to name, phone, tracking number, and serial number.
+  This does not create or imply a canonical `customer_channel_contacts`
+  collection; that separate customer-level model remains deferred
+  (DECISIONS.md #041).
 - **Orphaned dependency** — `@supabase/supabase-js` remains in `package.json` from the original prototype but is called nowhere; the actual backend direction taken (F0–F2.1) is Firebase/Firestore, not Supabase. This divergence from the original [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) target (which is Postgres/Supabase-flavored) has not been formally reconciled — see that document's new "Implementation Status" section and this sprint's Remaining Gaps.
 - **Staff layout composition** — `StaffLayout.tsx` owns outlet state and renders
   `StaffShell.tsx`; the shell is the active navigation, landmark, search, and
@@ -353,8 +397,22 @@ Grouped by what shipped, not by exact sprint label (many sprints predate a forma
   defects. Timeline/progress semantics, PhotoGallery, DownloadMenu, the import
   chooser, broader ProductFieldsForm cleanup, contrast, reduced motion, and
   other P2/P3 polish remain separately gated.
-- ~~**Public Tracking is unavailable in production.**~~ **Live in production since F5d-69G** (2026-08-19) — staff explicitly issue/rotate a plaintext SRV code (component-memory-only, never persisted); the Worker binding, issuance flow, and fail-closed rate-limit scope are deployed. See the F5d-69G entry below.
-- **Limited app test coverage** — no jsdom/React Testing Library dependency exists in this repository; React-component-level behavior (hook wiring, effect timing, JSX structure, lifecycle contracts) is proven via source-structural regex assertions against `.tsx`/`.ts` source text, not mounted-component rendering. Pure/non-React logic is exercised with real runtime execution via Vite's `ssrLoadModule`. Service Job retention-anchor and reactivity regression tests run through Node's built-in test runner; broader mounted-UI test coverage remains a known, accepted gap (see F5d-70 entry below).
+- **Public Tracking implementation exists but production is currently disabled.**
+  It was activated in F5d-69G, then deliberately disabled on 2026-09-25.
+  Current accepted production returns 404 for both public lookup shapes.
+  Re-activation is a separately approved production phase. The historical
+  `PUBLIC_TRACKING_ENABLED` binding is still opaque `secret_text`; future
+  Worker promotion must satisfy the N5 guard by making the candidate state
+  verifiably absent or plain-text `false`, never by weakening the guard.
+- **Browser-like UI test coverage remains incomplete.** The repository now has
+  dependency-free mounted hook/component runtimes
+  (`test/support/hookRuntime.mjs` and `componentRuntime.mjs`) that execute real
+  project hooks/components and rerender them in Node, plus SSR/source-structural
+  tests and deterministic Node suites. Those custom runtimes deliberately have
+  no browser DOM: host refs remain null, so focus trapping/restoration, inert
+  backgrounds, portal behavior, and similar DOM interactions are not proven.
+  No jsdom/React Testing Library dependency exists today; bounded browser-like
+  DOM coverage remains active backlog work.
 - ~~**Known bug, tracked as F5d-68: Service Request print/PDF spills to 2 physical pages.**~~ **Resolved in production by F5d-68** (2026-08-17) — the root cause was that this print flow, unlike its two sibling print documents, never activated a print-mode body class, so the staff shell, page heading, and on-screen success card/actions all printed alongside the document. Verified one physical page by a real production Print → Save as PDF. See the F5d-68 entry below.
 - ~~**Known bug: Internal Notes quick-add ("เพิ่ม") on Service Job Details did not persist.**~~ **Resolved in production by F5d-70 Phase 6F.2–6F.11** (2026-08-20) — the button appended to local React state and cleared the input, looking completed, but performed no repository write; a reload/navigation before the separate page-level "บันทึกการเปลี่ยนแปลง" silently destroyed the note. "เพิ่ม" now performs its own immediate, notes-only persistence write. See the F5d-70 entry below.
 
@@ -4178,6 +4236,12 @@ gate for the corrected Worker, followed by an executor readiness review before
 any execution authorization. R8's original repository/platform/version pins
 remain unchanged; they must be reconciled explicitly at that later gate and
 must never be bypassed to run against a changed deployment.
+
+**N3 closure override (2026-09-27):** the paragraph above is retained as
+historical evidence only. N3 Production Remediation later completed authorized
+Writes 1–7, verified A–E final, reduced active V1 drafts to zero, and closed the
+business remediation. Never rerun Writes 1–7 and never create Write 8 without a
+new explicit production business-data decision.
 
 ## Development Principles
 

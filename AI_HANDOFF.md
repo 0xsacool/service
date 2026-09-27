@@ -27,6 +27,14 @@ Final credentialed acceptance passed: `BRN-2026-000003` loads
 `serviceReports` list and update probes are both permission-denied; Public
 Tracking returns 404/404. No Production Remediation write was rerun.
 
+**N3 Production Remediation is FINAL SUCCESS / CLOSED.** Authorized Writes 1–7
+were completed and verified once; active V1 drafts are zero and A–E are final.
+**Never rerun Writes 1–7 and never create Write 8.** Any older executor/R7/R8,
+"five active drafts", "zero of seven writes", or "next execution" prose later
+in this handoff is historical evidence only and is superseded by this N3
+closure. Reopening production business-data writes requires a new explicit
+owner decision outside ordinary backlog implementation.
+
 Deployment guardrail: Wrangler 4.120.0 `versions upload` deletes undeclared
 plain vars unless `--keep-vars` is used. During this hotfix the first candidate
 was promoted without it, `SERVICE_REPORT_V2_MODE` disappeared, and Production
@@ -134,14 +142,14 @@ sections record the related public-tracking boundary and source-only status.
 The authoritative Worker sources remain `worker/README.md` and
 `worker/PRODUCTION_FIRESTORE_ACCESS.md`, both consolidated here.
 
-**F5d-31 source-only hardening:** the default Worker configuration has no
-Cron trigger, so an ordinary code deploy cannot activate scheduled work.
-`scheduled()` remains present but is not reachable from `fetch()`;
-`deletionExecutor` remains unwired. The app's production backend setting now
-fails closed unless it is exactly Firestore. Durable Service Job numbering is
-transactional in source, but current browser Rules intentionally deny
-`numberSequences`; do not deploy that path until a separately approved
-Rules/privileged-allocation design exists.
+**Historical F5d-31 note, superseded for allocator deployment:** the default
+Worker configuration still has no Cron trigger, `scheduled()` remains
+separate from `fetch()`, and `deletionExecutor` remains unwired. However,
+the old "do not deploy the allocator" gate is no longer current: authenticated
+Worker-mediated Service Job allocation/numbering was later approved, deployed,
+and production-accepted. Browser Rules still deny direct `numberSequences`
+access; the Worker is the privileged allocation boundary. Do not reuse the
+F5d-31 deployment warning as current next work.
 
 **Why this subsystem exists:** Service Jobs need photo/document attachments
 (before/after photos, receipts, reports). Storing file bytes requires an
@@ -508,30 +516,27 @@ subsystem:
 
 ## 8. Test Status
 
-- **Worker test suite** (`npm test` inside `worker/`): **86 checks, all
-  passing**, across 5 test files —
-  `googleAuthEmailNormalization.test.mts` (6), `retentionDryRun.test.mts`
-  (7), `deletionSafety.test.mts` (23),
-  `firestoreClientMarkDeleted.test.mts` (6), and
-  `deletionExecutor.test.mts` (44). The Firestore-client test uses a small
-  in-memory bundling runner so it can exercise the Worker module graph
-  offline. No test calls production infrastructure.
-- **Worker static checks:** `tsc --noEmit` clean. Prettier clean on every
-  file this project's sprints have touched. (Two pre-existing, untouched
-  files — `worker/src/attachmentRetention.ts`, `worker/src/index.ts` — carry
-  minor Prettier formatting drift unrelated to any recent sprint; not yet
-  fixed, out of scope so far.)
-- **Main app:** `tsc -b`, ESLint (`--max-warnings=0`), and `vite build` all
-  clean as of the F5d-17 checkpoint. No dedicated test runner is configured
-  for the main app (`src/`) — this is a known, longstanding gap, not new.
+N6 is the current clean-baseline certification. At source commit
+`bc510e8fd46ba287c5fe5e0152367a5518706de1`, the production app build,
+ESLint, Prettier format check, documented deterministic root test groups,
+Worker TypeScript check, full Worker test suite, and Firestore Rules emulator
+suite all passed; the Rules suite completed 34/34. N6 also removed the
+repository-wide Prettier debt and added `endOfLine: "auto"` for the Windows
+host. See `reports/Service-Tech-N6-Clean-Baseline-Certification-20260927.txt`.
+
+The root app uses Node-based deterministic tests, SSR/source-structural checks,
+and targeted custom mounted hook/component runtimes. Those custom runtimes are
+not a browser DOM; bounded DOM interaction coverage remains an active backlog
+item in `BACKLOG.md`.
 
 ---
 
 ## 9. What Is Intentionally Not Enabled
 
-- **Cron is disabled** — defined in `wrangler.toml` but never pushed to
-  Cloudflare by any deploy in this project's history (verified via the live
-  version's metadata — no cron trigger registered).
+- **Cron is disabled** — the default `worker/wrangler.toml` deliberately has
+  no `[triggers]` block. A scheduled handler exists in source for retention
+  reconciliation, but no production Cron trigger is registered; any activation
+  remains a separately approved production configuration change.
 - **Automatic deletion is disabled** — nothing calls `runDeletionExecutor()`
   from any live path.
 - **The deletion executor is unwired** — not imported by `index.ts`, not
@@ -560,13 +565,18 @@ subsystem:
 
 ---
 
-## 11. Exact Next Work (Proposed, Not Started)
+## 11. Current Backlog / Next Work
 
-**F5d-23 — Worker authorization foundation** should establish the approved
-staff-facing attachment access boundary before any automatic execution work.
-It must not activate Cron, wire automatic deletion, create lease/index
-infrastructure, or introduce customer-account behavior without separate
-approval.
+Use [BACKLOG.md](BACKLOG.md) as the authoritative active-work index. The
+F5d-23 Worker authorization foundation and later attachment/auth milestones in
+older handoff text are historical and already superseded by production work.
+
+Current recommended source sequence is documentation truth maintenance,
+bounded browser-like DOM interaction coverage, then V2 trusted-print UI
+integration. Public Tracking activation, legacy opaque flag cleanup,
+automatic deletion/Cron, staff role administration, automatic notifications,
+durable Product Instance identity, and the other deferred items stay gated as
+listed in `BACKLOG.md`.
 
 ---
 
@@ -592,9 +602,11 @@ approval.
 - **Never expose secret values** — names only, exactly as this document
   does. Never print, log, or write a private key, OAuth token, credential
   JSON, or Authorization header value anywhere, including into this file.
-- **Never broaden IAM permissions without explicit approval** — the custom
-  role's exact 4 permissions (Section 2) are deliberately narrow; do not
-  add more "to be safe" or "for convenience."
+- **Never broaden IAM permissions without explicit approval** — the production
+  custom role currently has the reviewed five permissions recorded in
+  `worker/gcp/firestore-retention-sweeper-role.yaml`
+  (`datastore.databases.get`, entity get/list/update/create; no delete).
+  Do not add permissions "to be safe" or "for convenience."
 - **Preserve the 50/run and 3-failure safety policy** (DECISIONS.md #024)
   exactly — do not substitute different numbers without a new, explicit
   user-supplied policy decision.
@@ -602,11 +614,10 @@ approval.
   retain metadata permanently, mark `deletedAt`, never hard-delete via the
   automatic path. Do not revisit this without the user explicitly reopening
   it.
-- **Use the established temporary-config technique** when deploying
-  anything that must exclude Cron — every deploy in this project's history
-  has excluded `[triggers]` from `wrangler.toml` at deploy time for exactly
-  this reason; do not deploy with `[triggers]` intact unless Cron
-  activation has been explicitly, separately approved.
+- **Keep Cron absent unless explicitly approved.** The default
+  `worker/wrangler.toml` already omits `[triggers]`; do not introduce or
+  deploy a trigger unless Cron activation has been explicitly and separately
+  approved.
 - **Stop and ask** if a destructive action or an undefined architectural
   decision is encountered — this project has been deliberately built with
   explicit, sequenced, user-gated approval at every live-infrastructure

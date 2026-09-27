@@ -128,6 +128,12 @@
 
 **Status:** Open โ€” needs brand assets/input before it can be decided.
 
+**N7.2 current-state note (2026-09-27):** the branding decision remains open, but
+the old statement that the runtime font stack has no Thai-script support is no
+longer current. `src/index.css` now includes `Noto Sans Thai` and Tahoma
+fallbacks. This does not decide BRUNO/JLC typography, palette, logo assets, or
+per-brand theming; those visual-identity questions remain open.
+
 ---
 
 > **Note on entries below:** decisions #001เนโฌโ€#008 above were written before the "Service Job" rename (#009) and use "claim"/"Claim" in their original prose. Per this file's own convention, that prose is left as-written rather than edited after the fact โ€” read "claim" in those entries as synonymous with "Service Job" going forward.
@@ -702,6 +708,14 @@ unapproved).
 **Impact:** A staff member can now find and select a real existing customer in Firestore mode by name, phone, tracking number, or serial number, unblocking New Service Job's customer-selection step. Searching by marketplace username or order number returns nothing today, matching reality rather than silently failing or fabricating a match — this is a known, honestly-represented gap, not a defect, and remains unsupported until `customer_channel_contacts`/`product_instances` are migrated to Firestore. Gate 7.1 still requires a separate, explicitly approved acceptance step; this decision does not itself authorize resuming it.
 
 **Status:** Decided (F5d-49 approval).
+
+**N7.2 supersession note (2026-09-27):** this entry remains historical truth for
+the F5d-49 scope, but its "marketplace/order unsupported" limitation is no
+longer current. F5d-69 later added authoritative Service Job snapshot fields
+(`contactChannelIdentity` and `orderNumber`), and
+`firestoreSearchRepository.ts` now matches both dimensions with focused
+coverage in `test/f5d69Search.test.mjs`. Canonical customer-level contact
+storage remains separately deferred under Decision #041.
 
 ---
 
