@@ -66,6 +66,11 @@ export function assertProductionBindings(version, expectedVersionId) {
   }
 }
 
+export function productionPreviewBase(versionId) {
+  requireVersionId(versionId);
+  return `https://${versionId.slice(0, 8)}-${WORKER_NAME}.${PREVIEW_DOMAIN}`;
+}
+
 async function expectStatus(fetchImpl, label, url, expectedStatus, init) {
   const response = await fetchImpl(url, init);
   if (response.status !== expectedStatus) {
@@ -76,7 +81,7 @@ async function expectStatus(fetchImpl, label, url, expectedStatus, init) {
 }
 
 export async function probeCandidate(versionId, fetchImpl = fetch) {
-  const base = `https://${versionId}-${WORKER_NAME}.${PREVIEW_DOMAIN}`;
+  const base = productionPreviewBase(versionId);
 
   await expectStatus(fetchImpl, 'health probe', `${base}/health`, 200);
   await expectStatus(

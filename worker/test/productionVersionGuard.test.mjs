@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   assertProductionBindings,
   main,
+  productionPreviewBase,
   verifyProductionCandidate,
 } from '../scripts/productionVersionGuard.mjs';
 
@@ -88,6 +89,12 @@ async function expectPromotionBlocked(
 }
 
 console.log('Running production Worker version guard regression test');
+
+assert.equal(
+  productionPreviewBase(VERSION_ID),
+  'https://b2534996-service-tech-files-worker.sacool-spizy.workers.dev'
+);
+console.log('  PASS  production preview URL uses Wrangler short version prefix');
 
 assert.doesNotThrow(() =>
   assertProductionBindings(version(baseBindings()), VERSION_ID)
