@@ -319,6 +319,30 @@ business-data write, Public Tracking change, or N3 remediation replay occurred.
 Detailed evidence is retained in
 `reports/Service-Tech-N7-7-Accessibility-Content-Closeout-20260928.txt`.
 
+## N7.8 N7.x final certification/closeout (2026-09-28)
+
+N7.8 re-certifies the published N7.7 checkpoint
+`97fe11caa5c80708d11940861713c09aa4744b5f` in the fresh isolated
+`C:\service\.n7-8-final-cert-20260928` worktree. Application build, ESLint,
+Prettier, `git diff --check`, and every documented root package-script suite
+pass. Worker typecheck and the full Worker regression chain pass. Firestore
+Rules pass 35/35 in the emulator. Root and Worker `npm audit --omit=dev`
+both report zero production-dependency vulnerabilities.
+
+The standalone Product Master Import diagnostic remains outside the documented
+package-script certification matrix and still exposes the same three baseline
+failures recorded during N7.7. N7.8 does not broaden scope to modify that
+subsystem or hide the debt. Before closeout-document edits, tracked source had
+no diff; only N7.8 evidence/helper files were untracked.
+
+Deterministic N7.8 certification is PASS. Independent GPT-6 Astra read-only
+review first found two publication-consistency issues in the closeout docs;
+both were corrected, and the re-review returns `VERDICT: PASS` /
+`FINDINGS: NONE`. N7.8 performs no Worker/Rules/frontend production deploy,
+Cloudflare/Firebase/IAM/index production mutation, production business-data
+write, Public Tracking change, or N3 remediation replay. Detailed evidence is retained in
+`reports/Service-Tech-N7-8-N7x-Final-Certification-Closeout-20260928.txt`.
+
 ## Historical production D24/D25 + Public Tracking state (2026-09-26)
 
 The reviewed production source checkpoint is

@@ -4,7 +4,7 @@
 
 ## Baseline
 
-- Source baseline entering N7.7: `7e14c8ed6286cd97ae3c170c2afc5f2ffc0399de` (`n7-6-product-return-form-20260928`). N6 remains the underlying full clean-baseline certification.
+- Source baseline entering N7.8: `97fe11caa5c80708d11940861713c09aa4744b5f` (`n7-7-accessibility-content-20260928`). N6 remains the underlying clean-baseline certification; N7.8 is the final N7.x re-certification/closeout gate.
 - Accepted production Worker: D24 V1-history hotfix source `cff31a0`, version `b2534996-977d-45d3-96f7-641599d66f1c`.
 - Production `SERVICE_REPORT_V2_MODE=compatibility`.
 - Production Public Tracking is disabled and must remain disabled until a separately approved activation phase.
@@ -26,10 +26,11 @@
 - **N7.5 Product Return Form contract reconciliation.** Decision #049 fixes the implementation contract before source work: Return Forms are for `Completed` jobs only; `closedAt` is the V1 pickup/acceptance timestamp only in that state; `RT-{YYYY}-{SEQUENCE}` is allocated exactly once by a trusted backend boundary during the first Completed transition; the latest report must be a normal trusted-print `v2-approved` result; customer and staff both countersign the paper form; no price/cost is printed in V1; legacy V1/draft/pending/rejected/integrity-incident reports fail closed for Return Form generation.
 - **N7.6 Product Return Form source implementation.** The application now has explicit `returnFormNumber`, a Worker-mediated `POST /service-jobs/{jobId}/complete` boundary, atomic Completed/`closedAt`/RT-number/`return_form`-sequence commit, replay-safe completion, browser update sequencing that saves ordinary edits before trusted completion, a distinct `ProductReturnFormPrintPreview`, and normal-only trusted-print gating against the latest D24 documentary report. Browser Firestore Rules source now makes `returnFormNumber` Worker-owned and prevents browser entry to or exit from `Completed`; the Rules emulator passes the N7.6 bypass regressions. Historical Completed jobs missing trusted RT/closure metadata remain fail-closed and are not silently backfilled. N7.6 is source-only until a separate Worker/Rules deployment phase is approved.
 - **N7.7 Accessibility/content source hardening.** Timeline/progress now expose current-step and numeric progress semantics; PhotoGallery thumbnails expose labelled selected state; DownloadMenu behaves as a disclosure with explicit expanded/controlled state plus deterministic focus/Escape restoration; ProductFieldsForm associates validation errors and status selection semantics; the CSV chooser remains keyboard-focusable with labelled/error state; bounded Product Import copy is Thai-first; secondary/status/import text uses measured higher-contrast tokens; and global reduced-motion handling is present. The focused mounted suite passes 7/7, app build/lint/format/diff-check pass after final corrections, broader affected regressions passed, and final GPT-6 Astra read-only review returns `VERDICT: PASS` / `FINDINGS: NONE`. This is source work only; real-browser assistive-technology/rendering verification and production deployment remain separate.
+- **N7.8 N7.x final certification/closeout.** The published N7.7 checkpoint is re-certified in a fresh isolated worktree: app build/lint/format and every documented root package-script suite pass, Worker typecheck/full tests pass, Firestore Rules pass 35/35, production-dependency audits report zero vulnerabilities, and tracked source remains unchanged. The standalone Product Master Import diagnostic still exposes the same three pre-existing non-gating baseline failures recorded by N7.7; they remain deferred rather than being hidden inside closeout. Final independent GPT-6 Astra re-review returns `VERDICT: PASS` / `FINDINGS: NONE` after correcting two closeout-document consistency findings; the review loop is recorded in the N7.8 closeout report. N7.8 performs no production deployment/configuration/data mutation.
 
 ## ACTIVE
 
-No N7.x product-source item remains active after N7.7. N7.8 final certification/closeout is the next source gate; blocked/deferred operational and product items below retain their own approval boundaries.
+N7.x product-source work is closed after N7.8 final certification. No N7.x source item remains active; blocked/deferred operational and product items below retain their own approval boundaries and require separately approved phases.
 
 ## BLOCKED / DEFERRED
 
@@ -69,6 +70,6 @@ The following statements may remain in historical context but must not be used a
 
 ## Recommended sequence
 
-1. Run N7.x final certification/closeout from the N7.7 source checkpoint.
-2. Keep this backlog/source-of-truth documentation current as final certification closes.
+1. Keep the N7.x source checkpoint closed unless a new, explicitly scoped source phase is approved.
+2. Treat real-browser assistive-technology/focus rendering and broader responsive/content polish as separate verification/polish work, not unfinished N7.x source implementation.
 3. Revisit deferred operational/product work only after its dependency or owner decision is resolved.

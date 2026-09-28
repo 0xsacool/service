@@ -610,13 +610,15 @@ Use [BACKLOG.md](BACKLOG.md) as the authoritative active-work index. The
 F5d-23 Worker authorization foundation and later attachment/auth milestones in
 older handoff text are historical and already superseded by production work.
 
-N7.6 Product Return Form source implementation and N7.7 P2/P3
-accessibility/content source hardening are complete. The next source gate is
-N7.8 N7.x final certification/closeout; neither N7.6 nor N7.7 authorizes a
-production Worker/Rules/frontend rollout. Public Tracking activation, legacy
-opaque flag cleanup, automatic deletion/Cron, staff role administration,
-automatic notifications, durable Product Instance identity, and the other
-deferred items stay gated as listed in `BACKLOG.md`.
+N7.6 Product Return Form source implementation, N7.7 P2/P3
+accessibility/content source hardening, and N7.8 N7.x final certification/
+closeout are complete at the source level. N7.x source work is closed; this
+closeout does not authorize a production Worker/Rules/frontend rollout.
+Real-browser assistive-technology/focus rendering and broader responsive/
+content polish remain separate verification/polish work. Public Tracking
+activation, legacy opaque flag cleanup, automatic deletion/Cron, staff role
+administration, automatic notifications, durable Product Instance identity,
+and the other deferred items stay gated as listed in `BACKLOG.md`.
 
 ---
 

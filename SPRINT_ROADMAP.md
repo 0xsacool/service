@@ -182,9 +182,17 @@ safe browser surface had an existing staff session.
   progress semantics, PhotoGallery and DownloadMenu, the import chooser,
   ProductFieldsForm semantics, measured contrast, reduced motion, and bounded
   Thai/content QA. Final GPT-6 Astra review passed with no material findings.
+- N7.8 (2026-09-28) re-certified the published N7.7 checkpoint in a fresh
+  isolated worktree: application build/lint/format and every documented root
+  package-script suite passed; Worker typecheck/full tests passed; Firestore
+  Rules passed 35/35; production-dependency audits reported zero
+  vulnerabilities. The same three pre-existing non-gating Product Master
+  Import diagnostic failures remain separately scoped. Final GPT-6 Astra
+  re-review passed with `FINDINGS: NONE` after two documentation-consistency
+  corrections. N7.8 performs no production deploy/configuration/data mutation.
 - Real-browser assistive-technology/focus rendering, cross-device layout, and
   broader responsive/content polish remain verification/polish concerns rather
-  than the former P2/P3 source backlog.
+  than unfinished N7.x source work.
 - Any broader brand visual identity work beyond the canonical text badges delivered in F5d-63 ([DECISIONS.md](DECISIONS.md) #008).
 
 **Estimated Scope:** M
@@ -509,9 +517,11 @@ while retaining the custom mounted hook/component runtimes for deterministic
 lifecycle/race tests. N7.4 adds trusted-print contract/UI regression coverage.
 N7.5 resolves Product Return Form semantics in Decision #049, and N7.6 implements
 the trusted completion/RT allocator, fail-closed approved-report gating, print
-preview, and browser Rules boundary source-side. N7.6 Worker/Rules changes are
-not production-deployed by this phase. Remaining N7.x work is the P2/P3
-accessibility/content pass plus final certification/closeout; real-browser layout
-and print-pagination checks remain useful launch evidence beyond jsdom.
+preview, and browser Rules boundary source-side. N7.7 completes the P2/P3
+accessibility/content source pass, and N7.8 completes full N7.x source
+re-certification/closeout. N7.6/N7.7 source changes are not production-deployed
+by this closeout. Real-browser assistive-technology/focus rendering, layout,
+and print-pagination checks remain separate launch-verification/polish evidence
+beyond the closed N7.x source scope.
 
 **Estimated Scope:** M

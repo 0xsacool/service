@@ -1,0 +1,79 @@
+Service Tech — N7.8 N7.x Final Certification / Closeout
+Date: 2026-09-28
+Status: PASS — N7.x SOURCE CLOSEOUT CERTIFIED
+
+BASELINE
+- Starting source checkpoint: 97fe11caa5c80708d11940861713c09aa4744b5f
+- Starting tag: n7-7-accessibility-content-20260928
+- Certification worktree: C:\service\.n7-8-final-cert-20260928
+- The isolated worktree had no tracked source diff entering certification.
+- N7.8 is source/certification closeout only; it does not authorize or perform production rollout.
+
+DEPENDENCY / ENVIRONMENT REPRODUCTION
+- Root npm ci: PASS, EXIT_CODE=0.
+- Worker npm ci: PASS, EXIT_CODE=0.
+- Root npm audit --omit=dev: PASS, found 0 vulnerabilities.
+- Worker npm audit --omit=dev: PASS, found 0 vulnerabilities.
+- The full installed trees still report development-dependency audit findings (root: 15 total, 12 moderate + 3 high; Worker: 3 high). No npm audit fix, package upgrade, or dependency-version mutation was performed.
+- No package-lock or tracked source mutation was introduced by dependency reproduction.
+- lnwjud task/process observation returned an ownership mismatch for newly launched handles in this client session. Final gate evidence therefore used persisted command-output files with explicit EXIT_CODE values rather than treating launch success as test success.
+- An initial temporary runner quoting error failed before npm could execute. The runner was corrected to invoke node.exe -> npm-cli.js directly; only the rerun results below are certification evidence.
+
+APPLICATION CERTIFICATION
+- npm run build: PASS, EXIT_CODE=0. Existing Vite large-chunk warning is non-failing.
+- npm run lint: PASS, EXIT_CODE=0.
+- npm run format:check: PASS, EXIT_CODE=0.
+- git diff --check: PASS.
+- Root deterministic package-script suites: PASS, EXIT_CODE=0 for every suite:
+  - test:service-jobs
+  - test:service-job-brand
+  - test:service-reports
+  - test:service-reports-ui
+  - test:service-reports-print
+  - test:attachment-retention
+  - test:ownership-public-tracking
+  - test:public-tracking-browser
+  - test:auth-readiness
+  - test:backend-configuration
+  - test:approval-console
+  - test:dom-accessibility
+  - test:accessibility-content
+  - test:trusted-print-ui
+  - test:return-form
+  - test:return-form-guard
+
+WORKER CERTIFICATION
+- Worker npm run typecheck: PASS, EXIT_CODE=0.
+- Worker full npm test chain: PASS, EXIT_CODE=0.
+- The Worker chain includes authorization, Service Job creation/completion, production-version guard, Public Tracking containment, Product Import, Service Report V1/V2, retention/deletion, CORS, and associated regression contracts.
+
+FIRESTORE RULES CERTIFICATION
+- npm run test:firestore-rules: PASS, EXIT_CODE=0.
+- Firestore emulator result: 35 tests, 35 passed, 0 failed, 0 skipped.
+- Trusted collection browser denial, direct Service Report authorization, cross-brand/anonymous denial, Product Import containment, Public Tracking isolation, and N7.6 Return Form/Completed-boundary protections remain enforced.
+
+KNOWN NON-GATING PRODUCT MASTER IMPORT DIAGNOSTIC
+- Standalone node --test test/productMasterImport.test.mjs is not one of the root package-script certification gates.
+- The diagnostic exits 1 with the same three Product Master Import baseline failures already recorded during N7.7.
+- The failures cover the existing source/test expectation mismatch around Firestore server-refresh source matching, persisted-attempt retention semantics, and NFC-before-validation expectation.
+- N7.8 does not modify Product Master Import source to hide or broaden this pre-existing debt. It remains explicitly visible for a separately scoped correction.
+
+SOURCE / SAFETY INVARIANTS
+- Before closeout-document edits, git diff is empty and only N7.8 evidence/helper files are untracked.
+- No Worker upload/deploy.
+- No frontend production deploy.
+- No Cloudflare traffic/config mutation.
+- No Firebase/IAM/Rules/index production mutation.
+- No production business-data write.
+- No Public Tracking enablement or flag mutation.
+- No N3 remediation replay or Write 8.
+- No destructive Git reset/clean/history rewrite.
+
+INDEPENDENT REVIEW
+- GPT-6 Astra read-only review round 1: FAIL on two publication-consistency findings only — SPRINT_ROADMAP still described completed N7.x work as remaining, and BACKLOG wording implied the final review was already recorded while PROJECT_STATE/report still marked it pending.
+- Both documentation findings were corrected without changing tracked product source or certification evidence.
+- GPT-6 Astra read-only re-review round 2: VERDICT: PASS / FINDINGS: NONE.
+- Residual uncertainty reported by Astra: certification was verified from recorded evidence; Astra did not rerun tests/audits or independently inspect live production.
+
+N7.8 RESULT
+N7.8 certification and independent review are PASS. Application build/lint/format and every documented root package-script suite pass; Worker typecheck/full tests pass; Firestore Rules pass 35/35; production-dependency audits report zero vulnerabilities; tracked product source remained unchanged during certification. N7.x source closeout is certified. Git commit/tag/push and exact remote/tag/worktree verification are the remaining publication mechanics and are intentionally not self-asserted by this pre-commit report.
