@@ -1,4 +1,4 @@
-import { forwardRef, type ReactNode } from 'react';
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 
 export function PrimaryButton({
   children,
@@ -25,24 +25,25 @@ export function PrimaryButton({
   );
 }
 
-export const SecondaryButton = forwardRef<
-  HTMLButtonElement,
-  {
-    children: ReactNode;
-    onClick?: () => void;
-    className?: string;
-    disabled?: boolean;
+type SecondaryButtonProps = Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  'children' | 'className'
+> & {
+  children: ReactNode;
+  className?: string;
+};
+
+export const SecondaryButton = forwardRef<HTMLButtonElement, SecondaryButtonProps>(
+  function SecondaryButton({ children, className = '', type = 'button', ...props }, ref) {
+    return (
+      <button
+        ref={ref}
+        type={type}
+        {...props}
+        className={`inline-flex items-center justify-center gap-2 rounded-full bg-white/80 px-6 py-3.5 text-base font-medium text-brand-600 ring-1 ring-black/5 shadow-sm backdrop-blur transition-all duration-200 hover:bg-white active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      >
+        {children}
+      </button>
+    );
   }
->(function SecondaryButton({ children, onClick, className = '', disabled = false }, ref) {
-  return (
-    <button
-      ref={ref}
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`inline-flex items-center justify-center gap-2 rounded-full bg-white/80 px-6 py-3.5 text-base font-medium text-brand-600 ring-1 ring-black/5 shadow-sm backdrop-blur transition-all duration-200 hover:bg-white active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
-    >
-      {children}
-    </button>
-  );
-});
+);

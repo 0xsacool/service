@@ -176,13 +176,15 @@ unavailable. Unauthenticated Login/protected-route accessibility smoke passed;
 authenticated StaffShell/list/link/drawer smoke was unavailable because neither
 safe browser surface had an existing staff session.
 
-**Remaining deliverables:**
+**Remaining deliverables (current-state addendum):**
 
-- Deferred P2/P3 accessibility work: `aria-current="step"` timeline and
-  progress semantics, PhotoGallery and DownloadMenu improvements, import
-  chooser and broader ProductFieldsForm cleanup, contrast, reduced motion,
-  and optional polish.
-- Remaining Thai copy and responsive/content QA beyond the bounded F5d-63 trust surfaces.
+- N7.7 (2026-09-28) completed the deferred P2/P3 source slice for timeline/
+  progress semantics, PhotoGallery and DownloadMenu, the import chooser,
+  ProductFieldsForm semantics, measured contrast, reduced motion, and bounded
+  Thai/content QA. Final GPT-6 Astra review passed with no material findings.
+- Real-browser assistive-technology/focus rendering, cross-device layout, and
+  broader responsive/content polish remain verification/polish concerns rather
+  than the former P2/P3 source backlog.
 - Any broader brand visual identity work beyond the canonical text badges delivered in F5d-63 ([DECISIONS.md](DECISIONS.md) #008).
 
 **Estimated Scope:** M

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { FileSpreadsheet, Upload } from 'lucide-react';
 import { parseCsv } from '../../../../../utils/csv';
 import type { ParsedImportFile } from './types';
@@ -23,6 +23,9 @@ export function ImportChooseFile({
 }) {
   const [error, setError] = useState<string | null>(null);
   const [isReading, setIsReading] = useState(false);
+  const inputId = useId();
+  const descriptionId = `${inputId}-description`;
+  const errorId = `${inputId}-error`;
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -59,29 +62,49 @@ export function ImportChooseFile({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-neutral-500">
+      <p id={descriptionId} className="text-sm text-neutral-600">
         เลือกไฟล์ CSV จากตารางสินค้าของบริษัท หรือกรอกข้อมูลจากแม่แบบที่ดาวน์โหลดไว้
       </p>
 
-      <label className="flex cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-black/10 bg-white/60 px-6 py-10 text-center transition-colors hover:border-brand-300 hover:bg-brand-50/40">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
+      <label
+        htmlFor={inputId}
+        aria-busy={isReading}
+        className="flex cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-black/10 bg-white/60 px-6 py-10 text-center transition-colors motion-reduce:transition-none hover:border-brand-300 hover:bg-brand-50/40 focus-within:ring-2 focus-within:ring-brand-600 focus-within:ring-offset-2"
+      >
+        <div
+          className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-600"
+          aria-hidden="true"
+        >
           {isReading ? (
-            <Upload className="h-6 w-6 animate-pulse" />
+            <Upload className="h-6 w-6 animate-pulse motion-reduce:animate-none" />
           ) : (
             <FileSpreadsheet className="h-6 w-6" />
           )}
         </div>
         <div>
-          <p className="font-medium text-ink">
-            {isReading ? 'กำลังอ่านไฟล์…' : 'คลิกเพื่อเลือกไฟล์ CSV'}
+          <p className="font-medium text-ink" aria-live="polite">
+            {isReading ? 'กำลังอ่านไฟล์…' : 'เลือกไฟล์ CSV'}
           </p>
-          <p className="mt-1 text-xs text-neutral-400">รองรับเฉพาะไฟล์ .csv</p>
+          <p className="mt-1 text-xs text-neutral-600">รองรับเฉพาะไฟล์ .csv</p>
         </div>
-        <input type="file" accept=".csv" className="hidden" onChange={handleFileChange} />
+        <input
+          id={inputId}
+          type="file"
+          accept=".csv,text/csv"
+          className="sr-only"
+          onChange={handleFileChange}
+          disabled={isReading}
+          aria-describedby={error ? `${descriptionId} ${errorId}` : descriptionId}
+          aria-invalid={Boolean(error)}
+        />
       </label>
 
       {error && (
-        <div className="rounded-2xl bg-danger-50 px-4 py-3 text-sm text-danger-600 ring-1 ring-danger-200">
+        <div
+          id={errorId}
+          role="alert"
+          className="rounded-2xl bg-danger-50 px-4 py-3 text-sm text-danger-700 ring-1 ring-danger-200"
+        >
           {error}
         </div>
       )}

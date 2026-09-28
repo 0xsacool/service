@@ -1,0 +1,89 @@
+Service Tech — N7.7 Accessibility/Content Source Hardening Closeout
+Date: 2026-09-28
+Verdict: PASS — SOURCE SLICE CLOSED / READY TO PUBLISH
+
+BASELINE
+- Starting source checkpoint: 7e14c8ed6286cd97ae3c170c2afc5f2ffc0399de
+- Starting tag: n7-6-product-return-form-20260928
+- Isolated worktree: C:\service\.n7-7-accessibility-content-20260928
+- N7.7 is source/test/documentation work only. No production deployment or mutation is part of this closeout.
+
+SCOPE CLOSED
+- Timeline exposes a labelled timeline, current-step state through aria-current="step", and screen-reader-only completion/current/not-yet state.
+- ProgressBar exposes role=progressbar with min/max/current value and Thai value text.
+- PhotoGallery thumbnails are labelled controls with selected state; decorative thumbnail images use empty alt text.
+- DownloadMenu uses disclosure semantics: aria-expanded + aria-controls, labelled ordinary-button group, focus moves to the first option, Escape closes and restores trigger focus, and selection restores trigger focus.
+- ProductFieldsForm associates validation errors with controls, exposes invalid state, and uses pressed state for the status choices.
+- Product Import file chooser keeps its native file input keyboard-focusable through sr-only styling, labels the control, associates description/error text, and reports validation errors with an alert.
+- Bounded Product Import copy is Thai-first and stale English fallback text was removed.
+- Scoped secondary/error/warning text uses higher-contrast tokens.
+- N7.7-added custom focus indicators use brand-600 and the focused test measures >=3:1 contrast against white.
+- Global prefers-reduced-motion handling collapses animation/transition duration and disables smooth scrolling.
+
+FINAL FOCUSED VERIFICATION
+- npm run test:accessibility-content: PASS, 7/7, 0 fail, EXIT_CODE=0.
+- The mounted suite covers Timeline/ProgressBar semantics, PhotoGallery selected state, DownloadMenu focus/Escape/disclosure contract, ProductFieldsForm error/status semantics, ImportChooseFile keyboard/error association, measured text/focus contrast, reduced-motion CSS presence, and bounded Thai import copy.
+- npm run build: PASS, EXIT_CODE=0.
+- npm run lint: PASS, EXIT_CODE=0.
+- npm run format:check: PASS, EXIT_CODE=0.
+- git diff --check: PASS; only the expected Windows LF→CRLF worktree warnings were emitted.
+- Vite build retained the pre-existing non-failing large-chunk warning.
+
+AFFECTED REGRESSION EVIDENCE
+- DOM accessibility runtime: 6/6 PASS.
+- Product Return Form runtime: 7/7 PASS.
+- Product Return Form guard runtime: 4/4 PASS.
+- Service Jobs: 10/10 PASS.
+- Public Tracking browser: 7/7 PASS.
+- Service Reports UI: 9/9 PASS.
+- Approval Console: 137/137 PASS.
+- Approval Console/DOM runs may emit the known non-failing Vite WebSocket port-in-use diagnostic; assertions still completed successfully.
+
+PRE-EXISTING BASELINE FAILURE ATTRIBUTION
+- Standalone Product Master Import run: 105/108 PASS, 3 FAIL.
+- The failing source files are:
+  - src/repositories/firestoreProductMasterRepository.ts
+  - src/hooks/useProductMaster.ts
+  - src/services/productImportRequest.ts
+- test/productMasterImport.test.mjs is also unchanged.
+- git diff against origin/master for all four files is empty.
+- Therefore those 3 failures are recorded as pre-existing baseline debt on the current source checkpoint and are not attributed to N7.7. N7.7 deliberately did not mutate that unrelated subsystem merely to make the suite numerically green.
+
+INDEPENDENT REVIEW / CORRECTION LOOP
+1. First valid GPT-6 Astra read-only review found one P2 issue:
+   - DownloadMenu declared aria-haspopup="true" while opening a role=group of ordinary buttons.
+   - Correction: remove aria-haspopup and retain disclosure semantics, focus entry, Escape close, and focus restoration.
+   - Focused suite/build/lint/format/diff gates were rerun.
+2. Second Astra read-only review confirmed the popup correction and found one P2 issue:
+   - N7.7-added brand-400 custom focus rings were ~2.54:1 against white, below the 3:1 non-text contrast target.
+   - Correction: change only N7.7-added focus indicators to brand-600 and extend tests to assert component classes plus measured >=3:1 focus contrast.
+   - Focused suite/build/lint/format/diff gates were rerun.
+3. Final GPT-6 Astra medium-reasoning read-only re-review:
+   - VERDICT: PASS
+   - FINDINGS: NONE
+   - EXIT_CODE=0
+   - Residual uncertainty: static/jsdom review does not substitute for real-browser focus rendering, screen-reader announcements, cross-device layout, or reduced-motion rendering.
+
+ENVIRONMENT NOTE
+- The isolated N7.7 worktree initially had no node_modules, so jsdom could not resolve.
+- npm ci was run from the existing lockfile in the isolated worktree; it completed successfully without changing package.json/package-lock versions.
+- The install reported the already-known dev/tooling audit state (15 findings: 12 moderate, 3 high) and install-script approval warnings. No npm audit fix or dependency upgrade was performed.
+
+SOURCE-OF-TRUTH RECONCILIATION
+- BACKLOG.md moves the N7.7 P2/P3 source slice from active to done and makes N7.8 final certification the next source gate.
+- PROJECT_STATE.md records N7.7 behavior, evidence, source-only status, and the remaining real-browser/AT verification boundary.
+- AI_HANDOFF.md points the next agent to N7.8 rather than the already-completed N7.6/N7.7 work.
+- SPRINT_ROADMAP.md records the P2/P3 source slice as delivered by N7.7.
+- UI_GUIDELINES.md records the updated contrast tokens, disclosure semantics, form/chooser semantics, focus indicator target, and reduced-motion behavior.
+
+SAFETY / PRODUCTION INVARIANTS
+- No Worker upload/deploy.
+- No Worker traffic change.
+- No Firebase/Cloudflare/IAM/Rules/index production mutation.
+- No production business-data write.
+- No N3 remediation replay and no new remediation write.
+- No Public Tracking enablement or configuration change.
+- No force push, hard reset, clean, or history rewrite.
+
+N7.7 RESULT
+N7.7 closes the bounded Accessibility/Content source slice with focused mounted evidence, affected regression evidence, post-correction build/lint/format/diff gates, and a final independent GPT-6 Astra PASS with no material findings. The next source gate is N7.8 N7.x final certification/closeout. Production remains unchanged.

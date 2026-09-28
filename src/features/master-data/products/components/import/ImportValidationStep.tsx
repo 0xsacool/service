@@ -5,8 +5,8 @@ import type { ProductImportRecord } from '../../../../../imports/products';
 const ROW_STATUS_STYLES: Record<ImportRowStatus, string> = {
   new: 'bg-success-50 text-success-700 ring-success-200',
   updated: 'bg-brand-50 text-brand-700 ring-brand-100',
-  skipped: 'bg-neutral-100 text-neutral-500 ring-neutral-200',
-  error: 'bg-danger-50 text-danger-600 ring-danger-200',
+  skipped: 'bg-neutral-100 text-neutral-600 ring-neutral-200',
+  error: 'bg-danger-50 text-danger-700 ring-danger-200',
 };
 
 const ROW_STATUS_LABELS: Record<ImportRowStatus, string> = {
@@ -42,7 +42,7 @@ export function ImportValidationStep({
             className="rounded-2xl bg-white/70 px-3 py-3 text-center ring-1 ring-black/5"
           >
             <p className="text-2xl font-semibold text-ink">{line.count}</p>
-            <p className="mt-0.5 text-xs text-neutral-400">{line.label}</p>
+            <p className="mt-0.5 text-xs text-neutral-600">{line.label}</p>
           </div>
         ))}
       </div>
@@ -50,7 +50,7 @@ export function ImportValidationStep({
       <div className="max-h-80 overflow-y-auto rounded-2xl ring-1 ring-black/5">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-neutral-50/95 backdrop-blur">
-            <tr className="border-b border-black/5 text-left text-xs font-medium uppercase tracking-wide text-neutral-400">
+            <tr className="border-b border-black/5 text-left text-xs font-medium uppercase tracking-wide text-neutral-600">
               <th className="px-4 py-2.5">แถว</th>
               <th className="px-4 py-2.5">สถานะ</th>
               <th className="px-4 py-2.5">แบรนด์</th>
@@ -62,7 +62,7 @@ export function ImportValidationStep({
           <tbody className="divide-y divide-black/5">
             {preview.rows.map((row) => (
               <tr key={row.rowNumber}>
-                <td className="px-4 py-2.5 text-neutral-400">{row.rowNumber}</td>
+                <td className="px-4 py-2.5 text-neutral-600">{row.rowNumber}</td>
                 <td className="px-4 py-2.5">
                   <ImportRowStatusBadge status={row.status} />
                 </td>
@@ -79,8 +79,8 @@ export function ImportValidationStep({
                           key={index}
                           className={
                             issue.severity === 'error'
-                              ? 'text-danger-600'
-                              : 'text-warning-600'
+                              ? 'text-danger-700'
+                              : 'text-warning-700'
                           }
                         >
                           {issue.message}

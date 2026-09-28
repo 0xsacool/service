@@ -610,12 +610,13 @@ Use [BACKLOG.md](BACKLOG.md) as the authoritative active-work index. The
 F5d-23 Worker authorization foundation and later attachment/auth milestones in
 older handoff text are historical and already superseded by production work.
 
-Current recommended source sequence starts with Product Return Form implementation
-under Decision #049, followed by the remaining P2/P3 accessibility/content work
-according to owner priority. Public Tracking activation, legacy opaque flag cleanup, automatic
-deletion/Cron, staff role administration, automatic notifications, durable
-Product Instance identity, and the other deferred items stay gated as listed
-in `BACKLOG.md`.
+N7.6 Product Return Form source implementation and N7.7 P2/P3
+accessibility/content source hardening are complete. The next source gate is
+N7.8 N7.x final certification/closeout; neither N7.6 nor N7.7 authorizes a
+production Worker/Rules/frontend rollout. Public Tracking activation, legacy
+opaque flag cleanup, automatic deletion/Cron, staff role administration,
+automatic notifications, durable Product Instance identity, and the other
+deferred items stay gated as listed in `BACKLOG.md`.
 
 ---
 

@@ -204,7 +204,7 @@ export function ImportProductsWizard({
       preventClose={preventModalClose}
     >
       <div className="space-y-5">
-        <p className="text-xs font-medium uppercase tracking-wide text-neutral-400">
+        <p className="text-xs font-medium uppercase tracking-wide text-neutral-600">
           {STEP_LABELS[state.step]}
         </p>
 
@@ -219,7 +219,7 @@ export function ImportProductsWizard({
         )}
 
         {state.step === 'submitting' && state.retryMessage && (
-          <p className="text-sm text-warning-600">
+          <p className="text-sm text-warning-700">
             การเชื่อมต่อขัดข้อง กำลังลองใหม่โดยใช้คำขอเดิม…
           </p>
         )}
@@ -238,7 +238,7 @@ export function ImportProductsWizard({
 
         {state.step === 'error' && (
           <div className="space-y-3 text-center">
-            <p className="text-sm text-danger-600">{state.message}</p>
+            <p className="text-sm text-danger-700">{state.message}</p>
           </div>
         )}
 

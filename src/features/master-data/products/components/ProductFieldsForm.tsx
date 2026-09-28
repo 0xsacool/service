@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { ProductCategory, ProductStatus } from '../../../../types';
 import type { NewProductInput } from '../../../../services/productMasterAdmin';
 import { Field, inputClass } from '../../../../shared/components';
@@ -21,22 +22,38 @@ export function ProductFieldsForm({
   errors: Record<string, string>;
   onChange: (patch: Partial<NewProductInput>) => void;
 }) {
+  const formId = useId();
+  const idFor = (field: string) => `${formId}-${field}`;
+  const errorProps = (field: string) => ({
+    'aria-invalid': Boolean(errors[field]),
+    'aria-describedby': errors[field] ? idFor(`${field}-error`) : undefined,
+  });
+
   return (
     <div className="space-y-4">
       <Field label="แบรนด์">
         <input
-          list="product-brand-options"
+          list={idFor('brand-options')}
           value={value.brand}
           onChange={(e) => onChange({ brand: e.target.value })}
-          placeholder="e.g. BRUNO"
+          placeholder="เช่น BRUNO"
           className={inputClass()}
+          {...errorProps('brand')}
         />
-        <datalist id="product-brand-options">
+        <datalist id={idFor('brand-options')}>
           {brands.map((b) => (
             <option key={b} value={b} />
           ))}
         </datalist>
-        {errors.brand && <p className="mt-1.5 text-xs text-danger-600">{errors.brand}</p>}
+        {errors.brand && (
+          <p
+            id={idFor('brand-error')}
+            role="alert"
+            className="mt-1.5 text-xs text-danger-700"
+          >
+            {errors.brand}
+          </p>
+        )}
       </Field>
 
       <Field label="หมวดหมู่">
@@ -44,6 +61,7 @@ export function ProductFieldsForm({
           value={value.categoryId}
           onChange={(e) => onChange({ categoryId: e.target.value })}
           className={inputClass()}
+          {...errorProps('categoryId')}
         >
           <option value="">เลือกหมวดหมู่…</option>
           {categories.map((category) => (
@@ -53,7 +71,13 @@ export function ProductFieldsForm({
           ))}
         </select>
         {errors.categoryId && (
-          <p className="mt-1.5 text-xs text-danger-600">{errors.categoryId}</p>
+          <p
+            id={idFor('categoryId-error')}
+            role="alert"
+            className="mt-1.5 text-xs text-danger-700"
+          >
+            {errors.categoryId}
+          </p>
         )}
       </Field>
 
@@ -62,11 +86,18 @@ export function ProductFieldsForm({
           <input
             value={value.model}
             onChange={(e) => onChange({ model: e.target.value })}
-            placeholder="e.g. BOE021"
+            placeholder="เช่น BOE021"
             className={inputClass()}
+            {...errorProps('model')}
           />
           {errors.model && (
-            <p className="mt-1.5 text-xs text-danger-600">{errors.model}</p>
+            <p
+              id={idFor('model-error')}
+              role="alert"
+              className="mt-1.5 text-xs text-danger-700"
+            >
+              {errors.model}
+            </p>
           )}
         </Field>
 
@@ -74,10 +105,19 @@ export function ProductFieldsForm({
           <input
             value={value.sku}
             onChange={(e) => onChange({ sku: e.target.value })}
-            placeholder="e.g. BOE021-WH"
+            placeholder="เช่น BOE021-WH"
             className={inputClass()}
+            {...errorProps('sku')}
           />
-          {errors.sku && <p className="mt-1.5 text-xs text-danger-600">{errors.sku}</p>}
+          {errors.sku && (
+            <p
+              id={idFor('sku-error')}
+              role="alert"
+              className="mt-1.5 text-xs text-danger-700"
+            >
+              {errors.sku}
+            </p>
+          )}
         </Field>
       </div>
 
@@ -86,11 +126,18 @@ export function ProductFieldsForm({
           <input
             value={value.productName}
             onChange={(e) => onChange({ productName: e.target.value })}
-            placeholder="e.g. Compact Hot Plate"
+            placeholder="เช่น Compact Hot Plate"
             className={inputClass()}
+            {...errorProps('productName')}
           />
           {errors.productName && (
-            <p className="mt-1.5 text-xs text-danger-600">{errors.productName}</p>
+            <p
+              id={idFor('productName-error')}
+              role="alert"
+              className="mt-1.5 text-xs text-danger-700"
+            >
+              {errors.productName}
+            </p>
           )}
         </Field>
 
@@ -101,21 +148,30 @@ export function ProductFieldsForm({
             value={value.warrantyMonths}
             onChange={(e) => onChange({ warrantyMonths: Number(e.target.value) })}
             className={inputClass()}
+            {...errorProps('warrantyMonths')}
           />
           {errors.warrantyMonths && (
-            <p className="mt-1.5 text-xs text-danger-600">{errors.warrantyMonths}</p>
+            <p
+              id={idFor('warrantyMonths-error')}
+              role="alert"
+              className="mt-1.5 text-xs text-danger-700"
+            >
+              {errors.warrantyMonths}
+            </p>
           )}
         </Field>
       </div>
 
-      <Field label="สถานะ">
+      <fieldset>
+        <legend className="mb-2 text-sm font-medium text-neutral-700">สถานะ</legend>
         <div className="flex gap-2">
           {STATUS_OPTIONS.map((option) => (
             <button
               key={option}
               type="button"
               onClick={() => onChange({ status: option })}
-              className={`rounded-full px-4 py-2 text-sm font-medium transition-all ${
+              aria-pressed={value.status === option}
+              className={`rounded-full px-4 py-2 text-sm font-medium transition-all motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${
                 value.status === option
                   ? 'bg-brand-500 text-white shadow-sm'
                   : 'bg-white/70 text-neutral-600 ring-1 ring-black/5 hover:bg-white'
@@ -125,7 +181,7 @@ export function ProductFieldsForm({
             </button>
           ))}
         </div>
-      </Field>
+      </fieldset>
     </div>
   );
 }

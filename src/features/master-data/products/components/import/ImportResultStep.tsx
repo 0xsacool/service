@@ -24,11 +24,10 @@ export function ImportResultStep({
 
       <div>
         <h3 className="text-lg font-semibold text-ink">นำเข้าเสร็จสมบูรณ์</h3>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-neutral-600">
           สร้างสินค้าใหม่ {result.created} รายการ และอัปเดต {result.updated} รายการ
           {untouched > 0 &&
-            ` — ${untouched} row${untouched === 1 ? '' : 's'} left untouched (already up to date or had errors)`}
-          .
+            ` — ${untouched} รายการไม่ถูกเปลี่ยนแปลง (ข้อมูลเป็นปัจจุบันแล้วหรือมีข้อผิดพลาด)`}
         </p>
       </div>
 

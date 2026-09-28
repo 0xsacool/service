@@ -289,6 +289,36 @@ bound to the current D24 history so newer/stale/failed history invalidates
 printing. N7.6 does **not** deploy the new Worker source or Rules and does not
 change production data/configuration/Public Tracking.
 
+## N7.7 Accessibility/content source hardening (2026-09-28)
+
+N7.7 closes the P2/P3 accessibility/content source slice identified by N7.1.
+`Timeline` now exposes labelled current-step state and `ProgressBar` publishes
+numeric progress semantics. `PhotoGallery` thumbnails are labelled selectable controls,
+and `DownloadMenu` is a disclosure with explicit expanded/controlled state,
+deterministic focus entry, Escape dismissal, and focus restoration without
+misrepresenting the popup as an ARIA menu.
+
+`ProductFieldsForm` now associates invalid controls with alert text and exposes
+status selection state. The Product Import chooser uses a keyboard-focusable
+file input with labelled/error state; bounded import copy is Thai-first. Scoped
+secondary/error/warning text uses measured higher-contrast tokens, N7.7-added
+custom focus indicators use `brand-600` with at least 3:1 contrast against white,
+and the global stylesheet honors `prefers-reduced-motion: reduce`.
+
+The mounted N7.7 suite passes 7/7 after the final corrections. App build,
+ESLint, Prettier, and `git diff --check` pass; affected broader regressions also
+passed (DOM accessibility, Product Return Form and guard, Service Jobs, Public
+Tracking browser, Service Report UI, and Approval Console). A standalone
+Product Master Import run exposed 3 failures in files that are unchanged from
+`origin/master`; those are recorded as pre-existing baseline debt, not attributed
+to N7.7. Independent GPT-6 Astra review found and drove correction of two P2
+issues (popup semantics and focus-ring contrast); the final read-only re-review
+returns `VERDICT: PASS` / `FINDINGS: NONE`. N7.7 changes source only: no
+Worker/Rules production deploy, traffic/config/IAM/index mutation, production
+business-data write, Public Tracking change, or N3 remediation replay occurred.
+Detailed evidence is retained in
+`reports/Service-Tech-N7-7-Accessibility-Content-Closeout-20260928.txt`.
+
 ## Historical production D24/D25 + Public Tracking state (2026-09-26)
 
 The reviewed production source checkpoint is
@@ -513,16 +543,18 @@ Grouped by what shipped, not by exact sprint label (many sprints predate a forma
 - **Staff layout composition** — `StaffLayout.tsx` owns outlet state and renders
   `StaffShell.tsx`; the shell is the active navigation, landmark, search, and
   responsive-drawer implementation.
-- **Localization/accessibility remain incomplete in production** — F5d-64's
-  approved P0/P1 keyboard and screen-reader hardening is live in production.
-  Broader content translation and the explicitly deferred P2/P3 accessibility
-  work remain open.
+- **Production accessibility lags the reviewed source checkpoint.** F5d-64's
+  P0/P1 keyboard and screen-reader hardening is live in production. N7.7 closes
+  the bounded P2/P3 source slice for timeline/progress, gallery/download,
+  ProductFieldsForm, import chooser, measured contrast, reduced motion, and
+  Thai/content QA, but that source has not been deployed by N7.7.
 - **No brand identity** — visuals remain generic/placeholder, not Bruno Thailand or Join Lux Club branding ([DECISIONS.md](DECISIONS.md) #008 — still open).
-- **Accessibility follow-up remains** — the F5d-64 source patch addresses the
-  audited P0/P1 table, drawer, dialog, route, form, selection, error, and focus
-  defects. Timeline/progress semantics, PhotoGallery, DownloadMenu, the import
-  chooser, broader ProductFieldsForm cleanup, contrast, reduced motion, and
-  other P2/P3 polish remain separately gated.
+- **Accessibility residual verification is now browser/AT-oriented rather than
+  the former P2/P3 source backlog.** N7.7 closes the listed source gaps and its
+  mounted interaction/contrast checks pass. jsdom and static review still do
+  not prove actual browser focus rendering, assistive-technology announcements,
+  cross-device layout, or reduced-motion rendering; those remain bounded
+  acceptance concerns rather than an open N7.7 implementation item.
 - **Public Tracking implementation exists but production is currently disabled.**
   It was activated in F5d-69G, then deliberately disabled on 2026-09-25.
   Current accepted production returns 404 for both public lookup shapes.

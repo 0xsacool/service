@@ -10,9 +10,9 @@ Defined as Tailwind v4 theme tokens in `src/index.css`.
 | -------------------- | ------------------------------------- | ------------------------------------------------ |
 | `brand-*` (50–900)   | Primary actions, links, active states | `brand-500 = #0071e3` (Apple blue — placeholder) |
 | `success-*` (50–700) | Ready/positive states                 | `success-500 = #34c759`                          |
-| `warning-*` (50–600) | Awaiting/attention states             | `warning-500 = #f59e0b`                          |
-| `danger-*` (50–600)  | Errors, urgent priority               | `danger-500 = #ef4444`                           |
-| `neutral-*`          | Text, borders, backgrounds            | Tailwind default neutral scale                   |
+| `warning-*` (50–700) | Awaiting/attention states             | `warning-500 = #f59e0b`                          |
+| `danger-*` (50–700)  | Errors, urgent priority               | `danger-500 = #ef4444`                           |
+| `neutral-*`          | Text, borders, backgrounds            | Tailwind default; `neutral-600 = #525252` pinned |
 | `canvas`             | Page background                       | `#f5f5f7`                                        |
 | `ink`                | Primary text color                    | `#1d1d1f`                                        |
 
@@ -36,7 +36,7 @@ Defined as Tailwind v4 theme tokens in `src/index.css`.
 ## Buttons
 
 - **Primary** (`PrimaryButton`): pill-shaped, `bg-brand-500`, white text, `hover:bg-brand-600`, `active:scale-[0.98]`, visible focus ring (`focus-visible:ring-2`).
-- **Secondary** (`SecondaryButton`): pill-shaped, translucent white background, brand-colored text, subtle ring.
+- **Secondary** (`SecondaryButton`): pill-shaped, translucent white background, brand-colored text, subtle ring, and a `brand-600` custom focus indicator with measured ≥3:1 contrast against white.
 - Both use full-pill (`rounded-full`) shape consistently — maintain this for any new button variant.
 
 ## Cards
@@ -47,7 +47,7 @@ Defined as Tailwind v4 theme tokens in `src/index.css`.
 
 - `inputClass()` helper: white/80% background, 2xl radius, 1px black/10% ring, focus ring in brand color, neutral-400 placeholder text.
 - `Field`: label + input + optional hint, consistent vertical rhythm (`mb-2` label, `mt-1.5` hint).
-- Error/invalid presentation exists in current forms, but broader ProductFieldsForm semantics and accessibility remain in the deferred P2/P3 backlog; use `BACKLOG.md` rather than the original Sprint 2 prototype note as the current scope.
+- N7.7 completed the bounded ProductFieldsForm accessibility slice: invalid controls reference alert text, status controls expose pressed state, and related custom focus indicators use the measured `brand-600` focus token. Broader form/business-rule work still follows `BACKLOG.md`.
 
 ## Tables
 
@@ -63,6 +63,15 @@ Defined as Tailwind v4 theme tokens in `src/index.css`.
 
 - `StatusBadge`: pill with a colored dot + label, `sm`/`md` sizes, color driven by `statusColor()`.
 - `PriorityPill`: pill, color driven by `priorityColor()`, no icon/dot — text and background color are the only signal today. **Accessibility gap:** should not rely on color alone; consider adding an icon or pattern differentiator in the Sprint 2 pass (see `PROJECT_STATE.md` limitations).
+
+## N7.7 Accessibility Hardening
+
+- Timeline items identify the current step with `aria-current="step"`; progress exposes the standard progressbar value contract.
+- PhotoGallery thumbnails are labelled toggle-like selectors with `aria-pressed`; decorative thumbnail images use empty alt text.
+- DownloadMenu is a disclosure, not an ARIA menu: the trigger exposes `aria-expanded`/`aria-controls`, options remain ordinary buttons in a labelled group, opening moves focus to the first option, and Escape restores the trigger.
+- The Product Import file chooser keeps its native file input keyboard-focusable via `sr-only`, associates description/error text, and reports validation errors with an alert.
+- Scoped secondary text/error/warning tokens were raised to measured contrast targets; N7.7-added focus indicators use `brand-600` and meet the 3:1 non-text contrast target against white.
+- `prefers-reduced-motion: reduce` globally collapses animation/transition duration and disables smooth scrolling. Real-browser/assistive-technology behavior remains an acceptance concern beyond jsdom/static review.
 
 ## Responsive Behavior
 

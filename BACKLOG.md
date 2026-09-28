@@ -4,7 +4,7 @@
 
 ## Baseline
 
-- Source baseline entering N7.6: `b0f2f9cfcee9b0cd159e7abd44ee6073322ad8a8` (`n7-5-return-form-contract-20260928`). N6 remains the underlying full clean-baseline certification.
+- Source baseline entering N7.7: `7e14c8ed6286cd97ae3c170c2afc5f2ffc0399de` (`n7-6-product-return-form-20260928`). N6 remains the underlying full clean-baseline certification.
 - Accepted production Worker: D24 V1-history hotfix source `cff31a0`, version `b2534996-977d-45d3-96f7-641599d66f1c`.
 - Production `SERVICE_REPORT_V2_MODE=compatibility`.
 - Production Public Tracking is disabled and must remain disabled until a separately approved activation phase.
@@ -25,24 +25,11 @@
 - **N7.4 V2 trusted-print UI integration.** Service Report preview now calls the existing Worker-backed trusted-print contract before opening the printable view. All six states remain distinct (legacy V1, V2 draft, pending, approved, rejected, integrity incident); approval/warranty/evidence verification is displayed from the trusted server result, normal mode is always attempted first, diagnostic mode is used only after the fail-closed evidence-integrity error, and integrity incidents cannot invoke `window.print()`. The browser now validates trusted-print report/event/evidence/verification-time coherence at runtime instead of trusting a TypeScript cast, and UI error mapping never renders raw provider/internal error text. The printable UI exposes display-name/business decision data only, not raw UIDs or digests.
 - **N7.5 Product Return Form contract reconciliation.** Decision #049 fixes the implementation contract before source work: Return Forms are for `Completed` jobs only; `closedAt` is the V1 pickup/acceptance timestamp only in that state; `RT-{YYYY}-{SEQUENCE}` is allocated exactly once by a trusted backend boundary during the first Completed transition; the latest report must be a normal trusted-print `v2-approved` result; customer and staff both countersign the paper form; no price/cost is printed in V1; legacy V1/draft/pending/rejected/integrity-incident reports fail closed for Return Form generation.
 - **N7.6 Product Return Form source implementation.** The application now has explicit `returnFormNumber`, a Worker-mediated `POST /service-jobs/{jobId}/complete` boundary, atomic Completed/`closedAt`/RT-number/`return_form`-sequence commit, replay-safe completion, browser update sequencing that saves ordinary edits before trusted completion, a distinct `ProductReturnFormPrintPreview`, and normal-only trusted-print gating against the latest D24 documentary report. Browser Firestore Rules source now makes `returnFormNumber` Worker-owned and prevents browser entry to or exit from `Completed`; the Rules emulator passes the N7.6 bypass regressions. Historical Completed jobs missing trusted RT/closure metadata remain fail-closed and are not silently backfilled. N7.6 is source-only until a separate Worker/Rules deployment phase is approved.
+- **N7.7 Accessibility/content source hardening.** Timeline/progress now expose current-step and numeric progress semantics; PhotoGallery thumbnails expose labelled selected state; DownloadMenu behaves as a disclosure with explicit expanded/controlled state plus deterministic focus/Escape restoration; ProductFieldsForm associates validation errors and status selection semantics; the CSV chooser remains keyboard-focusable with labelled/error state; bounded Product Import copy is Thai-first; secondary/status/import text uses measured higher-contrast tokens; and global reduced-motion handling is present. The focused mounted suite passes 7/7, app build/lint/format/diff-check pass after final corrections, broader affected regressions passed, and final GPT-6 Astra read-only review returns `VERDICT: PASS` / `FINDINGS: NONE`. This is source work only; real-browser assistive-technology/rendering verification and production deployment remain separate.
 
 ## ACTIVE
 
-### A1 — Accessibility P2/P3
-
-**What remains:** timeline/progress semantics, PhotoGallery and DownloadMenu improvements, import chooser keyboard/label behavior, broader ProductFieldsForm semantics, measured contrast, reduced-motion behavior, and remaining bounded Thai/content QA.
-
-**Evidence:** current components plus the deferred list in `SPRINT_ROADMAP.md`.
-
-**Dependencies:** none for most source work; the N7.3 browser-like DOM harness is now available for interaction regressions.
-
-**Risk:** medium.
-
-**Recommended order:** after the higher-integrity print/test work unless owner reprioritizes.
-
-**Production mutation required:** no for source work.
-
-**Independent review:** recommended.
+No N7.x product-source item remains active after N7.7. N7.8 final certification/closeout is the next source gate; blocked/deferred operational and product items below retain their own approval boundaries.
 
 ## BLOCKED / DEFERRED
 
@@ -82,7 +69,6 @@ The following statements may remain in historical context but must not be used a
 
 ## Recommended sequence
 
-1. Complete the remaining P2/P3 accessibility/content work.
-2. Run N7.x final certification/closeout after the accessibility pass.
-3. Keep this backlog/source-of-truth documentation current as each phase closes.
-4. Revisit deferred operational/product work only after its dependency or owner decision is resolved.
+1. Run N7.x final certification/closeout from the N7.7 source checkpoint.
+2. Keep this backlog/source-of-truth documentation current as final certification closes.
+3. Revisit deferred operational/product work only after its dependency or owner decision is resolved.

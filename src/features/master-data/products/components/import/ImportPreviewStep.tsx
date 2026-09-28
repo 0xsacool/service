@@ -11,12 +11,12 @@ export function ImportPreviewStep({ file }: { file: ParsedImportFile }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between text-sm">
-        <span className="text-neutral-500">
+        <span className="text-neutral-600">
           <span className="font-medium text-ink">{file.fileName}</span> — พบข้อมูล{' '}
           {file.rows.length} แถว
         </span>
         {file.rows.length > PREVIEW_ROW_LIMIT && (
-          <span className="text-xs text-neutral-400">
+          <span className="text-xs text-neutral-600">
             แสดง {PREVIEW_ROW_LIMIT} แถวแรก
           </span>
         )}
@@ -25,7 +25,7 @@ export function ImportPreviewStep({ file }: { file: ParsedImportFile }) {
       <div className="overflow-x-auto rounded-2xl ring-1 ring-black/5">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-black/5 bg-neutral-50/70 text-left text-xs font-medium uppercase tracking-wide text-neutral-400">
+            <tr className="border-b border-black/5 bg-neutral-50/70 text-left text-xs font-medium uppercase tracking-wide text-neutral-600">
               {file.header.map((column, index) => (
                 <th key={index} className="px-4 py-2.5 whitespace-nowrap">
                   {column || `คอลัมน์ที่ ${index + 1}`}
