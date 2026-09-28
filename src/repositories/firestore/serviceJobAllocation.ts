@@ -1,5 +1,6 @@
 import { getBrandCode, type BrandId } from '../../types';
 import { bangkokNumberingYear } from '../../services/bangkokTime';
+import { formatReturnFormNumber as formatReturnFormNumberDomain } from '../../services/productReturnForm';
 
 export const SERVICE_JOB_SEQUENCE_WIDTH = 6;
 export const MAX_SERVICE_JOB_COLLISION_CHECKS = 32;
@@ -25,6 +26,10 @@ export function formatServiceJobTrackingNumber(
 
 export function formatServiceRequestNumber(year: number, sequence: number): string {
   return formatSequence('SR', year, sequence);
+}
+
+export function formatReturnFormNumber(year: number, sequence: number): string {
+  return formatReturnFormNumberDomain(year, sequence);
 }
 
 export function nextServiceJobSequence(currentValue: unknown): number {

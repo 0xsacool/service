@@ -56,7 +56,7 @@ service cloud.firestore {
       allow create: if false;
       // The diff/affectedKeys check below is the sole guard on these
       // privileged fields — it denies any update that adds, removes, or
-      // changes 'brandId'/'id'/'createdAt'/both hash fields, and does so
+      // changes 'brandId'/'id'/'createdAt'/'returnFormNumber'/both hash fields, and does so
       // safely even when a legacy document never had one of them. A
       // previous version paired it with direct equality checks
       // (request.resource.data.createdAt == resource.data.createdAt, etc.);
@@ -66,18 +66,29 @@ service cloud.firestore {
       allow update: if staffOwnsBrand(resource.data.brandId) &&
         request.resource.data.brandId == resource.data.brandId &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-          'brandId', 'id', 'createdAt', 'publicTrackingCodeHash', 'publicTrackingTokenHash'
+          'brandId', 'id', 'createdAt', 'returnFormNumber', 'publicTrackingCodeHash', 'publicTrackingTokenHash'
         ]) &&
+        validCompletedStatusTransition() &&
         validClosedAtTransition() &&
         validServiceEventMetadata();
       allow delete: if false;
+
+      // N7.6 / Decision #049 — Completed is a Worker-owned state boundary.
+      // Browser updates may continue moving among non-Completed states, but
+      // they may neither enter nor leave Completed. The Worker uses privileged
+      // credentials and atomically writes status + closedAt + returnFormNumber
+      // + the return_form sequence outside this Rules path.
+      function validCompletedStatusTransition() {
+        return request.resource.data.status == resource.data.status ||
+          (resource.data.status != 'Completed' &&
+            request.resource.data.status != 'Completed');
+      }
 
       function validClosedAtTransition() {
         return request.resource.data.closedAt == resource.data.closedAt ||
           (resource.data.closedAt == null &&
             request.resource.data.closedAt is timestamp &&
-            (request.resource.data.status == 'Completed' ||
-              request.resource.data.status == 'Cancelled' ||
+            (request.resource.data.status == 'Cancelled' ||
               request.resource.data.status == 'Rejected'));
       }
 

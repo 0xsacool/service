@@ -30,7 +30,8 @@ import {
   recordFirestoreInitFailure,
 } from './firestoreInitDiagnostics';
 import { getFilesWorkerBaseUrl } from '../config/workerUrl';
-import { PublicTrackingIssuanceError } from './types';
+import { PublicTrackingIssuanceError, ServiceJobCompletionError } from './types';
+import { hasTrustedReturnFormMetadata } from '../services/productReturnForm';
 
 function isIntakeAttempt(value: ServiceJobCreateInput): value is ServiceJobIntakeAttempt {
   return 'idempotencyKey' in value && 'intake' in value;
@@ -177,8 +178,12 @@ export async function createFirestoreServiceJobRepository(
       );
     },
     async update(id, patch) {
+      if (patch.status === 'Completed') {
+        throw new Error('Use complete() for the trusted Completed transition');
+      }
       if (
         Object.prototype.hasOwnProperty.call(patch, 'brandId') ||
+        Object.prototype.hasOwnProperty.call(patch, 'returnFormNumber') ||
         Object.prototype.hasOwnProperty.call(patch, 'publicTrackingTokenHash') ||
         Object.prototype.hasOwnProperty.call(patch, 'publicTrackingCodeHash')
       ) {
@@ -226,6 +231,64 @@ export async function createFirestoreServiceJobRepository(
           bumpDataVersion();
         }
       );
+    },
+
+    async complete(id) {
+      let response: Response;
+      try {
+        response = await fetchWithWorkerToken(
+          tokenProvider,
+          `${getFilesWorkerBaseUrl()}/service-jobs/${encodeURIComponent(id)}/complete`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+          }
+        );
+      } catch {
+        throw new ServiceJobCompletionError(
+          'Service Job completion could not be confirmed',
+          null
+        );
+      }
+      if (!response.ok) {
+        const body: unknown = await response.json().catch(() => null);
+        const code =
+          body &&
+          typeof body === 'object' &&
+          'code' in body &&
+          typeof body.code === 'string'
+            ? body.code
+            : null;
+        const message =
+          body &&
+          typeof body === 'object' &&
+          'error' in body &&
+          typeof body.error === 'string'
+            ? body.error
+            : `Worker Service Job completion failed (${response.status})`;
+        throw new ServiceJobCompletionError(message, response.status, code);
+      }
+
+      const reference = doc(firestore, SERVICE_JOBS_COLLECTION, id);
+      const committed = await getDocFromServer(reference);
+      if (!committed.exists()) {
+        throw new ServiceJobCompletionError(
+          `Firestore did not return Service Job "${id}" after completion`,
+          null
+        );
+      }
+      const job = fromFirestoreData(committed.id, committed.data());
+      if (!hasTrustedReturnFormMetadata(job)) {
+        throw new ServiceJobCompletionError(
+          'Completed Service Job is missing trusted Return Form metadata',
+          null,
+          'malformed_completion'
+        );
+      }
+      jobsById.set(job.id, job);
+      bumpDataVersion();
+      return job;
     },
 
     // F5d-69G — staff-triggered issue/rotate. Worker-mediated: Firestore

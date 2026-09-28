@@ -252,6 +252,43 @@ claiming the feature exists. No runtime source, Worker route, Rules/index,
 deployment, production data, Cloudflare/Firebase configuration, Public Tracking
 state, or N3 remediation data was changed by this phase.
 
+## N7.6 Product Return Form source implementation (2026-09-28)
+
+N7.6 implements Decision #049 source-side. `ServiceJob.returnFormNumber` is an
+explicit nullable server-owned field. Ordinary browser updates cannot write it
+or transition into/out of `Completed`. The Firestore repository exposes a
+trusted `complete(id)` path through `POST /service-jobs/{jobId}/complete`;
+ordinary dirty edits are persisted before that call without sending
+`Completed`, so a failed completion does not leave a half-closed job.
+
+The Worker completion operation authenticates staff, enforces Service Job brand
+ownership, computes the Asia/Bangkok numbering year, and atomically commits
+`status=Completed`, trusted `closedAt`, immutable `RT-{YYYY}-{SEQUENCE}` and the
+brand-scoped `return_form` counter. Successful replay returns the existing RT
+identity without consuming another logical number. Historical Completed jobs
+missing valid RT/closure metadata fail closed rather than being silently
+backfilled. `Cancelled`/`Rejected` remain separate terminal browser flows.
+
+The distinct Product Return Form preview uses the latest D24 documentary report
+and calls trusted print in **normal mode only**. It accepts only a matching
+`v2-approved` result, uses that trusted report for repair/parts/warranty and
+business-safe approval metadata, provides customer/staff physical signature
+areas, prints no quote/cost/payment data, and never issues or rotates Public
+Tracking credentials. A QR is rendered only from an already-issued raw code
+held by the current browser session.
+
+Source `firestore.rules` is hardened so browser clients cannot bypass the Worker
+completion boundary or mutate `returnFormNumber`; the Firestore Rules emulator
+passes 35/35 including the N7.6 bypass cases. Post-correction validation passes
+the broad Return Form runtime suite 7/7, the mounted latest-history/stale-response
+guard suite 4/4, Service Report UI 9/9, app build, targeted ESLint/Prettier,
+Worker completion/commit regressions, Worker typecheck, and the full Worker
+regression suite. Impossible historical completion timestamps now fail closed
+in both Return Form eligibility and Worker replay, and a preview/request is
+bound to the current D24 history so newer/stale/failed history invalidates
+printing. N7.6 does **not** deploy the new Worker source or Rules and does not
+change production data/configuration/Public Tracking.
+
 ## Historical production D24/D25 + Public Tracking state (2026-09-26)
 
 The reviewed production source checkpoint is

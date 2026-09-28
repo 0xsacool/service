@@ -78,6 +78,8 @@ export function useEffect(effect, deps) {
   }
 }
 
+export const useLayoutEffect = useEffect;
+
 function runRender(fiber) {
   fiber.cursor = 0;
   const previous = currentFiber;
@@ -156,4 +158,11 @@ export function deferred() {
   return { promise, resolve, reject };
 }
 
-export default { useCallback, useEffect, useMemo, useRef, useState };
+export default {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+};

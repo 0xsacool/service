@@ -8,6 +8,7 @@ import { mockServiceJobs } from './mockData/serviceJobs.mock';
 import {
   formatServiceJobTrackingNumber,
   formatServiceRequestNumber,
+  formatReturnFormNumber,
   nextServiceJobSequence,
   serviceJobNumberingYear,
 } from './firestore/serviceJobAllocation';
@@ -16,6 +17,9 @@ import {
   hashPublicTrackingCode,
 } from '../services/publicTrackingCode';
 import { bumpDataVersion } from './dataVersion';
+import { bangkokIsoDate, bangkokNumberingYear } from '../services/bangkokTime';
+import { isTrustworthyServiceJobClosedAt } from '../services/serviceJobClosure';
+import { isValidReturnFormNumber } from '../services/productReturnForm';
 
 // Session-only persistence, same pattern as productMasterRepository.ts — a
 // Map (not the previous mockServiceJobs/createdServiceJobs array split)
@@ -82,6 +86,7 @@ export const serviceJobsRepository: ServiceJobsRepository = {
     const created: ServiceJob = {
       ...draft,
       id,
+      returnFormNumber: null,
       serviceRequestNumber: formatServiceRequestNumber(
         year,
         nextServiceJobSequence(highestRequest)
@@ -96,8 +101,12 @@ export const serviceJobsRepository: ServiceJobsRepository = {
     if (!existing) {
       throw new Error(`Cannot update service job "${id}": no such job exists`);
     }
+    if (patch.status === 'Completed') {
+      throw new Error('Use complete() for the trusted Completed transition');
+    }
     if (
       Object.prototype.hasOwnProperty.call(patch, 'brandId') ||
+      Object.prototype.hasOwnProperty.call(patch, 'returnFormNumber') ||
       Object.prototype.hasOwnProperty.call(patch, 'publicTrackingTokenHash') ||
       Object.prototype.hasOwnProperty.call(patch, 'publicTrackingCodeHash')
     ) {
@@ -106,6 +115,46 @@ export const serviceJobsRepository: ServiceJobsRepository = {
       );
     }
     const updated = { ...existing, ...patch };
+    jobsById.set(id, updated);
+    bumpDataVersion();
+    return updated;
+  },
+  async complete(id) {
+    const existing = jobsById.get(id);
+    if (!existing) {
+      throw new Error(`Cannot complete service job "${id}": no such job exists`);
+    }
+    if (existing.status === 'Completed') {
+      if (
+        !isValidReturnFormNumber(existing.returnFormNumber) ||
+        !isTrustworthyServiceJobClosedAt(existing.closedAt)
+      ) {
+        throw new Error('Completed Service Job is missing trusted Return Form metadata');
+      }
+      return existing;
+    }
+    if (existing.status === 'Cancelled' || existing.status === 'Rejected') {
+      throw new Error('Terminal Service Job cannot be completed');
+    }
+    if (!existing.brandId) {
+      throw new Error('Cannot allocate Return Form without a canonical brand');
+    }
+    const now = new Date();
+    const year = bangkokNumberingYear(now);
+    const prefix = formatReturnFormNumber(year, 1).slice(0, -6);
+    const highest = Array.from(jobsById.values())
+      .filter((job) => job.brandId === existing.brandId)
+      .reduce((current, job) => {
+        if (!job.returnFormNumber?.startsWith(prefix)) return current;
+        return Math.max(current, Number(job.returnFormNumber.slice(-6)) || 0);
+      }, 0);
+    const updated: ServiceJob = {
+      ...existing,
+      status: 'Completed',
+      returnFormNumber: formatReturnFormNumber(year, nextServiceJobSequence(highest)),
+      closedAt: now.toISOString(),
+      updatedAt: bangkokIsoDate(now),
+    };
     jobsById.set(id, updated);
     bumpDataVersion();
     return updated;

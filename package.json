@@ -23,6 +23,8 @@
     "test:approval-console": "node --test test/approvalConsoleAccess.test.mjs test/approvalConsolePage.test.mjs test/approvalConsoleHookLifecycle.test.mjs test/approvalConsoleLifecycle.test.mjs test/approvalConsoleEvidenceRuntime.test.mjs test/approvalConsoleInteractionRuntime.test.mjs test/serviceReportReadsArchitecture.test.mjs",
     "test:dom-accessibility": "node --test --test-concurrency=1 test/domAccessibilityRuntime.test.mjs",
     "test:trusted-print-ui": "node --test --test-concurrency=1 test/trustedPrintContract.test.mjs test/trustedPrintUi.test.mjs",
+    "test:return-form": "node --test --test-concurrency=1 test/productReturnForm.test.mjs",
+    "test:return-form-guard": "node --test --test-concurrency=1 test/productReturnFormGuardRuntime.test.mjs",
     "test:firestore-rules": "firebase emulators:exec --config firebase.rules-test.json --only firestore \"node --test test/firestoreRules.test.mjs\""
   },
   "dependencies": {

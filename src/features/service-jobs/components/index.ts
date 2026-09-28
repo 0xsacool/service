@@ -15,5 +15,6 @@ export { PublicTrackingSection } from './PublicTrackingSection';
 export { ChipToggleGroup } from './ChipToggleGroup';
 export { ServiceRequestPrintPreview } from './ServiceRequestPrintPreview';
 export { DeliveryNotePrintPreview } from './DeliveryNotePrintPreview';
+export { ProductReturnFormPrintPreview } from './ProductReturnFormPrintPreview';
 export { ServiceReportsSection } from './ServiceReportsSection';
 export { ServiceReportPrintPreview } from './ServiceReportPrintPreview';

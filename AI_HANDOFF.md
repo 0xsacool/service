@@ -549,9 +549,24 @@ production mutation. Return Form is Completed-only; the first trusted Completed
 transition owns immutable RT-number allocation and `closedAt`; the latest
 documentary report must be normal trusted-print `v2-approved`; customer and
 staff both sign the paper document; financial amounts are excluded from V1;
-legacy/draft/pending/rejected/integrity states fail closed. The current source
-still has no `returnFormNumber` or Return Form UI, so implementation is the
-next source phase rather than something N7.5 claims delivered.
+legacy/draft/pending/rejected/integrity states fail closed.
+
+N7.6 implements that contract source-side. `returnFormNumber` is explicit and
+Worker-owned; `POST /service-jobs/{jobId}/complete` performs authenticated,
+brand-scoped, replay-safe atomic completion with the `return_form` sequence;
+browser updates cannot enter/leave `Completed` or mutate RT identity. The Return
+Form preview is distinct from Delivery Note, uses the latest D24 report plus
+normal-only trusted print, accepts only matching `v2-approved`, contains both
+physical signature areas, omits financial/sensitive verification data, and does
+not issue Public Tracking credentials. Historical Completed records missing
+trusted RT/closure metadata stay fail-closed. Source Rules emulator coverage is
+35/35. Post-correction validation also passes Return Form runtime 7/7, mounted
+history/race guard 4/4, Service Report UI 9/9, app build, targeted ESLint/
+Prettier, Worker typecheck, completion/commit regressions, and the full Worker
+suite. The guard invalidates preview/in-flight verification when D24 history
+changes, becomes stale, or fails, and impossible ISO calendar timestamps fail
+closed. N7.6 remains **source-only** until a separate Worker/Rules deployment
+phase is approved; production state and N3 remediation data remain unchanged.
 
 ---
 

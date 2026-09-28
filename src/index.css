@@ -642,6 +642,61 @@ body {
     page-break-after: avoid;
   }
 
+  body.product-return-form-print-mode {
+    background: #fff;
+    margin: 0;
+  }
+
+  .product-return-form-print-mode .staff-shell {
+    min-height: 0 !important;
+    background: #fff !important;
+  }
+
+  .product-return-form-print-mode .staff-shell__sidebar,
+  .product-return-form-print-mode .staff-shell__topbar,
+  .product-return-form-preview-toolbar {
+    display: none !important;
+  }
+
+  .product-return-form-print-mode .staff-shell__main {
+    padding-left: 0 !important;
+  }
+
+  .product-return-form-print-mode .staff-shell__content {
+    padding: 0 !important;
+  }
+
+  .product-return-form-print-mode .service-job-details-page > * {
+    display: none !important;
+  }
+
+  .product-return-form-print-mode
+    .service-job-details-page
+    > .service-report-section-host {
+    display: block !important;
+    margin-top: 0 !important;
+  }
+
+  .product-return-form-print-mode .product-return-form-preview-shell {
+    display: block !important;
+    margin: 0 !important;
+  }
+
+  .product-return-form-print {
+    position: static !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    max-width: none !important;
+    padding: 0 !important;
+    width: auto !important;
+  }
+
+  .product-return-form-print__signatures,
+  .product-return-form-print table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
   /* F5d-68 — Service Request (New Service Job "Save & Print"). Mirrors the
      service-report-print-mode / delivery-note-print-mode isolation pattern
      above exactly: this print flow previously never activated any body

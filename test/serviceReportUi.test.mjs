@@ -1,9 +1,21 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { createServer } from 'vite';
 
-const vite = await createServer({ appType: 'custom', server: { middlewareMode: true } });
+const vite = await createServer({
+  appType: 'custom',
+  server: {
+    middlewareMode: true,
+    hmr: false,
+    watch: {
+      ignored: ['**/node_modules.n76-cache/**', '**/node_modules.n76-junction/**'],
+    },
+  },
+  cacheDir: join(tmpdir(), 'service-report-ui-runtime'),
+});
 after(() => vite.close());
 
 const {
@@ -169,5 +181,8 @@ test('Service Job details includes the Service Reports section inside the staff 
     new URL('../src/features/service-jobs/pages/ServiceJobDetails.tsx', import.meta.url),
     'utf8'
   );
-  assert.match(source, /<ServiceReportsSection serviceJob=\{claim\}/);
+  assert.match(
+    source,
+    /<ServiceReportsSection\s+serviceJob=\{claim\}\s+publicTrackingCode=\{issuedTrackingCode\}/
+  );
 });

@@ -251,6 +251,11 @@ async function seed() {
         role: 'admin',
       }),
       setDoc(doc(db, 'serviceJobs', 'job-bruno'), serviceJob('bruno-thailand')),
+      setDoc(doc(db, 'serviceJobs', 'job-completed-bruno'), {
+        ...serviceJob('bruno-thailand', 'Completed'),
+        closedAt: Timestamp.fromDate(new Date('2026-09-28T01:00:00.000Z')),
+        returnFormNumber: 'RT-2026-000001',
+      }),
       setDoc(doc(db, 'serviceJobs', 'job-join-lux'), serviceJob('join-lux-club')),
       setDoc(doc(db, 'serviceJobs', 'job-legacy'), serviceJob(null)),
       // F5d-69 — brand-owned but seeded WITHOUT any F5d-69 metadata field,
@@ -405,6 +410,39 @@ test('existing authorized ServiceJob updates preserve privileged fields and deny
     })
   );
   await assertFails(deleteDoc(doc(brunoDb, 'serviceJobs', 'job-bruno')));
+});
+
+test('N7.6 browser updates cannot bypass the Worker-owned Completed and Return Form boundary', async () => {
+  const brunoDb = staffDb(brunoUid);
+  const openJob = doc(brunoDb, 'serviceJobs', 'job-bruno');
+  const completedJob = doc(brunoDb, 'serviceJobs', 'job-completed-bruno');
+
+  // Entering Completed is Worker-only, whether or not the browser also tries
+  // to provide the closure timestamp or an RT number.
+  await assertFails(updateDoc(openJob, { status: 'Completed' }));
+  await assertFails(
+    updateDoc(openJob, { status: 'Completed', closedAt: serverTimestamp() })
+  );
+  await assertFails(
+    updateDoc(openJob, {
+      status: 'Completed',
+      closedAt: serverTimestamp(),
+      returnFormNumber: 'RT-2026-999999',
+    })
+  );
+  await assertFails(updateDoc(openJob, { returnFormNumber: 'RT-2026-999999' }));
+
+  // A trusted Completed record remains ordinarily editable without changing
+  // its completion identity, but the browser cannot reopen it or alter RT data.
+  await assertSucceeds(updateDoc(completedJob, { technician: 'Somsak' }));
+  await assertFails(updateDoc(completedJob, { status: 'Diagnosing' }));
+  await assertFails(updateDoc(completedJob, { returnFormNumber: 'RT-2026-000002' }));
+  await assertFails(updateDoc(completedJob, { closedAt: serverTimestamp() }));
+
+  // Existing browser terminal flows remain intact for Cancelled/Rejected.
+  await assertSucceeds(
+    updateDoc(openJob, { status: 'Cancelled', closedAt: serverTimestamp() })
+  );
 });
 
 // F5d-69 / DECISIONS.md #041 — Service Jobs are updated directly from the

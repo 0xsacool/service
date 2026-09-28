@@ -46,6 +46,7 @@ export type AllocatorStage =
   | 'intake-key-read'
   | 'tracking-sequence-read'
   | 'service-request-sequence-read'
+  | 'return-form-sequence-read'
   | 'occupied-id-read'
   | 'firestore-commit'
   | 'response-build';

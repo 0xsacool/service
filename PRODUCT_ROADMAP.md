@@ -93,7 +93,7 @@ Not yet built. Listed in roughly the order the current sprint trajectory (F-seri
 - **Remaining print work** — basic Service Request, Delivery Note, and Service
   Report/Repair Report previews exist, and N7.4 completed the V2 trusted-print
   UI integration. N7.5 resolved the Product Return Form contract in Decision
-  #049; the distinct Return Form implementation is now the remaining print item.
+  #049; N7.6 implements the distinct Return Form source path. Production Worker/Rules rollout remains a separate deployment phase.
 - **Remaining localization & accessibility work** — F5d-63's bounded
   Thai-first production trust slice and F5d-64's audited P0/P1 keyboard, focus,
   dialog, route, form, and screen-reader hardening are live. F5d-64 production

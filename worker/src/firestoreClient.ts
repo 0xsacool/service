@@ -23,6 +23,7 @@ import {
 } from './serviceJobCreation.ts';
 import type { ActiveDraftLock, ServiceReportCreationDataAccess } from './serviceReportCreation.ts';
 import type { ServiceReportFinalizationDataAccess } from './serviceReportFinalization.ts';
+import type { ServiceJobCompletionDataAccess } from './serviceJobCompletion.ts';
 import type {
   CompletedProductImport,
   ProductCatalogState,
@@ -87,6 +88,7 @@ export interface FirestoreClient
     PublicTrackingTokenHashStore,
     PublicTrackingCodeIssuanceDataAccess,
     ServiceJobCreationDataAccess,
+    ServiceJobCompletionDataAccess,
     ServiceReportCreationDataAccess,
     ServiceReportFinalizationDataAccess,
     ProductImportDataAccess {
@@ -306,7 +308,12 @@ function parseServiceJobDocument(doc: FirestoreDocument): ServiceJob | null {
     typeof fields.status !== 'string'
   )
     return null;
-  return { ...fields, id } as ServiceJob;
+  return {
+    ...fields,
+    id,
+    returnFormNumber:
+      typeof fields.returnFormNumber === 'string' ? fields.returnFormNumber : null,
+  } as ServiceJob;
 }
 
 // F5d-66 — reuses the exact same isValidServiceReport() the client-side
@@ -527,7 +534,9 @@ export function createFirestoreClient(env: Env): FirestoreClient {
       const stage: AllocatorStage =
         type === 'tracking_number'
           ? 'tracking-sequence-read'
-          : 'service-request-sequence-read';
+          : type === 'return_form'
+            ? 'return-form-sequence-read'
+            : 'service-request-sequence-read';
       return await runAllocatorStage(stage, async () => {
         const doc = await getDocument(
           env,
@@ -679,6 +688,57 @@ export function createFirestoreClient(env: Env): FirestoreClient {
           );
         }
       });
+    },
+
+    async commitServiceJobCompletion(transaction, input) {
+      const token = await getAccessToken(env);
+      const sequenceId = `${input.brandId}__return_form__${input.year}`;
+      const response = await fetch(`${baseUrl}:commit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({
+          transaction: transaction.id,
+          writes: [
+            {
+              update: {
+                name: resourceName('serviceJobs', input.serviceJobId),
+                fields: fields({
+                  status: 'Completed',
+                  closedAt: new FirestoreTimestampValue(input.closedAt),
+                  updatedAt: input.updatedAt,
+                  returnFormNumber: input.returnFormNumber,
+                }),
+              },
+              updateMask: {
+                fieldPaths: ['status', 'closedAt', 'updatedAt', 'returnFormNumber'],
+              },
+              currentDocument: { exists: true },
+            },
+            {
+              update: {
+                name: resourceName('numberSequences', sequenceId),
+                fields: fields({
+                  brandId: input.brandId,
+                  documentType: 'return_form',
+                  year: input.year,
+                  currentValue: input.sequence,
+                }),
+              },
+            },
+          ],
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.text();
+        if (response.status === 409 && sanitizedGoogleErrorStatus(body) === 'ABORTED') {
+          throw new TransactionConflictError();
+        }
+        throw new FirestoreRequestError(
+          'commitServiceJobCompletion',
+          response.status,
+          body
+        );
+      }
     },
 
     // --- F5d-66: Service Report draft creation / finalization ---

@@ -55,6 +55,7 @@ export interface ServiceJobFirestoreFields {
   quote: number | null;
   accessories: string[] | null;
   serviceRequestNumber: string | null;
+  returnFormNumber: string | null;
   publicTrackingTokenHash: string | null;
   publicTrackingCodeHash: string | null;
   // F5d-69 — already `T | null` on ServiceJob itself, so unlike quote/
@@ -74,7 +75,7 @@ export interface ServiceJobFirestoreFields {
 
 export type ServiceJobFirestoreUpdateFields = Omit<
   ServiceJobFirestoreFields,
-  'brandId' | 'publicTrackingTokenHash' | 'publicTrackingCodeHash'
+  'brandId' | 'returnFormNumber' | 'publicTrackingTokenHash' | 'publicTrackingCodeHash'
 >;
 
 function toCompatibleClosedAt(value: unknown): string | null {
@@ -133,6 +134,7 @@ export function toFirestoreFields(entry: ServiceJob): ServiceJobFirestoreFields 
 
   return {
     brandId: entry.brandId,
+    returnFormNumber: entry.returnFormNumber,
     publicTrackingTokenHash: entry.publicTrackingTokenHash,
     publicTrackingCodeHash: entry.publicTrackingCodeHash,
     ...toFirestoreUpdateFields(entry),
@@ -165,6 +167,8 @@ export function fromFirestoreData(id: string, data: DocumentData): ServiceJob {
     quote: data.quote ?? undefined,
     accessories: data.accessories ?? undefined,
     serviceRequestNumber: data.serviceRequestNumber ?? undefined,
+    returnFormNumber:
+      typeof data.returnFormNumber === 'string' ? data.returnFormNumber : null,
     publicTrackingTokenHash:
       typeof data.publicTrackingTokenHash === 'string'
         ? data.publicTrackingTokenHash

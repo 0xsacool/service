@@ -83,6 +83,10 @@ export interface ServiceJob {
   // records predate this field; every job created via Sprint 4's intake
   // flow always sets it.
   serviceRequestNumber?: string;
+  // N7.6 / Decision #049 — immutable RT-{YYYY}-{SEQUENCE} allocated only by
+  // the trusted first-Completed transition. Legacy and non-Completed records
+  // normalize to null; ordinary browser updates must never write this field.
+  returnFormNumber: string | null;
   // F5c (file-retention prerequisite) — the real ISO 8601 date/time the job
   // entered a terminal status (Completed/Cancelled/Rejected), not to be
   // confused with updatedAt (bumped on every save regardless of status).

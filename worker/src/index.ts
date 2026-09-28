@@ -41,6 +41,13 @@ import {
 } from './productImport.ts';
 import { allocateServiceJob, isValidIdempotencyKey, MAX_INTAKE_BYTES, parseServiceJobCreateRequest } from './serviceJobCreation.ts';
 import {
+  completeServiceJob,
+  ServiceJobCompletionBrandMismatchError,
+  ServiceJobCompletionHistoricalStateError,
+  ServiceJobCompletionNotFoundError,
+  ServiceJobCompletionTerminalError,
+} from './serviceJobCompletion.ts';
+import {
   ActiveDraftExistsError,
   allocateServiceReportDraft,
   IdempotencyKeyJobMismatchError,
@@ -95,6 +102,7 @@ const SERVICE_JOBS_PATH = '/service-jobs';
 // '/service-jobs' (Service Job creation) — the two routes cannot collide.
 const SERVICE_JOBS_PREFIX = '/service-jobs/';
 const MAX_SERVICE_REPORT_INPUT_BYTES = 200 * 1024;
+const MAX_SERVICE_JOB_COMPLETION_BODY_BYTES = 1024;
 // PI-3 — privileged Product Master import. Exact path, no prefix, so it can
 // never collide with anything else.
 const PRODUCTS_IMPORT_PATH = '/products/import';
@@ -554,6 +562,91 @@ async function handleServiceJobCreate(request: Request, env: Env, dependencies: 
     // which must never reach Worker logs (Objective 2).
     console.error('[files-worker] Service Job create failed');
     return json({ error: 'Unable to create Service Job' }, { status: 500 });
+  }
+}
+
+async function handleServiceJobCompletion(
+  request: Request,
+  env: Env,
+  jobId: string,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  if (!isSafeJobId(jobId)) {
+    return json({ code: 'invalid_job_id', error: 'Invalid jobId' }, { status: 400 });
+  }
+
+  const authorization = await authorizeStaffCreation(request, env, dependencies);
+  if (authorization instanceof Response) return authorization;
+  if (!(await isServiceJobInBrand(jobId, authorization.profile.brandId, authorization.client))) {
+    return json({ code: 'forbidden', error: 'Forbidden' }, { status: 403 });
+  }
+
+  const mediaType = request.headers.get('Content-Type')?.split(';', 1)[0]?.trim().toLowerCase();
+  const contentLength = request.headers.get('Content-Length');
+  if (
+    !request.body ||
+    mediaType !== 'application/json' ||
+    (contentLength !== null && Number(contentLength) > MAX_SERVICE_JOB_COMPLETION_BODY_BYTES)
+  ) {
+    return json(
+      { code: 'invalid_completion_request', error: 'Invalid Service Job completion request' },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const raw = await readBodyWithLimit(
+      request.body,
+      MAX_SERVICE_JOB_COMPLETION_BODY_BYTES
+    );
+    const text = new TextDecoder().decode(raw);
+    const parsed = text.length > 0 ? parseStrictJson(text) : undefined;
+    if (!isEmptyRequestObject(parsed)) {
+      return json(
+        { code: 'invalid_completion_request', error: 'Invalid Service Job completion request' },
+        { status: 400 }
+      );
+    }
+
+    const job = await completeServiceJob({
+      serviceJobId: jobId,
+      brandId: authorization.profile.brandId,
+      dataAccess: authorization.client,
+    });
+    return json({ job }, { status: 200 });
+  } catch (error) {
+    if (error instanceof ServiceJobCompletionNotFoundError) {
+      return json({ code: 'not_found', error: 'Service Job not found' }, { status: 404 });
+    }
+    if (error instanceof ServiceJobCompletionBrandMismatchError) {
+      return json({ code: 'forbidden', error: 'Forbidden' }, { status: 403 });
+    }
+    if (error instanceof ServiceJobCompletionTerminalError) {
+      return json(
+        { code: 'terminal_state', error: 'Terminal Service Job cannot be completed' },
+        { status: 409 }
+      );
+    }
+    if (error instanceof ServiceJobCompletionHistoricalStateError) {
+      return json(
+        {
+          code: 'return_form_metadata_missing',
+          error: 'Completed Service Job is missing trusted Return Form metadata',
+        },
+        { status: 409 }
+      );
+    }
+    if (error instanceof FileTooLargeError || error instanceof SyntaxError) {
+      return json(
+        { code: 'invalid_completion_request', error: 'Invalid Service Job completion request' },
+        { status: 400 }
+      );
+    }
+    console.error('[files-worker] Service Job completion failed');
+    return json(
+      { code: 'completion_unavailable', error: 'Unable to complete Service Job' },
+      { status: 500 }
+    );
   }
 }
 
@@ -1150,6 +1243,13 @@ export function createWorkerHandler(
       ) {
         return withCors(
           await handleManualDeletionV2(request, env, segments[0]!, segments[2]!, v2Dependencies),
+          request,
+          env
+        );
+      }
+      if (segments.length === 2 && segments[1] === 'complete') {
+        return withCors(
+          await handleServiceJobCompletion(request, env, segments[0]!, dependencies),
           request,
           env
         );

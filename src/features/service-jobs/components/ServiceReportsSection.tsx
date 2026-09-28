@@ -61,6 +61,8 @@ import {
   toDraftPatch,
 } from './serviceReportUi';
 import { ServiceReportPrintPreview } from './ServiceReportPrintPreview';
+import { ProductReturnFormPrintPreview } from './ProductReturnFormPrintPreview';
+import { useReturnFormPreviewGuard } from './useReturnFormPreviewGuard';
 import { loadTrustedPrintForPreview, trustedPrintErrorMessage } from './trustedPrintUi';
 
 interface DisplayedServiceReportVersion {
@@ -158,7 +160,13 @@ function reportStatusClass(status: ServiceReport['status']): string {
 // successor and approval mutations are Worker-mediated; ordinary history is
 // Worker-backed and direct browser Rules remain fail-closed for report lists
 // and mutations. See DECISIONS.md #036/#040 and the D24/D25 closeout state.
-export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }) {
+export function ServiceReportsSection({
+  serviceJob,
+  publicTrackingCode = null,
+}: {
+  serviceJob: ServiceJob;
+  publicTrackingCode?: string | null;
+}) {
   const {
     reports,
     createDraft,
@@ -191,6 +199,17 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
   const [finalizePromptToken, setFinalizePromptToken] = useState(0);
   const [isCreating, setIsCreating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [isPreparingReturnForm, setIsPreparingReturnForm] = useState(false);
+  const [returnFormError, setReturnFormError] = useState<string | null>(null);
+  const returnFormGuard = useReturnFormPreviewGuard({
+    serviceJob,
+    reports,
+    trustedPrint,
+    isHistoryLoading,
+    isHistoryStale,
+    historyError,
+  });
+  const returnFormAvailability = returnFormGuard.availability;
 
   const selectedReport = reports.find((report) => report.id === selectedReportId);
   const selectedReportV1ReadOnly = Boolean(
@@ -208,6 +227,28 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
     setSelectedReportId(reportId);
     setMode(nextMode);
     setFinalizePromptToken((value) => (shouldPromptFinalize ? value + 1 : 0));
+  };
+
+  const handleOpenReturnForm = async () => {
+    setReturnFormError(null);
+    if (isHistoryLoading || isHistoryStale || historyError) {
+      setReturnFormError(
+        'กรุณารีเฟรชประวัติใบรายงานให้เป็นปัจจุบันก่อนออกใบรับคืนสินค้า'
+      );
+      return;
+    }
+    setIsPreparingReturnForm(true);
+    try {
+      await returnFormGuard.verify();
+    } catch (error) {
+      setReturnFormError(
+        error instanceof WorkerServiceReportError
+          ? trustedPrintErrorMessage(error)
+          : 'ไม่สามารถยืนยันใบรายงานล่าสุดสำหรับออกใบรับคืนสินค้าได้'
+      );
+    } finally {
+      setIsPreparingReturnForm(false);
+    }
   };
 
   const handleCreate = async () => {
@@ -252,6 +293,17 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
     setMode('view');
     return finalized;
   };
+
+  if (returnFormGuard.printablePreview) {
+    return (
+      <ProductReturnFormPrintPreview
+        serviceJob={serviceJob}
+        trustedPrint={returnFormGuard.printablePreview}
+        publicTrackingCode={publicTrackingCode}
+        onClose={returnFormGuard.clear}
+      />
+    );
+  }
 
   if (selectedReport && mode === 'edit' && canEditDraft(selectedReport)) {
     return (
@@ -354,6 +406,38 @@ export function ServiceReportsSection({ serviceJob }: { serviceJob: ServiceJob }
           </PrimaryButton>
         </div>
       </div>
+
+      <GlassCard className="p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-semibold text-ink">ใบรับคืนสินค้า</p>
+            <p className="mt-1 text-sm text-neutral-600">
+              {returnFormAvailability.ready
+                ? `พร้อมตรวจสอบใบรายงานล่าสุด ${returnFormAvailability.latestReport.reportNo} ก่อนพิมพ์`
+                : returnFormAvailability.reason}
+            </p>
+          </div>
+          <SecondaryButton
+            onClick={() => void handleOpenReturnForm()}
+            disabled={
+              !returnFormAvailability.ready ||
+              isPreparingReturnForm ||
+              isHistoryLoading ||
+              isHistoryStale ||
+              Boolean(historyError)
+            }
+            className="px-4 py-2.5 text-sm"
+          >
+            <Printer className="h-4 w-4" />
+            {isPreparingReturnForm ? 'กำลังตรวจสอบ…' : 'ตรวจสอบและพิมพ์ใบรับคืน'}
+          </SecondaryButton>
+        </div>
+        {returnFormError ? (
+          <p className="mt-3 text-sm text-danger-600" role="alert">
+            {returnFormError}
+          </p>
+        ) : null}
+      </GlassCard>
 
       {clientMode === 'v2-active' &&
       reports.some((report) => report.sourceSchemaVersion !== 2) ? (

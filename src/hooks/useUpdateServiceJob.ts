@@ -1,4 +1,6 @@
 import type { ServiceJob } from '../types';
+import type { BackendKind } from '../config/backend';
+import type { ServiceJobsRepository } from '../repositories/types';
 import { repositories } from '../repositories/repositoryProvider';
 import {
   buildServiceJobUpdate,
@@ -18,6 +20,32 @@ export interface UseUpdateServiceJobResult {
 // closedAt decision is always based on the real last-persisted value —
 // this also means ServiceJobDetails.tsx's call site needed no changes at
 // all to gain closedAt handling.
+export async function persistServiceJobEdits(input: {
+  id: string;
+  edits: ServiceJobEdits;
+  current: ServiceJob;
+  backendKind: BackendKind | null;
+  repository: ServiceJobsRepository;
+}): Promise<ServiceJob> {
+  if (input.edits.status !== 'Completed') {
+    const patch = buildServiceJobUpdate(input.edits, input.current, input.backendKind);
+    return await input.repository.update(input.id, patch);
+  }
+
+  const preCompletionEdits: ServiceJobEdits = { ...input.edits };
+  delete preCompletionEdits.status;
+  if (Object.keys(preCompletionEdits).length > 0) {
+    const patch = buildServiceJobUpdate(
+      preCompletionEdits,
+      input.current,
+      input.backendKind
+    );
+    await input.repository.update(input.id, patch);
+  }
+
+  return await input.repository.complete(input.id);
+}
+
 export function useUpdateServiceJob(): UseUpdateServiceJobResult {
   const updateServiceJob = async (
     id: string,
@@ -27,8 +55,13 @@ export function useUpdateServiceJob(): UseUpdateServiceJobResult {
     if (!current) {
       throw new Error(`Cannot update service job "${id}": no such job exists`);
     }
-    const patch = buildServiceJobUpdate(edits, current, backendKind);
-    return await repositories.serviceJobs.update(id, patch);
+    return await persistServiceJobEdits({
+      id,
+      edits,
+      current,
+      backendKind,
+      repository: repositories.serviceJobs,
+    });
   };
 
   return { updateServiceJob };

@@ -31,12 +31,12 @@ import type { ProductImportRowIssue } from '../services/productImportClassificat
 
 export type ServiceJobUpdate = Omit<
   Partial<ServiceJob>,
-  'brandId' | 'publicTrackingTokenHash' | 'publicTrackingCodeHash'
+  'brandId' | 'returnFormNumber' | 'publicTrackingTokenHash' | 'publicTrackingCodeHash'
 >;
 
 export type NewDurableServiceJob = Omit<
   ServiceJob,
-  'id' | 'brandId' | 'serviceRequestNumber'
+  'id' | 'brandId' | 'serviceRequestNumber' | 'returnFormNumber'
 > & {
   brandId: BrandId;
 };
@@ -80,6 +80,17 @@ export interface PublicTrackingCodeIssuance {
 // safe recovery is an explicit staff-initiated rotation. Same shape and
 // rationale as WorkerServiceReportError above, kept at this repository seam
 // for the same dependency reason (DECISIONS.md #006/#017).
+export class ServiceJobCompletionError extends Error {
+  public readonly status: number | null;
+  public readonly code: string | null;
+  constructor(message: string, status: number | null, code: string | null = null) {
+    super(message);
+    this.name = 'ServiceJobCompletionError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
 export class PublicTrackingIssuanceError extends Error {
   public readonly status: number | null;
   constructor(message: string, status: number | null) {
@@ -101,6 +112,7 @@ export interface ServiceJobsRepository {
   getByTrackingNumber(trackingNumber: string): ServiceJob | undefined;
   create(job: ServiceJobCreateInput): Promise<ServiceJob>;
   update(id: string, patch: ServiceJobUpdate): Promise<ServiceJob>;
+  complete(id: string): Promise<ServiceJob>;
   // F5d-69G — staff-triggered only, never automatic and never part of
   // creation. Serves both "issue" (job currently inactive) and "rotate" (job
   // already active) — see worker/src/publicTrackingCodeIssuance.ts's module

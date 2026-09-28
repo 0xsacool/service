@@ -130,7 +130,7 @@ does not constitute a production deployment.
 
 ### 3. Product Return Form
 
-_Given to the customer when a repaired product is physically returned and the Service Job completes. Decision #049 is the authoritative V1 contract. The current application source has not implemented this document or `returnFormNumber` yet._
+_Given to the customer when a repaired product is physically returned and the Service Job completes. Decision #049 is the authoritative V1 contract. N7.6 implements this document and `returnFormNumber` source-side; Worker/Rules production deployment remains a separate phase._
 
 | Attribute                                                | Value                                                                                                                                                                                                        |
 | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -207,7 +207,7 @@ The historical relational design established the intended document families and 
 | Staff countersignature        | Required as a physical signature area beside the Customer Signature; neither signature is stored digitally in V1                                                   |
 | Repair/warranty source        | Latest documentary Service Report must be normal trusted-print `v2-approved`; use that same trusted report for summary, parts, warranty, and approval verification |
 | Financial amount              | Not part of the V1 Product Return Form; no quote/final-cost reconciliation is performed or printed                                                                 |
-| RT document number            | Trusted backend allocation on first Completed transition; immutable and replay-safe; current application source still needs implementation                         |
+| RT document number            | Trusted backend allocation on first Completed transition; immutable and replay-safe; implemented source-side in N7.6, with production deployment separate          |
 | Legacy/unsafe report states   | Legacy V1, draft, pending, rejected, and integrity-incident reports are not Return Form eligible                                                                   |
 
 There are therefore **no unresolved Product Return Form business semantics blocking source implementation**. A future business decision is required only if pickup and formal acceptance later become separate events, if a legacy-report exception is desired, or if money/payment information is added to this document family.

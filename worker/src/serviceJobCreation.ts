@@ -111,6 +111,7 @@ export function buildServerJob(
       ? [{ author: 'Staff', date: createdAt, text: intake.internalNotes.trim() }]
       : [],
     closedAt: null,
+    returnFormNumber: null,
     publicTrackingTokenHash: null,
     publicTrackingCodeHash: null,
     // F5d-69 — already validated and invariant-resolved by
@@ -559,7 +560,7 @@ export interface ServiceJobCreationDataAccess {
   getSequence(
     transaction: AllocationTransaction,
     brandId: BrandId,
-    type: 'tracking_number' | 'service_request' | 'repair_report',
+    type: 'tracking_number' | 'service_request' | 'repair_report' | 'return_form',
     year: number
   ): Promise<number | null>;
   getServiceJob(

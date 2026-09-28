@@ -205,7 +205,7 @@ export interface ServiceReportCreationDataAccess {
   getSequence(
     transaction: AllocationTransaction,
     brandId: BrandId,
-    type: 'tracking_number' | 'service_request' | 'repair_report',
+    type: 'tracking_number' | 'service_request' | 'repair_report' | 'return_form',
     year: number
   ): Promise<number | null>;
   getServiceJob(transaction: AllocationTransaction, id: string): Promise<ServiceJob | null>;

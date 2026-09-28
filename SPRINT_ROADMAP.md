@@ -499,18 +499,17 @@ implied by Approval Console access.
 
 ### QA Hardening & Launch Readiness _(partly delivered; active gaps remain)_
 
-Service Request, Delivery Note, and basic Service Report print previews exist.
-The distinct Product Return Form does not. N7.3 adds a jsdom-based real
+Service Request, Delivery Note, basic Service Report, and the distinct Product
+Return Form now have source print previews. N7.3 adds a jsdom-based real
 React/ReactDOM interaction harness covering Modal portal/inert/focus behavior,
 StaffShell mobile-drawer focus/modal-boundary behavior, and route-focus policy,
 while retaining the custom mounted hook/component runtimes for deterministic
-lifecycle/race tests. N7.4 adds trusted-print contract/UI regression coverage,
-including runtime payload validation and fail-closed integrity printing, on top
-of that foundation. N7.5 resolves Product Return Form numbering, eligibility,
-acceptance/signature, trusted-report, and cost semantics in Decision #049;
-source implementation still remains. Remaining QA work therefore centers on
-Product Return Form implementation/verification, cross-device/real-browser
-layout and print checks, and the explicitly deferred P2/P3 accessibility/content
-pass. jsdom is not treated as proof of real browser layout or print pagination.
+lifecycle/race tests. N7.4 adds trusted-print contract/UI regression coverage.
+N7.5 resolves Product Return Form semantics in Decision #049, and N7.6 implements
+the trusted completion/RT allocator, fail-closed approved-report gating, print
+preview, and browser Rules boundary source-side. N7.6 Worker/Rules changes are
+not production-deployed by this phase. Remaining N7.x work is the P2/P3
+accessibility/content pass plus final certification/closeout; real-browser layout
+and print-pagination checks remain useful launch evidence beyond jsdom.
 
 **Estimated Scope:** M

@@ -514,7 +514,10 @@ function ServiceJobDetailsView({
       </GlassCard>
 
       <div className="service-report-section-host">
-        <ServiceReportsSection serviceJob={claim} />
+        <ServiceReportsSection
+          serviceJob={claim}
+          publicTrackingCode={issuedTrackingCode}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
