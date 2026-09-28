@@ -23,7 +23,53 @@ Platform: responsive web application (mobile through desktop), Thai-first for
 Version 1 (see [DECISIONS.md](DECISIONS.md) #003). The authenticated staff app
 is live at `https://luxace-service.web.app` on the Firestore + Worker runtime.
 
-## Current production D24 V1 history hotfix override (2026-09-27)
+## Current production N8 rollout / closeout (2026-09-28)
+
+N8 is **CLOSED**. The N7.x product source was reconciled with production through
+a controlled `Worker -> Hosting -> Firestore Rules` rollout and credentialed,
+read-only staff-UI acceptance. The source checkpoint on `master` is
+`daa010cc2f138399a192a435f9ba87b84e27ce7e`; that commit adds only the tested
+N5 preview-host guard correction and does not change the certified runtime,
+frontend, or Rules payload from N7.8.
+
+Production Cloudflare Worker deployment
+`6265a345-6c36-4c0b-b0ba-8b94e04ba956` routes 100% traffic to version
+`341775c9-9c60-4703-842f-89b565a33545`. Exact version metadata shows
+`SERVICE_REPORT_V2_MODE=compatibility` and visible plain-text
+`PUBLIC_TRACKING_ENABLED=false`; health is 200, unauthenticated D24/D25 and
+trusted completion are 401, and both Public Tracking lookup shapes remain 404.
+The guard-compliant fallback Worker remains
+`753fb167-1c3f-4995-815d-6fe31a1fa2cc`.
+
+Production Hosting release `1790599550496000` serves version
+`55b6074514a25278`. All 25 frozen dist paths were fetched back from production
+and matched the N8.2R1 artifact byte-for-byte; canonical manifest SHA-256 is
+`4ceef18d3fad081421f754affb3a785757251c23d06b11369e97423338ca4302`.
+The rollback channel `n8-rollback-20260928` retains pre-N8 version
+`831e2750f3b69b51` until 2026-10-05T12:41:43.757246198Z.
+
+Production Firestore release `projects/luxace-service/releases/cloud.firestore`
+now targets immutable ruleset
+`projects/luxace-service/rulesets/9070ddb3-234e-4e06-b7fa-58fc544d52e5`.
+Its raw SHA-256 is
+`ae8f93454b61f49df31244c4de31d8c5fa5887c5c7e6db967c67edae2df04867`
+and LF-normalized SHA-256 is
+`8e3214b5c142a8dc3cf5706fb3f4f77ba3aa0cfed50af7b122f6b7dc44409588`,
+both exact matches to source. The prior immutable rollback ruleset
+`c91d9fac-5e43-49ff-8bb2-5e17a107a6a4` remains available.
+
+Credentialed read-only production acceptance loaded the BRUNO dashboard,
+`BRN-2026-000003` and finalized `FR-2026-000001`, the D25 Approval Console,
+trusted-print preview, and legacy Completed job `SRV-2026-0465`. The new
+Product Return Form surface is present and fail-closed: the active BRN job is
+not Completed, while the legacy Completed job explicitly reports missing
+trusted RT/closure metadata. Trusted print revalidated the historical report
+against the server and correctly labelled it legacy V1. No status save, report
+creation, RT allocation, print dispatch, N3 remediation replay, or other
+production business-data write was performed during N8 acceptance/closeout.
+See `reports/Service-Tech-N8-Production-Rollout-Final-Closeout-20260928.txt`.
+
+## Historical production D24 V1 history hotfix override (2026-09-27)
 
 This section supersedes the 2026-09-26 D24/D25 Worker version details below.
 Production source for the D24 V1-history compatibility correction is commit
@@ -82,16 +128,15 @@ Focused guard/containment tests, the full Worker test suite, Worker TypeScript
 typecheck, and independent GPT-6 Astra read-only review all pass; the final
 review returned `VERDICT: PASS` / `REQUIRED_FIXES: NONE`. N5 performed no
 production upload, deploy, traffic change, IAM/Rules mutation, or business-data
-write. Production therefore remains on Worker
-`b2534996-977d-45d3-96f7-641599d66f1c` at 100% with the already-accepted
-runtime state.
+write. At the N5 checkpoint, production therefore remained on Worker
+`b2534996-977d-45d3-96f7-641599d66f1c` at 100% with the then-accepted
+runtime state; the N8 current-production section above supersedes that snapshot.
 
-That current production version still carries the historical
-`PUBLIC_TRACKING_ENABLED` binding as opaque `secret_text`. Before a future
-Worker candidate can pass the N5 guard, a separately approved Cloudflare
-configuration gate must make that candidate state verifiable by removing the
-legacy secret binding or replacing it with visible plain-text `false`. Do not
-weaken or bypass the guard to work around this prerequisite.
+Historical note: the D24 production version described above carried
+`PUBLIC_TRACKING_ENABLED` as opaque `secret_text`. N8 Gate A resolved that
+prerequisite without weakening the guard: the current production Worker and
+its retained fallback both expose visible plain-text `false`, and the corrected
+N5 guard passed before promotion.
 
 ## N6 clean baseline certification (2026-09-27)
 

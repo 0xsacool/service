@@ -1,0 +1,118 @@
+Service Tech — N8 Production Rollout Final Closeout
+Date: 2026-09-28
+Status: PASS — N8 CLOSED
+
+SCOPE
+- N8 reconciled the certified N7.x source with production, prepared a clean release candidate, independently reviewed the deployment plan/artifact, corrected the production build-mode defect found by review, satisfied Worker/Rules prerequisites, deployed in dependency order, and completed credentialed read-only UI acceptance.
+- N8 did not reopen N3 Production Remediation, did not rerun Writes 1–7, did not create Write 8, and did not create or modify production business records during final acceptance/closeout.
+- Public Tracking remains deliberately disabled.
+
+SOURCE / PUBLICATION
+- N7.8 certified source: 30d2b32d3048b50f8d8aaccc8748a416e919fa44.
+- N8 Gate A guard correction commit: daa010cc2f138399a192a435f9ba87b84e27ce7e.
+- Guard correction tag: n8-gatea-guard-preview-fix-20260928.
+- Guard correction only changes worker/scripts/productionVersionGuard.mjs and worker/test/productionVersionGuard.test.mjs; runtime/frontend/Rules payloads are unchanged from the certified N7.8 release source.
+- Wrangler 4.120.0 preview hostnames use the first eight version-ID characters; the corrected guard now constructs that exact preview host and retains all fail-closed checks.
+
+N8.1 PRODUCTION DELTA AUDIT
+- PASS / CLOSED.
+- Confirmed pre-N8 production Worker b2534996-977d-45d3-96f7-641599d66f1c, Hosting version 831e2750f3b69b51, and Rules baseline c312aa700e4c51af57c3931d9141d17944a5bc321185de532811533d3e0ca1a9.
+- Established forward order Worker -> Hosting -> Rules and full rollback order Rules -> Hosting -> Worker.
+- Identified opaque PUBLIC_TRACKING_ENABLED secret and fresh Rules-capture requirements as explicit gates.
+
+N8.2 / N8.2R1 RELEASE CANDIDATE
+- Initial frozen artifact was rejected after independent review because VITE_SERVICE_REPORT_V2_MODE was absent at build time and therefore compiled to disabled.
+- N8.2R1 rebuilt the same exact source once with VITE_SERVICE_REPORT_V2_MODE=compatibility and authoritative Firebase Web configuration injected only into the build process.
+- Corrected frozen artifact: 25 files / 1,324,725 bytes.
+- Canonical Hosting manifest SHA-256:
+  4ceef18d3fad081421f754affb3a785757251c23d06b11369e97423338ca4302
+- index.html SHA-256:
+  46765d39be232ea2a7f8f636200cee1b7f7f800f8cecde05eb3adbbda04d7d29
+- main bundle assets/index-xnbsu9j3.js SHA-256:
+  5a508e680454cd855240fe063ebdd8e1677294138f7bf8c5ea8f4089aafc54ca
+- Focused Service Report/Trusted Print/Return Form/backend checks, all documented root test groups, lint, format, Worker typecheck/full regressions, and Firestore Rules 35/35 passed without rebuilding the frozen artifact.
+
+N8.3 / N8.3A INDEPENDENT REVIEW
+- GPT-6 Sol / high reasoning / read-only found the initial build-mode defect and rejected the first artifact.
+- After N8.2R1 correction, bounded re-review verified compatibility mode, V2 creation routing, and trusted-print/Return Form fail-closed contract.
+- A bookkeeping mismatch between an ad-hoc aggregate hash and the documented canonical Hosting manifest was adjudicated; artifact bytes had not drifted.
+- Final N8.3A verdict: PASS / PRIOR_BLOCKER RESOLVED / ARTIFACT_IDENTITY CERTIFIED / FINDINGS NONE.
+
+GATE A — WORKER CANDIDATES
+- Forward candidate: 341775c9-9c60-4703-842f-89b565a33545.
+- Fallback candidate: 753fb167-1c3f-4995-815d-6fe31a1fa2cc.
+- Both expose SERVICE_REPORT_V2_MODE=compatibility and PUBLIC_TRACKING_ENABLED=false as visible plain_text.
+- Both preserve required service-account secrets and the R2 binding.
+- Corrected N5 guard passed both candidates before any production promotion.
+
+GATE B — RULES ROLLBACK BASELINE
+- Fresh pre-rollout live release:
+  projects/luxace-service/releases/cloud.firestore
+- Immutable rollback ruleset:
+  projects/luxace-service/rulesets/c91d9fac-5e43-49ff-8bb2-5e17a107a6a4
+- LF-normalized SHA-256:
+  c312aa700e4c51af57c3931d9141d17944a5bc321185de532811533d3e0ca1a9
+
+N8.4 CONTROLLED PRODUCTION ROLLOUT
+- PASS / COMPLETED; no rollback required.
+- Rollout order: Worker -> Hosting -> Firestore Rules.
+
+WORKER LIVE
+- Deployment: 6265a345-6c36-4c0b-b0ba-8b94e04ba956.
+- Version: 341775c9-9c60-4703-842f-89b565a33545 at 100%.
+- SERVICE_REPORT_V2_MODE=compatibility.
+- PUBLIC_TRACKING_ENABLED=false plain_text.
+- Final unauthenticated probes:
+  /health = 200
+  D24 history = 401
+  D25 approval queue = 401
+  POST /service-jobs/BRN-2026-000003/complete = 401
+  Public Tracking legacy lookup = 404
+  Public Tracking manual-code lookup = 404
+
+HOSTING LIVE
+- Release: projects/luxace-service/sites/luxace-service/channels/live/releases/1790599550496000
+- Version: projects/luxace-service/sites/luxace-service/versions/55b6074514a25278
+- All 25 frozen dist paths were fetched from production and matched byte-for-byte; mismatches = 0.
+- Canonical manifest matches the certified artifact:
+  4ceef18d3fad081421f754affb3a785757251c23d06b11369e97423338ca4302
+
+FIRESTORE RULES LIVE
+- Ruleset:
+  projects/luxace-service/rulesets/9070ddb3-234e-4e06-b7fa-58fc544d52e5
+- Release update time: 2026-09-28T12:47:59.044158Z
+- Raw SHA-256:
+  ae8f93454b61f49df31244c4de31d8c5fa5887c5c7e6db967c67edae2df04867
+- LF-normalized SHA-256:
+  8e3214b5c142a8dc3cf5706fb3f4f77ba3aa0cfed50af7b122f6b7dc44409588
+- Live Rules hashes match the certified source exactly.
+
+CREDENTIALED READ-ONLY PRODUCTION UI ACCEPTANCE
+- Existing owner staff session was restored by the production app without exposing/requesting credentials.
+- Dashboard loaded for BRUNO THAILAND / BRN on FIRESTORE + WORKER.
+- BRN-2026-000003 loaded finalized FR-2026-000001.
+- Product Return Form surface is present and correctly disabled while the job is not Completed.
+- Trusted-print preview revalidated FR-2026-000001 against the server and correctly labelled it as legacy V1 rather than claiming V2 approval.
+- Legacy Completed job SRV-2026-0465 fails closed with the explicit message that trusted return-form number/time metadata is unavailable.
+- D25 Approval Console loaded with zero pending items.
+- Public Tracking remains visibly disabled in staff UI and 404/404 at the Worker boundary.
+- No save, status transition, report creation, RT allocation, print dispatch, or other production business-data mutation was performed during acceptance.
+- Browser DOM reached readyState=complete with no visible error/alert state and no failed PerformanceResourceTiming entries on the accepted page. Retained console/network streams were unavailable, so this closeout does not claim a historical console-log audit.
+
+ROLLBACK TARGETS RETAINED
+- Worker fallback: 753fb167-1c3f-4995-815d-6fe31a1fa2cc.
+- Hosting rollback channel: n8-rollback-20260928 -> version 831e2750f3b69b51.
+- Hosting rollback channel expiry: 2026-10-05T12:41:43.757246198Z.
+- Firestore Rules rollback ruleset:
+  projects/luxace-service/rulesets/c91d9fac-5e43-49ff-8bb2-5e17a107a6a4
+- If full N8 rollback is ever required, use Rules -> Hosting -> Worker. Issued RT numbers/counters/business data are not rollback artifacts and must never be mechanically reverted.
+
+INVARIANTS / DEFERRED WORK
+- Public Tracking remains disabled; activation remains a separate owner-approved production phase.
+- N3 Production Remediation remains final/closed; never rerun Writes 1–7 and never create Write 8 without a new explicit business-data decision.
+- No IAM/Auth/index/R2/Cron mutation was part of N8.4.
+- Existing deferred items remain separate: Staff Role Management UI, full brand identity, durable Product Instance/serial uniqueness, automatic retention Cron, automatic notifications, customer quote approval, technician workload management, full customer/product history, feedback, and broader customer attachment visibility.
+- Standalone Product Master Import diagnostic retains the previously recorded three non-gating baseline failures; N8 did not change that subsystem.
+
+RESULT
+N8 is CLOSED. The certified N7.x source is reconciled with production, the corrected compatibility-mode frontend artifact is live byte-for-byte, the trusted completion/Return Form Worker route and hardened Firestore Rules are live, Public Tracking remains disabled, rollback targets are preserved, and credentialed read-only production UI acceptance confirms the new surfaces fail closed on historical/non-eligible records without mutating business data.

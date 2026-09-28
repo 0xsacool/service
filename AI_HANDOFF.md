@@ -8,7 +8,49 @@
 
 ---
 
-## Current production override (2026-09-27)
+## Current production override — N8 CLOSED (2026-09-28)
+
+N8 is closed. Current published source checkpoint is
+`daa010cc2f138399a192a435f9ba87b84e27ce7e` (tag
+`n8-gatea-guard-preview-fix-20260928`). The guard-only publication does not
+change the certified runtime/frontend/Rules payload from N7.8 source
+`30d2b32d3048b50f8d8aaccc8748a416e919fa44`.
+
+Current production identities:
+
+- Worker deployment `6265a345-6c36-4c0b-b0ba-8b94e04ba956` -> version
+  `341775c9-9c60-4703-842f-89b565a33545` at 100%.
+- Worker bindings: `SERVICE_REPORT_V2_MODE=compatibility` and visible
+  plain-text `PUBLIC_TRACKING_ENABLED=false`; Public Tracking remains 404/404.
+- Hosting release `1790599550496000`, version `55b6074514a25278`; the live 25
+  frozen dist files match canonical manifest SHA-256
+  `4ceef18d3fad081421f754affb3a785757251c23d06b11369e97423338ca4302`.
+- Firestore Rules live ruleset
+  `9070ddb3-234e-4e06-b7fa-58fc544d52e5`, raw SHA-256
+  `ae8f93454b61f49df31244c4de31d8c5fa5887c5c7e6db967c67edae2df04867`,
+  LF-normalized SHA-256
+  `8e3214b5c142a8dc3cf5706fb3f4f77ba3aa0cfed50af7b122f6b7dc44409588`.
+
+Rollback targets retained: Worker `753fb167-1c3f-4995-815d-6fe31a1fa2cc`,
+Hosting channel `n8-rollback-20260928` -> version `831e2750f3b69b51`
+(expiry 2026-10-05T12:41:43.757246198Z), and Rules ruleset
+`c91d9fac-5e43-49ff-8bb2-5e17a107a6a4`. Full N8 rollback order is Rules ->
+Hosting -> Worker; business data/issued RT numbers are never mechanically
+rolled back.
+
+Credentialed read-only N8 acceptance loaded the BRUNO dashboard,
+`BRN-2026-000003` + finalized `FR-2026-000001`, D25 Approval Console,
+trusted-print preview, and legacy Completed `SRV-2026-0465`. Return Form UI is
+present and fail-closed on non-eligible/historical records; no production
+business-data write was performed. See
+`reports/Service-Tech-N8-Production-Rollout-Final-Closeout-20260928.txt`.
+
+Public Tracking activation, Staff Role Management, Cron/automatic retention,
+notifications, customer quote approval, durable Product Instance identity,
+workload management, full history, feedback, and broader customer attachment
+visibility remain separate deferred phases.
+
+## Historical production override (2026-09-27)
 
 The D24 V1-history compatibility hotfix is live from source commit `cff31a0`
 (tag `d24-v1-history-hotfix-20260927`). Cloudflare Worker
@@ -46,7 +88,7 @@ the mode and was never promoted. The final candidate was uploaded with
 candidate unless the exact candidate shows `SERVICE_REPORT_V2_MODE=compatibility`.
 See the 2026-09-27 closeout report in `reports/`.
 
-## N5 deployment guardrail (source complete, not deployed)
+## N5 deployment guardrail (active promotion path; corrected by N8)
 
 Before any future Worker traffic promotion, use
 `worker/scripts/productionVersionGuard.mjs` through
@@ -58,14 +100,11 @@ are `401`, and both Public Tracking routes are `404`. Add `--promote` only
 after preflight succeeds; the script itself will not dispatch deployment before
 all checks pass.
 
-Important: current production still carries the legacy
-`PUBLIC_TRACKING_ENABLED` binding as opaque `secret_text`, although live
-tracking is verified disabled. The N5 guard intentionally rejects opaque
-secrets. A future Worker rollout therefore requires a separately approved
-Cloudflare configuration gate to remove that legacy secret or replace it with
-visible plain-text `false` before candidate promotion. N5 itself made no live
-Cloudflare/Firebase mutation or traffic change. Full Worker tests, typecheck,
-and independent GPT-6 Astra review passed with no required fixes.
+Historical prerequisite resolved by N8: the pre-N8 production Worker carried
+`PUBLIC_TRACKING_ENABLED` as opaque `secret_text`, which the N5 guard correctly
+rejected. N8 Gate A prepared forward/fallback candidates with visible plain-text
+`false`; the corrected guard passed before the forward version was promoted.
+Do not regress to opaque or `true` state and do not bypass the guard.
 
 ## N6 clean baseline certification (2026-09-27)
 
@@ -172,7 +211,11 @@ clients, one collection, by design (DECISIONS.md #022).
 
 ---
 
-## 2. Current Production State
+## 2. Historical Production State Snapshot
+
+> This table is retained for subsystem history and is superseded by the N8
+> current-production override at the top of this file. Do not use the older
+> Worker/version rows below as current deployment truth.
 
 | Item                                                            | Value                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -690,20 +733,30 @@ and the other deferred items stay gated as listed in `BACKLOG.md`.
 
 ## 14. Last Verified State
 
-- **Production Worker version:** `9a8b83f2-861d-4700-9b4a-05260c4ee661`
-  (version number 11), 100% traffic — confirmed via
-  `wrangler deployments status` and `wrangler versions view --json`
-  immediately before this checkpoint.
-- **R2 bucket:** `service-tech-attachments-prod`, region APAC, 0 objects —
-  confirmed via `wrangler r2 bucket list` / `wrangler r2 bucket info`.
-- **Cron status:** not registered against the live version (no cron trigger
-  present in the deployed version's metadata, despite `scheduled()` handler
-  code being present in the bundle).
-- **Latest test count:** 86/86 checks passing across 5 Worker test files
-  (`npm test` inside `worker/`).
-- **Main app static checks:** `tsc -b`, ESLint, `vite build` all clean.
-- **Checkpoint date/time:** 2026-08-09 (F5d-22 closed). The exact synthetic
-  QA Firestore document and R2 object remain absent after F5d-18 cleanup.
+- **Checkpoint date:** 2026-09-28 — N8 production rollout / acceptance closed.
+- **Published source:** `daa010cc2f138399a192a435f9ba87b84e27ce7e` on
+  `master`/`origin/master` at the pre-closeout checkpoint; the N8 final
+  documentation commit/tag is recorded in the dated closeout report after
+  publication.
+- **Production Worker:** `341775c9-9c60-4703-842f-89b565a33545` at 100% via
+  deployment `6265a345-6c36-4c0b-b0ba-8b94e04ba956`.
+- **Worker invariants:** `SERVICE_REPORT_V2_MODE=compatibility`, visible
+  `PUBLIC_TRACKING_ENABLED=false`; health/D24/D25/complete/Public Tracking
+  probes = 200/401/401/401/404/404.
+- **Production Hosting:** release `1790599550496000`, version
+  `55b6074514a25278`; all 25 frozen paths matched the canonical manifest
+  `4ceef18d3fad081421f754affb3a785757251c23d06b11369e97423338ca4302`.
+- **Production Rules:** `9070ddb3-234e-4e06-b7fa-58fc544d52e5`; raw SHA-256
+  `ae8f93454b61f49df31244c4de31d8c5fa5887c5c7e6db967c67edae2df04867`.
+- **Rollback:** Worker `753fb167-1c3f-4995-815d-6fe31a1fa2cc`; Hosting
+  `n8-rollback-20260928` -> `831e2750f3b69b51`; Rules
+  `c91d9fac-5e43-49ff-8bb2-5e17a107a6a4`.
+- **Validation baseline:** N7.8 app build/lint/format/all documented root suites
+  PASS, Worker typecheck/full tests PASS, Firestore Rules 35/35 PASS; N8.2R1
+  repeated the required deterministic release checks against the corrected
+  frozen artifact. Credentialed read-only N8 production UI acceptance PASS.
+- **N3 remediation:** FINAL SUCCESS / CLOSED; never rerun Writes 1–7 or create
+  Write 8 without a new explicit owner business-data decision.
 
 ---
 
