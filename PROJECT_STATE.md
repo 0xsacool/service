@@ -23,7 +23,64 @@ Platform: responsive web application (mobile through desktop), Thai-first for
 Version 1 (see [DECISIONS.md](DECISIONS.md) #003). The authenticated staff app
 is live at `https://luxace-service.web.app` on the Firestore + Worker runtime.
 
-## Current production N8 rollout / closeout (2026-09-28)
+## Current production N9 timeline stabilization / recovery (2026-09-29)
+
+N9 is the current production source/runtime line. Published source is
+`98a219dc2b83f8c7d4b7115395808454b7294668` (tag
+`n9-4-timeline-rollout-20260929`). N9.3 made `ServiceJob.status` authoritative
+for current-step/progress presentation while preserving timeline as append-only
+history. Ordinary status saves append exactly one history event when the status
+changes; trusted completion appends `Completed` once and remains replay-safe.
+Stale persisted timeline `current` flags no longer drive the UI.
+
+Production Cloudflare Worker deployment
+`a0e92ad6-3329-4125-ad8c-a53fa166b291` routes 100% traffic to version
+`f5fdd517-ff6f-4e4d-a001-1903c9f17929`. Exact version metadata shows
+`SERVICE_REPORT_V2_MODE=compatibility` and visible plain-text
+`PUBLIC_TRACKING_ENABLED=false`. Post-N9.6R1 smoke remains health `200`,
+unauthenticated D24/D25 `401/401`, and both Public Tracking lookup shapes
+`404/404`. Firestore Rules remain the N8-approved immutable ruleset
+`9070ddb3-234e-4e06-b7fa-58fc544d52e5`; N9 did not redeploy Rules, IAM,
+indexes, or Cron.
+
+N9.4 initially deployed a 25-file Hosting artifact built from the isolated N9.3
+worktree. N9.6 production UI acceptance found that artifact fail-closed at
+`BackendConfigurationGate`: the isolated worktree had the tracked
+`.env.production` Public Tracking URL but did not have the gitignored `.env`
+and `.env.local` values required for the production Firebase/business/files
+backend build. No business-data write occurred during that failed acceptance.
+N9.6R1 rebuilt the exact same source from `C:\service`, using the existing
+approved gitignored production VITE environment without exposing or committing
+it, validated the production bundle locally, and deployed **Firebase Hosting
+only**. The recovered live entry assets include `index-kX1ZisUv.js` and
+`index-YgaPx4UT.css`; a fresh production dashboard then loaded authenticated
+BRUNO staff data normally.
+
+Credentialed read-only N9.6R1 acceptance loaded synthetic audit job
+`BRN-2026-000013` and confirmed the N9-F1 correction in production: the page
+shows `Completed`, `7/7`, `100%`, and current step `Completed` while its sparse
+historical timeline still contains the original `Received` event. Historical
+timeline state therefore no longer overrides authoritative job status. The
+record's latest report is `FR-2026-000006` and return form is
+`RT-2026-000001`; those synthetic records were retained as audit evidence and
+were not mutated by N9.6/N9.6R1 acceptance.
+
+Post-recovery verification re-ran the focused N9/accessibility suite (`12/12`
+PASS), root production build (PASS), root lint from the certified isolated
+source (PASS), Worker typecheck (PASS), and full Worker regression suite (PASS).
+The main `C:\service\node_modules` currently lacks `jsdom` even though it is
+declared in `package.json`/`package-lock.json`; no dependency install was
+performed. The focused suite was therefore re-run from the certified isolated
+worktree with complete dependencies. This is a local dependency-state note,
+not a source failure.
+
+Operational guardrail added by this incident: future production Hosting builds
+must use the approved production VITE environment and pass a local production
+preview/configuration-gate check before deployment. Do not infer that a clean
+isolated source worktree is release-ready when required gitignored build-time
+environment is absent.
+
+## Historical production N8 rollout / closeout (2026-09-28)
 
 N8 is **CLOSED**. The N7.x product source was reconciled with production through
 a controlled `Worker -> Hosting -> Firestore Rules` rollout and credentialed,

@@ -8,7 +8,56 @@
 
 ---
 
-## Current production override — N8 CLOSED (2026-09-28)
+## Current production override — N9.6R1 ACCEPTED (2026-09-29)
+
+Current published source is
+`98a219dc2b83f8c7d4b7115395808454b7294668` (tag
+`n9-4-timeline-rollout-20260929`). N9.3 makes authoritative
+`ServiceJob.status` drive current-step/progress while timeline remains
+append-only history; stale persisted timeline `current` flags must never be
+used as the current-status source again.
+
+Current production identities/evidence:
+
+- Worker deployment `a0e92ad6-3329-4125-ad8c-a53fa166b291` -> version
+  `f5fdd517-ff6f-4e4d-a001-1903c9f17929` at 100%.
+- Worker bindings remain `SERVICE_REPORT_V2_MODE=compatibility` and visible
+  plain-text `PUBLIC_TRACKING_ENABLED=false`; smoke is health `200`, D24/D25
+  unauthenticated `401/401`, Public Tracking `404/404`.
+- Firestore Rules remain N8 ruleset
+  `9070ddb3-234e-4e06-b7fa-58fc544d52e5`; N9 did not deploy Rules/IAM/indexes/Cron.
+- Hosting was recovered in N9.6R1 with a Hosting-only deploy from the exact
+  source above, built in `C:\service` using the existing approved gitignored
+  production VITE environment. Live entry assets include `index-kX1ZisUv.js`
+  and `index-YgaPx4UT.css`.
+- Credentialed read-only production acceptance on `BRN-2026-000013` shows
+  `Completed`, `7/7`, `100%`, current step `Completed`; the sparse historical
+  `Received` event remains history only and no longer overrides job status.
+
+Important N9.6 incident/guardrail: the first N9.4 Hosting artifact was built
+from the isolated N9.3 worktree without the gitignored `.env/.env.local`
+production build configuration and therefore failed closed at
+`BackendConfigurationGate` before authentication. N9.6R1 rebuilt from
+`C:\service`, validated a local production preview first, and deployed
+**Hosting only**. Future production Hosting builds must likewise carry the
+approved production VITE environment and pass a local preview/configuration
+gate check before deploy. Never copy, print, or commit `.env` values merely to
+make an isolated worktree release-ready.
+
+Post-recovery verification: focused N9/accessibility `12/12` PASS, production
+build PASS, lint PASS from the certified isolated source, Worker typecheck PASS,
+and full Worker regression PASS. Local `C:\service\node_modules` currently
+lacks `jsdom` despite it being declared in `package.json`/`package-lock.json`;
+no dependency install was performed. Treat that as local dependency state, not
+a source regression.
+
+The seven pre-existing Codex/Astra configuration modifications in the main
+worktree remain intentionally dirty and byte-stable across N9.5/N9.6R1. Do not
+reset/clean/stash them casually. Historical isolated worktrees also remain
+retained. Public Tracking activation and all deferred product/operational items
+remain separate approval boundaries.
+
+## Historical production override — N8 CLOSED (2026-09-28)
 
 N8 is closed. Current published source checkpoint is
 `daa010cc2f138399a192a435f9ba87b84e27ce7e` (tag
