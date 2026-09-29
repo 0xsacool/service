@@ -1145,4 +1145,4 @@ Hard delete is not part of this source phase. A future delete may remove only a 
 
 **Impact:** #043's statement that Import is the only catalog-mutating path is superseded only for the approved Worker-mediated edit operation above; its import invariants remain unchanged. `canImportProducts` remains import-only and does not imply edit rights. Firestore Rules continue to deny browser create/update/delete on `products/{productId}`.
 
-**Status:** Source implementation was approved and certified on 2026-09-29. The owner separately approved production activation and `canManageProducts` provisioning on 2026-09-29. Product hard delete remains separately gated and is not authorized by that rollout approval.
+**Status:** Source implementation was certified and production activation completed on 2026-09-29 at runtime source `8c5f1c95e3601032e3dd5d66a0f7044a5089a1b6` / tag `product-master-ux-rollout-20260929`. The single owner profile was provisioned with `canManageProducts=true` and credentialed production UI acceptance passed. Product hard delete remains separately gated and was not implemented or authorized by this rollout.

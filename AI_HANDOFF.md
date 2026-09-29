@@ -8,7 +8,47 @@
 
 ---
 
-## Current production override — N9.6R1 ACCEPTED (2026-09-29)
+## Current production override — Product Master UX ACTIVATED (2026-09-29)
+
+Production runtime source is
+`8c5f1c95e3601032e3dd5d66a0f7044a5089a1b6` (tag
+`product-master-ux-rollout-20260929`). Product general metadata and
+`Active | Legacy` status are now managed through authenticated Worker
+`PATCH /products/{id}`, authorized only by literal
+`canManageProducts=true`. Direct browser Firestore Product writes remain
+denied; Product hard delete is still absent and separately gated.
+
+Current production identities/evidence:
+
+- Worker deployment `0ad13c8e-3549-4424-99b5-6846abc34707` -> version
+  `fc50c9b0-864e-4ce7-80ec-6755e5843ee8` at 100%.
+- Worker bindings remain `SERVICE_REPORT_V2_MODE=compatibility` and visible
+  plain-text `PUBLIC_TRACKING_ENABLED=false`.
+- Smoke passes health `200`, D24/D25 unauthenticated `401/401`, Public
+  Tracking `404/404`, and Product PATCH unauthenticated `401`.
+- The only production `staffProfiles` record is the owner profile; it has
+  `canManageProducts=true`, `canImportProducts=true`, role `approver`,
+  and `brandId=bruno-thailand`.
+- Corrected Hosting entry SHA-256 is
+  `2C0A6299A8D4B95530D72C3DBF52E516ADFCAA5035EF5B39AA9C07C84FF91F22`;
+  live and local `index.html` are byte-identical and main asset is
+  `/assets/index-Cb3QHLAJ.js`.
+- Credentialed live UI acceptance changed a retained synthetic Product
+  `Active -> Legacy -> Active` and verified all editable fields restored.
+
+Two rollout incidents were detected and fully remediated before closeout:
+a PowerShell URI interpolation bug briefly created one stray `staffProfiles`
+document during capability provisioning, and the first isolated Hosting build
+lacked gitignored production `.env/.env.local` values and therefore failed
+closed at `BackendConfigurationGate`. The stray profile was deleted under its
+exact `updateTime` precondition and the final collection contains only the
+owner profile. Hosting was rebuilt from the same committed source with the
+approved existing production VITE environment and redeployed successfully.
+
+No Firestore Rules, IAM, indexes, Cron, Product hard-delete capability, or
+Public Tracking activation was introduced by this rollout.
+
+## Historical production override — N9.6R1 ACCEPTED (2026-09-29)
 
 Current published source is
 `98a219dc2b83f8c7d4b7115395808454b7294668` (tag

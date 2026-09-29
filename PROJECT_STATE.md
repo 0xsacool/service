@@ -23,7 +23,52 @@ Platform: responsive web application (mobile through desktop), Thai-first for
 Version 1 (see [DECISIONS.md](DECISIONS.md) #003). The authenticated staff app
 is live at `https://luxace-service.web.app` on the Firestore + Worker runtime.
 
-## Current production N9 timeline stabilization / recovery (2026-09-29)
+## Current production Product Master UX activation (2026-09-29)
+
+Product Master UX production activation is complete on runtime source
+`8c5f1c95e3601032e3dd5d66a0f7044a5089a1b6` (tag
+`product-master-ux-rollout-20260929`). Product general fields and
+`Active | Legacy` status are editable in production only through authenticated
+Worker `PATCH /products/{id}`, guarded by the dedicated fail-closed
+`canManageProducts: true` staff capability. Browser Firestore writes to
+`products` remain denied. Product Master defaults to Active rows, while the
+New Service Job catalog selector is an Active-only searchable combobox matching
+brand/model/SKU/name with bounded results.
+
+Production Worker deployment
+`0ad13c8e-3549-4424-99b5-6846abc34707` routes 100% traffic to version
+`fc50c9b0-864e-4ce7-80ec-6755e5843ee8`. Exact version metadata preserves
+`SERVICE_REPORT_V2_MODE=compatibility` and visible plain-text
+`PUBLIC_TRACKING_ENABLED=false`. Production smoke passes health `200`,
+unauthenticated D24/D25 `401/401`, both Public Tracking shapes `404/404`,
+and unauthenticated Product PATCH `401`.
+
+The single production owner staff profile now has literal
+`canManageProducts=true`; `canImportProducts=true`, role `approver`, and
+`brandId=bruno-thailand` remain intact. A first provisioning command exposed
+the historical PowerShell URI-interpolation hazard and created one stray
+`staffProfiles` document. Rollout was paused immediately; the exact stray was
+deleted under its `updateTime` precondition, the collection was verified back
+to one owner profile, and provisioning was retried with safe URI construction.
+
+The first Hosting deploy in this rollout also reproduced the N9.6 build-time
+environment guardrail: a clean isolated worktree lacked gitignored
+`.env/.env.local`, so the deployed application failed closed at
+`BackendConfigurationGate`. No Product acceptance write was attempted while
+that artifact was live. The same committed source was rebuilt using the
+existing approved production VITE environment without exposing or committing
+those values and Hosting was redeployed. Live `index.html` now matches the
+local production build byte-for-byte at SHA-256
+`2C0A6299A8D4B95530D72C3DBF52E516ADFCAA5035EF5B39AA9C07C84FF91F22`;
+the main asset is `/assets/index-Cb3QHLAJ.js`.
+
+Credentialed production UI acceptance used a retained synthetic Product and
+changed its status `Active -> Legacy -> Active` through the live UI/Worker
+path; the final Firestore read confirmed all editable fields restored to their
+original values. Product hard delete remains unimplemented and separately
+gated; no Firestore Rules, IAM, indexes, or Cron mutation occurred.
+
+## Historical production N9 timeline stabilization / recovery (2026-09-29)
 
 N9 is the current production source/runtime line. Published source is
 `98a219dc2b83f8c7d4b7115395808454b7294668` (tag

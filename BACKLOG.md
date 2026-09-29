@@ -1,12 +1,13 @@
 # Service Tech Backlog
 
-> Authoritative active-work index reconciled against repository source, deterministic tests, and the accepted production state after N9.6R1 recovery/acceptance on 2026-09-29. Historical roadmap and decision entries remain useful for lineage, but this file is the current backlog source of truth. See `PROJECT_STATE.md` for runtime history and `DECISIONS.md` for architectural decisions.
+> Authoritative active-work index reconciled against repository source, deterministic tests, and the accepted production state after Product Master UX activation on 2026-09-29. Historical roadmap and decision entries remain useful for lineage, but this file is the current backlog source of truth. See `PROJECT_STATE.md` for runtime history and `DECISIONS.md` for architectural decisions.
 
 ## Baseline
 
-- Current published source checkpoint: `98a219dc2b83f8c7d4b7115395808454b7294668` (tag `n9-4-timeline-rollout-20260929`). N9.3 made Service Job status authoritative for current timeline step/progress while preserving timeline history; N9.4 published that 14-file delta.
-- Accepted production Worker: version `f5fdd517-ff6f-4e4d-a001-1903c9f17929`, deployment `a0e92ad6-3329-4125-ad8c-a53fa166b291`, 100% traffic.
-- Accepted production Hosting: N9.6R1 Hosting-only recovery serves the configured 25-file artifact whose live entry assets include `index-kX1ZisUv.js` and `index-YgaPx4UT.css`. The earlier N9.4 Hosting artifact was superseded after N9.6 proved it had been built from an isolated worktree without the required gitignored production VITE environment and therefore failed closed at `BackendConfigurationGate`.
+- Current production runtime source checkpoint: `8c5f1c95e3601032e3dd5d66a0f7044a5089a1b6` (tag `product-master-ux-rollout-20260929`). Product Master general edit/Active-Legacy retirement and the searchable Active-only New Service Job picker are activated.
+- Accepted production Worker: version `fc50c9b0-864e-4ce7-80ec-6755e5843ee8`, deployment `0ad13c8e-3549-4424-99b5-6846abc34707`, 100% traffic.
+- Accepted production Hosting: corrected configured artifact has byte-identical local/live `index.html` SHA-256 `2C0A6299A8D4B95530D72C3DBF52E516ADFCAA5035EF5B39AA9C07C84FF91F22` and main asset `/assets/index-Cb3QHLAJ.js`. The first rollout Hosting build reproduced the N9.6 isolated-worktree environment failure and was immediately superseded by a rebuild from the same committed source with the approved gitignored production VITE environment.
+- Production owner capability: the single `staffProfiles` record has literal `canManageProducts=true`; authenticated UI acceptance toggled a retained synthetic test Product `Active -> Legacy -> Active` and verified complete restoration.
 - Accepted production Firestore Rules remain ruleset `9070ddb3-234e-4e06-b7fa-58fc544d52e5`, raw SHA-256 `ae8f93454b61f49df31244c4de31d8c5fa5887c5c7e6db967c67edae2df04867`; N9 did not redeploy Rules.
 - Production `SERVICE_REPORT_V2_MODE=compatibility`; `PUBLIC_TRACKING_ENABLED=false` is visible plain-text and Public Tracking remains disabled. Post-recovery smoke is Worker health `200`, unauthenticated D24/D25 `401/401`, Public Tracking `404/404`.
 - Credentialed read-only N9.6R1 acceptance confirms `BRN-2026-000013` shows `Completed`, `7/7`, `100%`, and current step `Completed` even though its sparse historical timeline still contains the original `Received` event. Historical timeline state no longer overrides authoritative `ServiceJob.status`.
@@ -33,6 +34,7 @@
 - **N9.3 timeline stabilization.** Current step/progress are derived from authoritative `ServiceJob.status`, timeline remains append-only history, ordinary status saves append exactly one new history event, trusted completion appends `Completed` once and is replay-safe, and stale persisted `event.current` no longer controls the UI. Focused and broader validation passed before publication.
 - **N9.4/N9.5 controlled publication and main reconciliation.** Commit `98a219dc2b83f8c7d4b7115395808454b7294668` and tag `n9-4-timeline-rollout-20260929` were published; Worker `f5fdd517-ff6f-4e4d-a001-1903c9f17929` was guard-checked and promoted to 100%. Local `C:\service` master was then fast-forwarded to the same source without changing the seven pre-existing Codex/Astra config modifications or historical worktrees.
 - **N9.6/N9.6R1 production UI acceptance and Hosting recovery.** Initial acceptance found the N9.4 Hosting artifact fail-closed at `BackendConfigurationGate` because the isolated build worktree lacked gitignored production `.env/.env.local`. N9.6R1 rebuilt the exact same source from `C:\service` with the approved local VITE environment, validated it locally, deployed Hosting only, and then confirmed production dashboard/auth plus `BRN-2026-000013` as `Completed`, `7/7`, `100%`, current step `Completed`. No production business-data write occurred.
+- **Product Master UX source + production activation.** Runtime source `8c5f1c95e3601032e3dd5d66a0f7044a5089a1b6` (tag `product-master-ux-rollout-20260929`) adds Worker-mediated Product general edit with dedicated `canManageProducts`, Active/Legacy retirement, an Active-default Product Master list, and a bounded accessible Active-only catalog search in New Service Job. Production Worker/Hosting were rolled out and credentialed UI acceptance toggled a retained synthetic test Product to Legacy and back to Active. Public Tracking stayed off; no Rules/IAM/index/Cron or hard-delete scope was added.
 
 ## ACTIVE
 
@@ -41,6 +43,7 @@ N9.2-N9.7 are closed after timeline stabilization, controlled publication, Hosti
 ## BLOCKED / DEFERRED
 
 - **Public Tracking activation.** Implementation exists but production activation remains deliberately deferred/disabled. Activation is a separate production phase.
+- **Product Master hard delete.** Legacy is the active production retirement path. Permanent Product deletion remains separately gated until a privileged backend can prove immediately before delete that no Service Job/history reference exists and the Worker IAM change for `datastore.entities.delete` is explicitly approved.
 - **Admin / Staff Role Management UI.** Approval role enforcement exists, but account/role lifecycle administration does not. Browser `staffProfiles` writes remain denied; privileged provisioning architecture must be explicitly scoped.
 - **BRUNO / JLC full visual identity.** Generic visual tokens remain until brand assets/palette/theming direction are supplied.
 - **Durable Product Instance / server-side serial uniqueness.** Current Registered Products are derived from Service Job history; durable physical-unit identity and authoritative serial-conflict enforcement need an architecture decision.
@@ -75,7 +78,7 @@ The following statements may remain in historical context but must not be used a
 
 ## Recommended sequence
 
-1. Keep N9 closed after documentation/final closeout and preserve source `98a219dc2b83f8c7d4b7115395808454b7294668`, the accepted Worker, and the recovered configured Hosting artifact unless a new explicitly scoped phase is approved.
+1. Preserve Product Master UX runtime source `8c5f1c95e3601032e3dd5d66a0f7044a5089a1b6`, Worker `fc50c9b0-864e-4ce7-80ec-6755e5843ee8`, and the corrected configured Hosting artifact unless a new explicitly scoped phase is approved.
 2. Any future production Hosting build must use the approved production VITE environment and pass a local production-preview configuration-gate check before deploy; do not build release Hosting from a clean isolated worktree that lacks gitignored `.env/.env.local`.
 3. Public Tracking activation remains a separate production decision even though the live Worker carries visible plain-text `false` and passes the deployment guard.
 4. Treat broader real-browser assistive-technology/device/print-pagination work as separate verification/polish, then revisit deferred operational/product work only after its dependency or owner decision is resolved.
