@@ -30,6 +30,8 @@ export interface UseProductDetailResult {
   canEdit: boolean;
   canEditKnowledge: boolean;
   updateGeneral: (input: NewProductInput) => Promise<void>;
+  setStatus: (status: ProductMasterEntry['status']) => Promise<void>;
+  deleteProduct: () => Promise<void>;
   toggleAccessory: (accessoryId: string) => void;
   addAccessory: (label: string) => void;
   toggleCommonProblem: (problemId: string) => void;
@@ -89,6 +91,21 @@ export function useProductDetail(productId: string): UseProductDetailResult {
     });
     await repositories.productMaster.refreshFromServer([product.id]);
     refreshProduct();
+  };
+
+  const setStatus = async (status: ProductMasterEntry['status']): Promise<void> => {
+    if (!product) return;
+    await repositories.productCatalogManagement.setProductStatus(product.id, status);
+    await repositories.productMaster.refreshFromServer([product.id]);
+    refreshProduct();
+  };
+
+  const deleteProduct = async (): Promise<void> => {
+    if (!product) return;
+    const productId = product.id;
+    await repositories.productCatalogManagement.deleteProduct(productId);
+    await repositories.productMaster.refreshFromServer([productId]);
+    setProduct(undefined);
   };
 
   const setProductAssociation = (
@@ -159,6 +176,8 @@ export function useProductDetail(productId: string): UseProductDetailResult {
     canEdit,
     canEditKnowledge,
     updateGeneral,
+    setStatus,
+    deleteProduct,
     toggleAccessory,
     addAccessory,
     toggleCommonProblem,

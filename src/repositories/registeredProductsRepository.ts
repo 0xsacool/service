@@ -66,6 +66,7 @@ function deriveServicedProducts(customerId: string): RegisteredProduct[] {
       warrantyStatus: warrantyStatusFor(warrantyExpiresAt),
       lastServiceDate: job.updatedAt,
       previousServiceCount: 1,
+      catalogProductId: instanceEntry?.productId ?? null,
     });
   }
 
@@ -91,6 +92,7 @@ function deriveUnservicedProducts(customerId: string): RegisteredProduct[] {
       warrantyStatus: warrantyStatusFor(warrantyExpiresAt),
       lastServiceDate: NEVER_SERVICED,
       previousServiceCount: 0,
+      catalogProductId: entry.productId,
     };
   });
 }

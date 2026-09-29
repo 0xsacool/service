@@ -8,6 +8,7 @@ import type {
   AccessoryDefinition,
   CommonProblemDefinition,
   ProductMasterEntry,
+  ProductStatus,
   Attachment,
   AttachmentCategory,
   ServiceReport,
@@ -32,7 +33,11 @@ import type { ProductImportRowIssue } from '../services/productImportClassificat
 
 export type ServiceJobUpdate = Omit<
   Partial<ServiceJob>,
-  'brandId' | 'returnFormNumber' | 'publicTrackingTokenHash' | 'publicTrackingCodeHash'
+  | 'brandId'
+  | 'catalogProductId'
+  | 'returnFormNumber'
+  | 'publicTrackingTokenHash'
+  | 'publicTrackingCodeHash'
 >;
 
 export type NewDurableServiceJob = Omit<
@@ -262,6 +267,10 @@ export type ProductCatalogManagementErrorCode =
   | 'forbidden'
   | 'validation_failed'
   | 'not_found'
+  | 'product_not_legacy'
+  | 'product_reference_unknown'
+  | 'product_in_use'
+  | 'conflict'
   | 'dependency_unavailable';
 
 export class ProductCatalogManagementError extends Error {
@@ -281,6 +290,8 @@ export class ProductCatalogManagementError extends Error {
 
 export interface ProductCatalogManagementRepository {
   updateProduct(productId: string, request: ProductCatalogUpdateRequest): Promise<void>;
+  setProductStatus(productId: string, status: ProductStatus): Promise<void>;
+  deleteProduct(productId: string): Promise<void>;
 }
 
 export interface ProductImportRepository {

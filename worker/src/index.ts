@@ -29,7 +29,18 @@ import {
   type FirebaseTokenVerifier,
 } from './firebaseAuth.ts';
 import { getAuthorizedStaffProfile, isServiceJobInBrand, isStaffAuthorizedForServiceJob, type StaffProfile } from './staffAuthorization.ts';
-import { parseProductCatalogUpdateRequest } from '../../src/services/productCatalogManagement.ts';
+import {
+  parseProductCatalogStatusRequest,
+  parseProductCatalogUpdateRequest,
+} from '../../src/services/productCatalogManagement.ts';
+import {
+  deleteProductSafely,
+  ProductDeleteInUseError,
+  ProductDeleteNotFoundError,
+  ProductDeleteNotLegacyError,
+  ProductDeleteReferenceUnknownError,
+  ProductDeleteRetryExhaustedError,
+} from './productCatalogDeletion.ts';
 import {
   CatalogTooLargeError,
   IdempotencyMismatchError,
@@ -40,7 +51,13 @@ import {
   runProductImportTransaction,
   StaleCatalogError,
 } from './productImport.ts';
-import { allocateServiceJob, isValidIdempotencyKey, MAX_INTAKE_BYTES, parseServiceJobCreateRequest } from './serviceJobCreation.ts';
+import {
+  allocateServiceJob,
+  CatalogProductUnavailableError,
+  isValidIdempotencyKey,
+  MAX_INTAKE_BYTES,
+  parseServiceJobCreateRequest,
+} from './serviceJobCreation.ts';
 import {
   completeServiceJob,
   ServiceJobCompletionBrandMismatchError,
@@ -634,6 +651,122 @@ async function handleProductUpdate(
   }
 }
 
+async function handleProductStatusUpdate(
+  request: Request,
+  env: Env,
+  productId: string,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  if (!isSafeProductId(productId)) {
+    return json({ code: 'validation_failed', error: 'Invalid product id' }, { status: 400 });
+  }
+  const authorization = await authorizeProductManagement(request, env, dependencies);
+  if (authorization instanceof Response) return authorization;
+  const mediaType = request.headers.get('Content-Type')?.split(';', 1)[0]?.trim().toLowerCase();
+  const contentLength = request.headers.get('Content-Length');
+  if (
+    !request.body ||
+    mediaType !== 'application/json' ||
+    (contentLength !== null && Number(contentLength) > MAX_PRODUCT_UPDATE_BODY_BYTES)
+  ) {
+    return json(
+      { code: 'validation_failed', error: 'Invalid product status request' },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const raw = await readBodyWithLimit(request.body, MAX_PRODUCT_UPDATE_BODY_BYTES);
+    const parsed = parseProductCatalogStatusRequest(
+      JSON.parse(new TextDecoder().decode(raw))
+    );
+    if (!parsed) {
+      return json(
+        { code: 'validation_failed', error: 'Invalid product status request' },
+        { status: 400 }
+      );
+    }
+    const updated = await authorization.client.updateProductCatalogStatus(
+      productId,
+      parsed.status,
+      new Date().toISOString()
+    );
+    if (!updated) {
+      return json({ code: 'not_found', error: 'Product not found' }, { status: 404 });
+    }
+    return json({ productId, status: parsed.status }, { status: 200 });
+  } catch (error) {
+    if (error instanceof FileTooLargeError || error instanceof SyntaxError) {
+      return json(
+        { code: 'validation_failed', error: 'Invalid product status request' },
+        { status: 400 }
+      );
+    }
+    console.error('[files-worker] Product status update failed');
+    return json(
+      { code: 'dependency_unavailable', error: 'Unable to update product status' },
+      { status: 503 }
+    );
+  }
+}
+
+async function handleProductDelete(
+  request: Request,
+  env: Env,
+  productId: string,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  if (!isSafeProductId(productId)) {
+    return json({ code: 'validation_failed', error: 'Invalid product id' }, { status: 400 });
+  }
+  const authorization = await authorizeProductManagement(request, env, dependencies);
+  if (authorization instanceof Response) return authorization;
+
+  try {
+    await deleteProductSafely({
+      productId,
+      dataAccess: authorization.client,
+    });
+    return new Response(null, { status: 204 });
+  } catch (error) {
+    if (error instanceof ProductDeleteNotFoundError) {
+      return json({ code: 'not_found', error: 'Product not found' }, { status: 404 });
+    }
+    if (error instanceof ProductDeleteNotLegacyError) {
+      return json(
+        { code: 'product_not_legacy', error: 'Product must be Legacy before deletion' },
+        { status: 409 }
+      );
+    }
+    if (error instanceof ProductDeleteReferenceUnknownError) {
+      return json(
+        {
+          code: 'product_reference_unknown',
+          error: 'Historical product references cannot be proven for this product',
+        },
+        { status: 409 }
+      );
+    }
+    if (error instanceof ProductDeleteInUseError) {
+      return json(
+        { code: 'product_in_use', error: 'Product is referenced by Service Job history' },
+        { status: 409 }
+      );
+    }
+    if (error instanceof ProductDeleteRetryExhaustedError) {
+      return json(
+        { code: 'conflict', error: 'Product changed during deletion; retry later' },
+        { status: 409 }
+      );
+    }
+    console.error('[files-worker] Product deletion failed');
+    return json(
+      { code: 'dependency_unavailable', error: 'Unable to delete product' },
+      { status: 503 }
+    );
+  }
+}
+
 async function handleServiceJobCreate(request: Request, env: Env, dependencies: WorkerDependencies): Promise<Response> {
   const authorization = await authorizeStaffCreation(request, env, dependencies);
   if (authorization instanceof Response) return authorization;
@@ -661,6 +794,12 @@ async function handleServiceJobCreate(request: Request, env: Env, dependencies: 
       throw buildError;
     }
   } catch (error) {
+    if (error instanceof CatalogProductUnavailableError) {
+      return json(
+        { code: 'catalog_product_unavailable', error: 'Selected product is no longer available' },
+        { status: 409 }
+      );
+    }
     if (error instanceof FileTooLargeError || error instanceof SyntaxError) return json({ error: 'Invalid Service Job intake' }, { status: 400 });
     // F5d-56: the exact failing stage — OAuth token acquisition, a
     // Firestore transaction/read/commit call, or response construction —
@@ -1143,10 +1282,13 @@ export function createWorkerHandler(
       return withCors(await handleProductImport(request, env, dependencies), request, env);
     }
 
-    if (request.method === 'PATCH' && url.pathname.startsWith(PRODUCTS_PREFIX)) {
-      let productId: string;
+    if (
+      (request.method === 'PATCH' || request.method === 'DELETE') &&
+      url.pathname.startsWith(PRODUCTS_PREFIX)
+    ) {
+      let productPath: string;
       try {
-        productId = decodeURIComponent(url.pathname.slice(PRODUCTS_PREFIX.length));
+        productPath = decodeURIComponent(url.pathname.slice(PRODUCTS_PREFIX.length));
       } catch {
         return withCors(
           json({ code: 'validation_failed', error: 'Invalid product id' }, { status: 400 }),
@@ -1154,15 +1296,28 @@ export function createWorkerHandler(
           env
         );
       }
-      if (!productId || productId.includes('/')) {
+
+      if (request.method === 'PATCH' && productPath.endsWith('/status')) {
+        const productId = productPath.slice(0, -'/status'.length);
+        return withCors(
+          await handleProductStatusUpdate(request, env, productId, dependencies),
+          request,
+          env
+        );
+      }
+
+      if (!productPath || productPath.includes('/')) {
         return withCors(
           json({ code: 'validation_failed', error: 'Invalid product id' }, { status: 400 }),
           request,
           env
         );
       }
+
       return withCors(
-        await handleProductUpdate(request, env, productId, dependencies),
+        request.method === 'DELETE'
+          ? await handleProductDelete(request, env, productPath, dependencies)
+          : await handleProductUpdate(request, env, productPath, dependencies),
         request,
         env
       );

@@ -73,6 +73,9 @@ class FakeStore implements ServiceJobCreationDataAccess {
   async serviceJobExists(_: AllocationTransaction, id: string) {
     return this.jobs.has(id);
   }
+  async getCatalogProductStatus() {
+    return 'Active' as const;
+  }
   async commitServiceJobCreation(
     _: AllocationTransaction,
     input: {

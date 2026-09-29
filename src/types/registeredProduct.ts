@@ -33,4 +33,8 @@ export interface RegisteredProduct {
   warrantyStatus: WarrantyStatus;
   lastServiceDate: string; // ISO date, or '—' if never serviced
   previousServiceCount: number;
+  // Decision #051 — stable Product Master identity when this selection came
+  // from a catalog row or a post-cutover Service Job. Optional for legacy
+  // and manual selections that have no authoritative catalog link.
+  catalogProductId?: string | null;
 }

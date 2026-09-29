@@ -71,6 +71,7 @@ function applyClassifiedRow(
       warrantyMonths: 12,
       accessoryIds: [],
       commonProblemIds: [],
+      referenceTrackingVersion: 1,
     };
     productMasterRepository.createProduct(entry);
     return { rowNumber: row.rowNumber, status: 'new', productId: id, warnings };

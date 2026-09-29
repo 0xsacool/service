@@ -75,6 +75,7 @@ export function buildManualRegisteredProduct(
     warrantyStatus,
     lastServiceDate: '—',
     previousServiceCount: 0,
+    catalogProductId: matchedCatalogEntry?.id ?? null,
   };
 }
 

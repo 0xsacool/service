@@ -188,6 +188,10 @@ try {
   const createFields = (createWrite?.update as { fields?: Record<string, unknown> } | undefined)
     ?.fields as Record<string, Record<string, unknown>> | undefined;
   check('the new product gets status Active', createFields?.status?.stringValue === 'Active');
+  check(
+    'the new product is marked reference-tracked for safe hard-delete decisions',
+    createFields?.referenceTrackingVersion?.integerValue === '1'
+  );
   check('the new product gets warrantyMonths 12', createFields?.warrantyMonths?.integerValue === '12');
   check('the new product gets empty associations', Array.isArray((createFields?.accessoryIds?.arrayValue as { values?: unknown[] })?.values ?? []));
   check(

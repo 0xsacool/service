@@ -34,8 +34,9 @@
 title: "Firestore Retention & Service Job Allocation (Service Tech Worker)"
 description: >-
   Narrow read, create, and update access to Firestore entities for the Cloudflare
-  Worker's attachment retention and Service Job allocation flows. No
-  delete, no database/index/backup administration, no IAM management.
+  Worker's attachment retention, Service Job allocation, and guarded Product
+  Catalog flows. Product hard delete is application-gated; no database/index/
+  backup administration and no IAM management.
   Not scoped to a single collection — enforced by application code, not
   IAM.
 stage: GA
@@ -45,3 +46,4 @@ includedPermissions:
   - datastore.entities.list
   - datastore.entities.update
   - datastore.entities.create
+  - datastore.entities.delete

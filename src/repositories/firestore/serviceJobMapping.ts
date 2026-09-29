@@ -39,6 +39,7 @@ export interface ServiceJobFirestoreFields {
   product: string;
   productCategory: string;
   serialNumber: string;
+  catalogProductId: string | null;
   issue: string;
   description: string;
   status: ServiceJobStatus;
@@ -75,7 +76,11 @@ export interface ServiceJobFirestoreFields {
 
 export type ServiceJobFirestoreUpdateFields = Omit<
   ServiceJobFirestoreFields,
-  'brandId' | 'returnFormNumber' | 'publicTrackingTokenHash' | 'publicTrackingCodeHash'
+  | 'brandId'
+  | 'catalogProductId'
+  | 'returnFormNumber'
+  | 'publicTrackingTokenHash'
+  | 'publicTrackingCodeHash'
 >;
 
 function toCompatibleClosedAt(value: unknown): string | null {
@@ -134,6 +139,7 @@ export function toFirestoreFields(entry: ServiceJob): ServiceJobFirestoreFields 
 
   return {
     brandId: entry.brandId,
+    catalogProductId: entry.catalogProductId ?? null,
     returnFormNumber: entry.returnFormNumber,
     publicTrackingTokenHash: entry.publicTrackingTokenHash,
     publicTrackingCodeHash: entry.publicTrackingCodeHash,
@@ -151,6 +157,8 @@ export function fromFirestoreData(id: string, data: DocumentData): ServiceJob {
     product: data.product,
     productCategory: data.productCategory,
     serialNumber: data.serialNumber,
+    catalogProductId:
+      typeof data.catalogProductId === 'string' ? data.catalogProductId : null,
     issue: data.issue,
     description: data.description,
     status: data.status,

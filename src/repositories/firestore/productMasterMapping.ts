@@ -21,6 +21,7 @@ export interface ProductMasterFirestoreFields {
   warrantyMonths: number;
   accessoryIds: string[];
   commonProblemIds: string[];
+  referenceTrackingVersion?: 1;
 }
 
 export function toFirestoreFields(
@@ -36,6 +37,9 @@ export function toFirestoreFields(
     warrantyMonths: entry.warrantyMonths,
     accessoryIds: entry.accessoryIds,
     commonProblemIds: entry.commonProblemIds,
+    ...(entry.referenceTrackingVersion === 1
+      ? { referenceTrackingVersion: 1 as const }
+      : {}),
   };
 }
 
@@ -51,5 +55,6 @@ export function fromFirestoreData(id: string, data: DocumentData): ProductMaster
     warrantyMonths: data.warrantyMonths,
     accessoryIds: data.accessoryIds ?? [],
     commonProblemIds: data.commonProblemIds ?? [],
+    referenceTrackingVersion: data.referenceTrackingVersion === 1 ? 1 : undefined,
   };
 }

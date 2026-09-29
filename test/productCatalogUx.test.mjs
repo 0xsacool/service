@@ -15,9 +15,8 @@ after(async () => {
 const { searchActiveProductCatalog } = await vite.ssrLoadModule(
   '/src/services/productCatalogSearch.ts'
 );
-const { parseProductCatalogUpdateRequest } = await vite.ssrLoadModule(
-  '/src/services/productCatalogManagement.ts'
-);
+const { parseProductCatalogStatusRequest, parseProductCatalogUpdateRequest } =
+  await vite.ssrLoadModule('/src/services/productCatalogManagement.ts');
 const { canManageProductCatalogForBackend } = await vite.ssrLoadModule(
   '/src/services/productCatalogAccess.ts'
 );
@@ -96,6 +95,18 @@ test('product update contract is exact, normalized, and status-bounded', () => {
   assert.equal(parseProductCatalogUpdateRequest({ ...parsed, sku: null })?.sku, null);
 });
 
+test('quick status contract accepts only exact Active/Legacy requests', () => {
+  assert.deepEqual(parseProductCatalogStatusRequest({ version: 1, status: 'Legacy' }), {
+    version: 1,
+    status: 'Legacy',
+  });
+  assert.equal(parseProductCatalogStatusRequest({ version: 1, status: 'Deleted' }), null);
+  assert.equal(
+    parseProductCatalogStatusRequest({ version: 1, status: 'Active', extra: true }),
+    null
+  );
+});
+
 test('production Product edit capability is distinct from legacy direct mutation gate', () => {
   assert.equal(canManageProductCatalogForBackend('mock', false), true);
   assert.equal(canManageProductCatalogForBackend('firestore', false), false);
@@ -112,6 +123,28 @@ test('Product Master defaults to Active so retired Legacy rows do not clutter no
     'utf8'
   );
   assert.match(source, /useState<StatusFilter>\('Active'\)/);
+});
+
+test('Product pages expose quick status confirmation and gate hard delete to reference-tracked Legacy rows', async () => {
+  const listSource = await readFile(
+    new URL(
+      '../src/features/master-data/products/pages/ProductsPage.tsx',
+      import.meta.url
+    ),
+    'utf8'
+  );
+  const detailSource = await readFile(
+    new URL(
+      '../src/features/master-data/products/pages/ProductDetail.tsx',
+      import.meta.url
+    ),
+    'utf8'
+  );
+  assert.match(listSource, /requestStatusChange\(p\)/);
+  assert.match(listSource, /ProductActionConfirmModal/);
+  assert.match(detailSource, /referenceTrackingVersion === 1/);
+  assert.match(detailSource, /ลบสินค้าถาวร/);
+  assert.match(detailSource, /ProductActionConfirmModal/);
 });
 
 test('New Service Job uses searchable combobox instead of native catalog select', async () => {

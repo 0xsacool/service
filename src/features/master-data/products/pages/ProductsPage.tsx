@@ -23,6 +23,7 @@ import {
   AddProductModal,
   DownloadMenu,
   ImportProductsWizard,
+  ProductActionConfirmModal,
   ProductStatusBadge,
 } from '../components';
 
@@ -62,7 +63,9 @@ export function ProductsPage() {
     refreshAndRebuildImportContext,
     commitImportRows,
     canEdit,
+    canManageProducts,
     canImportProductCatalog,
+    setProductStatus,
   } = useProductMaster();
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('Active');
@@ -70,6 +73,42 @@ export function ProductsPage() {
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportWizard, setShowImportWizard] = useState(false);
+  const [statusAction, setStatusAction] = useState<{
+    product: ProductMasterEntry;
+    nextStatus: ProductStatus;
+    pending: boolean;
+    error: string | null;
+  } | null>(null);
+
+  const requestStatusChange = (product: ProductMasterEntry) => {
+    if (!canManageProducts) return;
+    setStatusAction({
+      product,
+      nextStatus: product.status === 'Active' ? 'Legacy' : 'Active',
+      pending: false,
+      error: null,
+    });
+  };
+
+  const confirmStatusChange = async () => {
+    if (!statusAction || statusAction.pending) return;
+    const owner = statusAction;
+    setStatusAction({ ...owner, pending: true, error: null });
+    try {
+      await setProductStatus(owner.product.id, owner.nextStatus);
+      setStatusAction(null);
+    } catch {
+      setStatusAction((current) =>
+        current?.product.id === owner.product.id
+          ? {
+              ...current,
+              pending: false,
+              error: 'ไม่สามารถเปลี่ยนสถานะสินค้าได้ กรุณาลองใหม่',
+            }
+          : current
+      );
+    }
+  };
 
   const categoryName = (categoryId: string): string =>
     categories.find((c) => c.id === categoryId)?.name ?? 'ไม่ระบุหมวดหมู่';
@@ -162,7 +201,7 @@ export function ProductsPage() {
         }
       />
 
-      {!canEdit && (
+      {!canEdit && !canManageProducts && (
         <p className="mb-5 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {PRODUCT_CATALOG_READ_ONLY_MESSAGE}
         </p>
@@ -253,7 +292,18 @@ export function ProductsPage() {
                 </td>
                 <td className="px-5 py-4 text-neutral-600">{p.warrantyMonths} เดือน</td>
                 <td className="px-5 py-4">
-                  <ProductStatusBadge status={p.status} />
+                  <ProductStatusBadge
+                    status={p.status}
+                    onClick={
+                      canManageProducts
+                        ? (event) => {
+                            event.stopPropagation();
+                            requestStatusChange(p);
+                          }
+                        : undefined
+                    }
+                    ariaLabel={`เปลี่ยนสถานะ ${p.name}`}
+                  />
                 </td>
                 <td className="px-5 py-4 text-right">
                   <ChevronRight className="ml-auto h-4 w-4 text-neutral-400" />
@@ -270,10 +320,15 @@ export function ProductsPage() {
       {/* Cards on mobile */}
       <div className="space-y-3 lg:hidden">
         {filtered.map((p: ProductMasterEntry) => (
-          <button
+          <div
             key={p.id}
+            role="link"
+            tabIndex={0}
             onClick={() => navigate(ROUTES.masterDataProductDetail(p.id))}
-            className="block w-full text-left animate-[rise_0.4s_ease_both]"
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') navigate(ROUTES.masterDataProductDetail(p.id));
+            }}
+            className="block w-full cursor-pointer text-left animate-[rise_0.4s_ease_both] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
             <GlassCard className="p-4">
               <div className="flex items-start justify-between gap-2">
@@ -291,13 +346,24 @@ export function ProductsPage() {
                     {categoryName(p.categoryId)}
                   </p>
                 </div>
-                <ProductStatusBadge status={p.status} />
+                <ProductStatusBadge
+                  status={p.status}
+                  onClick={
+                    canManageProducts
+                      ? (event) => {
+                          event.stopPropagation();
+                          requestStatusChange(p);
+                        }
+                      : undefined
+                  }
+                  ariaLabel={`เปลี่ยนสถานะ ${p.name}`}
+                />
               </div>
               <p className="mt-3 text-xs text-neutral-400">
                 ประกัน {p.warrantyMonths} เดือน
               </p>
             </GlassCard>
-          </button>
+          </div>
         ))}
         {filtered.length === 0 && (
           <GlassCard className="p-8 text-center text-neutral-400">
@@ -324,6 +390,26 @@ export function ProductsPage() {
           buildImportContext={buildImportContext}
           refreshAndRebuildImportContext={refreshAndRebuildImportContext}
           commitImportRows={commitImportRows}
+        />
+      )}
+
+      {statusAction && (
+        <ProductActionConfirmModal
+          title={
+            statusAction.nextStatus === 'Legacy' ? 'เลิกใช้สินค้า' : 'เปิดใช้งานสินค้า'
+          }
+          message={
+            statusAction.nextStatus === 'Legacy'
+              ? `ต้องการเปลี่ยน ${statusAction.product.name} เป็นเลิกใช้หรือไม่? สินค้าจะไม่แสดงในรายการเลือกสำหรับงานบริการใหม่ แต่ประวัติเดิมยังอยู่ครบ`
+              : `ต้องการเปิดใช้งาน ${statusAction.product.name} อีกครั้งหรือไม่?`
+          }
+          confirmLabel={
+            statusAction.nextStatus === 'Legacy' ? 'เลิกใช้สินค้า' : 'เปิดใช้งาน'
+          }
+          pending={statusAction.pending}
+          error={statusAction.error}
+          onClose={() => setStatusAction(null)}
+          onConfirm={() => void confirmStatusChange()}
         />
       )}
     </PageContainer>

@@ -13,6 +13,7 @@ import {
 } from '../services/productMasterAdmin';
 import {
   canImportProductCatalog,
+  canManageProductCatalog,
   canMutateProductCatalog,
 } from '../services/productCatalogAccess';
 import { computeCatalogFingerprint } from '../services/productCatalogFingerprint';
@@ -43,8 +44,14 @@ export interface UseProductMasterResult {
   isLoading: false;
   error: null;
   canEdit: boolean;
+  canManageProducts: boolean;
   canImportProductCatalog: boolean;
   addProduct: (input: NewProductInput) => ProductMasterEntry;
+  setProductStatus: (
+    productId: string,
+    status: ProductMasterEntry['status']
+  ) => Promise<void>;
+  deleteProduct: (productId: string) => Promise<void>;
   buildImportContext: () => ProductImportContext;
   commitImportRows: (
     rows: ImportPreviewRow<ProductImportRecord>[],
@@ -109,6 +116,9 @@ export function useProductMaster(): UseProductMasterResult {
   const brands = Array.from(new Set(products.map((p) => p.brand))).sort();
   const canEdit = canMutateProductCatalog();
   const { staffProfile } = useAuthSession();
+  const canManageProducts = canManageProductCatalog(
+    staffProfile?.canManageProducts ?? false
+  );
   const canImport = canImportProductCatalog(staffProfile?.canImportProducts ?? false);
 
   const addProduct = (input: NewProductInput): ProductMasterEntry => {
@@ -117,6 +127,21 @@ export function useProductMaster(): UseProductMasterResult {
     repositories.productMaster.createProduct(entry);
     setProducts(repositories.productMaster.getProducts());
     return entry;
+  };
+
+  const setProductStatus = async (
+    productId: string,
+    status: ProductMasterEntry['status']
+  ): Promise<void> => {
+    await repositories.productCatalogManagement.setProductStatus(productId, status);
+    await repositories.productMaster.refreshFromServer([productId]);
+    setProducts(repositories.productMaster.getProducts());
+  };
+
+  const deleteProduct = async (productId: string): Promise<void> => {
+    await repositories.productCatalogManagement.deleteProduct(productId);
+    await repositories.productMaster.refreshFromServer([productId]);
+    setProducts(repositories.productMaster.getProducts());
   };
 
   const buildImportContext = (): ProductImportContext => ({
@@ -247,8 +272,11 @@ export function useProductMaster(): UseProductMasterResult {
     isLoading: false,
     error: null,
     canEdit,
+    canManageProducts,
     canImportProductCatalog: canImport,
     addProduct,
+    setProductStatus,
+    deleteProduct,
     buildImportContext,
     refreshAndRebuildImportContext,
     commitImportRows,

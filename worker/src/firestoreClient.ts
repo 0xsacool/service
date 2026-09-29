@@ -31,6 +31,7 @@ import type {
   ProductImportDataAccess,
 } from './productImport.ts';
 import type { CatalogProduct } from '../../src/services/productIdentity.ts';
+import type { ProductCatalogDeletionDataAccess } from './productCatalogDeletion.ts';
 import type { ProductCatalogUpdateRequest } from '../../src/services/productCatalogManagement.ts';
 import type { ServiceJob } from '../../src/types/serviceJob.ts';
 import { isValidServiceReport } from '../../src/services/serviceReport.ts';
@@ -92,7 +93,8 @@ export interface FirestoreClient
     ServiceJobCompletionDataAccess,
     ServiceReportCreationDataAccess,
     ServiceReportFinalizationDataAccess,
-    ProductImportDataAccess {
+    ProductImportDataAccess,
+    ProductCatalogDeletionDataAccess {
   listAttachments(): Promise<AttachmentRetentionRecord[]>;
   // F5d-15 — a single-document read, added for the deletion executor's
   // required "re-read current metadata immediately before deleting" step
@@ -133,6 +135,11 @@ export interface FirestoreClient
   updateProductCatalogEntry(
     productId: string,
     request: ProductCatalogUpdateRequest,
+    updatedAt: string
+  ): Promise<boolean>;
+  updateProductCatalogStatus(
+    productId: string,
+    status: 'Active' | 'Legacy',
     updatedAt: string
   ): Promise<boolean>;
 }
@@ -603,6 +610,12 @@ export function createFirestoreClient(env: Env): FirestoreClient {
         'occupied-id-read'
       );
       return doc !== null;
+    },
+
+    async getCatalogProductStatus(transaction, productId) {
+      const doc = await getDocument(env, baseUrl, 'products', productId, transaction);
+      const status = doc?.fields?.status?.stringValue;
+      return status === 'Active' || status === 'Legacy' ? status : null;
     },
 
     // F5d-56B (Objective 6): the full body after token acquisition —
@@ -1093,8 +1106,137 @@ export function createFirestoreClient(env: Env): FirestoreClient {
     },
 
     // --- Privileged Product Master writes -----------------------------
+    async getProductForDeletion(transaction, productId) {
+      const doc = await getDocument(env, baseUrl, 'products', productId, transaction);
+      if (!doc) return null;
+      const status = doc.fields?.status?.stringValue;
+      if (status !== 'Active' && status !== 'Legacy') {
+        throw new Error('Product status is malformed');
+      }
+      const marker = valueToJson(doc.fields?.referenceTrackingVersion);
+      return {
+        status,
+        referenceTrackingVersion:
+          typeof marker === 'number' && Number.isInteger(marker) ? marker : null,
+      };
+    },
+
+    async hasServiceJobProductReference(transaction, productId) {
+      const token = await getAccessToken(env);
+      const response = await fetch(`${baseUrl}:runQuery`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          structuredQuery: {
+            from: [{ collectionId: 'serviceJobs' }],
+            where: {
+              fieldFilter: {
+                field: { fieldPath: 'catalogProductId' },
+                op: 'EQUAL',
+                value: { stringValue: productId },
+              },
+            },
+            limit: 1,
+          },
+          transaction: transaction.id,
+        }),
+      });
+      if (!response.ok) {
+        throw new FirestoreRequestError(
+          'hasServiceJobProductReference',
+          response.status,
+          await response.text()
+        );
+      }
+      const body = (await response.json()) as unknown;
+      if (!Array.isArray(body)) {
+        throw new Error('Firestore product reference query is malformed');
+      }
+      return body.some(
+        (entry) =>
+          entry !== null &&
+          typeof entry === 'object' &&
+          Object.hasOwn(entry as object, 'document')
+      );
+    },
+
+    async commitProductDeletion(transaction, input) {
+      const token = await getAccessToken(env);
+      const timestamp = new FirestoreTimestampValue(input.now);
+      const response = await fetch(`${baseUrl}:commit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          transaction: transaction.id,
+          writes: [
+            {
+              delete: resourceName('products', input.productId),
+              currentDocument: { exists: true },
+            },
+            {
+              update: {
+                name: resourceName('productCatalogState', 'current'),
+                fields: fields({
+                  revision: input.nextCatalogRevision,
+                  updatedAt: timestamp,
+                }),
+              },
+              updateMask: { fieldPaths: ['revision', 'updatedAt'] },
+            },
+          ],
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.text();
+        if (response.status === 409 && sanitizedGoogleErrorStatus(body) === 'ABORTED') {
+          throw new TransactionConflictError();
+        }
+        throw new FirestoreRequestError(
+          `commitProductDeletion("${input.productId}")`,
+          response.status,
+          body
+        );
+      }
+    },
+
     // Firestore Rules still deny every browser write to `products`. Product
     // edits and imports are both Worker-mediated; hard delete remains absent.
+    async updateProductCatalogStatus(productId, status, updatedAt) {
+      const token = await getAccessToken(env);
+      const url = new URL(`${baseUrl}/products/${encodeURIComponent(productId)}`);
+      url.searchParams.append('updateMask.fieldPaths', 'status');
+      url.searchParams.append('updateMask.fieldPaths', 'updatedAt');
+      url.searchParams.set('currentDocument.exists', 'true');
+      const response = await fetch(url.toString(), {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          fields: fields({
+            status,
+            updatedAt: new FirestoreTimestampValue(updatedAt),
+          }),
+        }),
+      });
+      if (response.status === 404) return false;
+      if (!response.ok) {
+        throw new FirestoreRequestError(
+          `updateProductCatalogStatus("${productId}")`,
+          response.status,
+          await response.text()
+        );
+      }
+      return true;
+    },
+
     async updateProductCatalogEntry(productId, request, updatedAt) {
       const token = await getAccessToken(env);
       const url = new URL(`${baseUrl}/products/${encodeURIComponent(productId)}`);
@@ -1230,6 +1372,7 @@ export function createFirestoreClient(env: Env): FirestoreClient {
             warrantyMonths: 12,
             accessoryIds: [],
             commonProblemIds: [],
+            referenceTrackingVersion: 1,
             createdAt: timestamp,
             updatedAt: timestamp,
           })

@@ -84,6 +84,7 @@ export function buildServerJob(
     product: intake.product,
     productCategory: intake.productCategory,
     serialNumber: intake.serialNumber,
+    catalogProductId: intake.catalogProductId ?? null,
     issue,
     description,
     status: 'Received',
@@ -312,6 +313,7 @@ export function parseServiceJobIntake(value: unknown): ServiceJobIntakePayload |
     'product',
     'productCategory',
     'serialNumber',
+    'catalogProductId',
     'problemDescription',
     'problemChips',
     'accessories',
@@ -344,6 +346,10 @@ export function parseServiceJobIntake(value: unknown): ServiceJobIntakePayload |
   // that path can actually submit; every existing caller already sends a
   // real serial and is unaffected.
   const serialNumber = string(intake.serialNumber, 150, false);
+  const catalogProductId =
+    intake.catalogProductId === undefined || intake.catalogProductId === null
+      ? null
+      : string(intake.catalogProductId, 160);
   const problemDescription = string(intake.problemDescription, 4000, false);
   const problemChips = strings(intake.problemChips, 20, 160);
   const accessories = strings(intake.accessories, 50, 160);
@@ -369,6 +375,9 @@ export function parseServiceJobIntake(value: unknown): ServiceJobIntakePayload |
     product === null ||
     productCategory === null ||
     serialNumber === null ||
+    (intake.catalogProductId !== undefined &&
+      intake.catalogProductId !== null &&
+      (catalogProductId === null || !/^[A-Za-z0-9_-]{1,160}$/.test(catalogProductId))) ||
     problemDescription === null ||
     problemChips === null ||
     accessories === null ||
@@ -392,6 +401,7 @@ export function parseServiceJobIntake(value: unknown): ServiceJobIntakePayload |
     product,
     productCategory,
     serialNumber,
+    catalogProductId,
     problemDescription,
     problemChips,
     accessories,
@@ -568,6 +578,10 @@ export interface ServiceJobCreationDataAccess {
     id: string
   ): Promise<ServiceJob | null>;
   serviceJobExists(transaction: AllocationTransaction, id: string): Promise<boolean>;
+  getCatalogProductStatus(
+    transaction: AllocationTransaction,
+    productId: string
+  ): Promise<'Active' | 'Legacy' | null>;
   commitServiceJobCreation(
     transaction: AllocationTransaction,
     input: {
@@ -586,6 +600,7 @@ export interface ServiceJobCreationDataAccess {
   ): Promise<void>;
 }
 export class TransactionConflictError extends Error {}
+export class CatalogProductUnavailableError extends Error {}
 
 export async function allocateServiceJob(input: {
   brandId: BrandId;
@@ -611,6 +626,15 @@ export async function allocateServiceJob(input: {
       const existing = await input.dataAccess.getServiceJob(transaction, existingId);
       if (!existing) throw new Error('Idempotency record has no canonical Service Job');
       return existing;
+    }
+    if (input.intake.catalogProductId) {
+      const productStatus = await input.dataAccess.getCatalogProductStatus(
+        transaction,
+        input.intake.catalogProductId
+      );
+      if (productStatus !== 'Active') {
+        throw new CatalogProductUnavailableError();
+      }
     }
     // A fresh opaque id is generated on every attempt, never reused across a
     // retry — safe because a TransactionConflictError only ever happens when

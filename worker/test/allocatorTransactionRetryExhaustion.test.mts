@@ -91,6 +91,9 @@ class FakeStore implements ServiceJobCreationDataAccess {
   async serviceJobExists(): Promise<boolean> {
     return false;
   }
+  async getCatalogProductStatus() {
+    return 'Active' as const;
+  }
   async commitServiceJobCreation(): Promise<void> {
     this.commitAttempts += 1;
     if (this.commitAttempts <= this.conflictsBeforeSuccess) {

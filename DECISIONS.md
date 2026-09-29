@@ -1146,3 +1146,21 @@ Hard delete is not part of this source phase. A future delete may remove only a 
 **Impact:** #043's statement that Import is the only catalog-mutating path is superseded only for the approved Worker-mediated edit operation above; its import invariants remain unchanged. `canImportProducts` remains import-only and does not imply edit rights. Firestore Rules continue to deny browser create/update/delete on `products/{productId}`.
 
 **Status:** Source implementation was certified and production activation completed on 2026-09-29 at runtime source `8c5f1c95e3601032e3dd5d66a0f7044a5089a1b6` / tag `product-master-ux-rollout-20260929`. The single owner profile was provisioned with `canManageProducts=true` and credentialed production UI acceptance passed. Product hard delete remains separately gated and was not implemented or authorized by this rollout.
+
+---
+
+## 051 - Product quick retirement is direct; hard delete is reference-tracked, Legacy-only, and fail-closed for pre-cutover catalog rows
+
+**Reason:** Production use showed that entering Product Detail just to switch `Active`/`Legacy` is unnecessarily slow. The owner also approved permanent deletion for genuine test/mistake rows, but only when the system can prove the Product has never been used in Service Job/history. The current production schema cannot make that proof for historical catalog rows: Service Jobs store product/category/serial snapshots and no stable Product Master foreign key, while durable Product Instance is still deferred. Matching by current name/model/SKU would be heuristic and can be wrong after catalog edits.
+
+**Decision:** `Active`/`Legacy` becomes a privileged quick action on Product list and Product Detail, still mediated by the Worker and `canManageProducts`; direct browser Firestore writes remain denied. Every quick status change requires an explicit confirmation in the UI and the backend remains authoritative.
+
+A new optional immutable Service Job field, `catalogProductId`, records the selected Product Master document id for newly-created jobs when staff selected a catalog Product. Old clients may omit it and old Service Jobs remain valid. New Service Job creation that carries `catalogProductId` must read that Product inside the same Firestore transaction and accept it only while the Product exists and is `Active`; this read serializes intake against a concurrent Product delete.
+
+New Product Master documents created by Product Import after this cutover are stamped `referenceTrackingVersion: 1`. Existing pre-cutover Product documents are deliberately **not** backfilled: their historical non-use cannot be proven from the current schema. Hard delete is therefore permitted only when all of these are true at the privileged backend boundary immediately before deletion: (1) caller has `canManageProducts=true`; (2) Product exists and status is `Legacy`; (3) `referenceTrackingVersion == 1`; (4) a transactional equality query finds zero `serviceJobs.catalogProductId == productId` references. The Product read, reference query, and delete commit belong to one retryable transaction. Any missing marker, malformed state, reference, or ambiguous dependency result fails closed without deletion.
+
+The Worker custom IAM role adds exactly `datastore.entities.delete` to its existing get/list/update/create/database-get set. No browser Rule is widened: `products/{productId}` create/update/delete remains denied to browser clients. No Product DELETE route may accept Active rows, pre-cutover rows, or rows with a Service Job reference.
+
+**Impact:** Existing old/test Product rows can still be retired instantly with `Legacy`, but cannot be hard-deleted under this safety contract unless a later separately approved historical-cleanup mechanism can establish their provenance without heuristics. This is intentional: the approved no-history-delete rule is stronger than convenience. New imported rows are fully reference-trackable and can later be safely deleted if never used. This decision does not implement Product Instance/N10.
+
+**Status:** Approved by the owner on 2026-09-29 for implementation and production rollout, including the narrowly-scoped Worker IAM delete permission. Public Tracking state is unrelated and must remain disabled.

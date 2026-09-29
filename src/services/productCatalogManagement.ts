@@ -6,6 +6,11 @@ import {
   looksLikeFormula,
 } from './productImportRequest.ts';
 
+export interface ProductCatalogStatusRequest {
+  version: 1;
+  status: ProductStatus;
+}
+
 export interface ProductCatalogUpdateRequest {
   version: 1;
   brand: string;
@@ -27,6 +32,21 @@ const ALLOWED_KEYS = new Set([
   'warrantyMonths',
   'status',
 ]);
+
+export function parseProductCatalogStatusRequest(
+  input: unknown
+): ProductCatalogStatusRequest | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const raw = input as Record<string, unknown>;
+  if (
+    Object.keys(raw).length !== 2 ||
+    raw.version !== 1 ||
+    (raw.status !== 'Active' && raw.status !== 'Legacy')
+  ) {
+    return null;
+  }
+  return { version: 1, status: raw.status };
+}
 
 function requiredText(value: unknown, maxLength: number): string | null {
   if (typeof value !== 'string') return null;

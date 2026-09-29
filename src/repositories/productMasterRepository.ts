@@ -14,6 +14,10 @@ const productsById = new Map<string, ProductMasterEntry>(
   productMasterEntries.map((product) => [product.id, product])
 );
 
+export function deleteMockProductMasterEntry(productId: string): void {
+  productsById.delete(productId);
+}
+
 export const productMasterRepository: ProductMasterRepository = {
   getCategories() {
     return productCategories;

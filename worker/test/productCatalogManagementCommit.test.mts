@@ -79,6 +79,24 @@ try {
   check('Legacy is written as a string field', fields.status?.stringValue === 'Legacy');
   check('blank SKU is written as Firestore null', fields.sku?.nullValue === null);
   check('updatedAt remains a Firestore timestamp', typeof fields.updatedAt?.timestampValue === 'string');
+
+  captured.length = 0;
+  const statusUpdated = await client.updateProductCatalogStatus(
+    'product-1',
+    'Legacy',
+    '2026-09-29T06:01:00.000Z'
+  );
+  check('quick status update reports success', statusUpdated === true);
+  check('quick status issues exactly one Firestore request', captured.length === 1);
+  const statusCall = captured[0]!;
+  check('quick status update uses PATCH', statusCall.method === 'PATCH');
+  check(
+    'quick status mask touches only status and updatedAt',
+    statusCall.url.searchParams.getAll('updateMask.fieldPaths').sort().join(',') ===
+      ['status', 'updatedAt'].sort().join(',')
+  );
+  const statusFields = statusCall.body.fields as Record<string, Record<string, unknown>>;
+  check('quick status writes Legacy exactly', statusFields.status?.stringValue === 'Legacy');
 } finally {
   globalThis.fetch = originalFetch;
 }

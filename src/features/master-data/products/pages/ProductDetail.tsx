@@ -1,16 +1,18 @@
 import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, SearchX } from 'lucide-react';
+import { ArrowLeft, SearchX, Trash2 } from 'lucide-react';
 import { useProductDetail } from '../../../../hooks/useProductDetail';
 import { PageContainer, PrimaryButton, EmptyState } from '../../../../shared/components';
 import {
   GeneralTab,
   AccessoriesTab,
   CommonProblemsTab,
+  ProductActionConfirmModal,
   ProductStatusBadge,
 } from '../components';
 import { ROUTES } from '../../../../constants';
 import { PRODUCT_CATALOG_READ_ONLY_MESSAGE } from '../../../../services/productCatalogAccess';
+import { ProductCatalogManagementError } from '../../../../repositories/types';
 
 export type ProductDetailTabKey = 'general' | 'accessories' | 'commonProblems';
 
@@ -93,6 +95,8 @@ export function ProductDetail() {
     allAccessories,
     allCommonProblems,
     updateGeneral,
+    setStatus,
+    deleteProduct,
     toggleAccessory,
     addAccessory,
     toggleCommonProblem,
@@ -102,6 +106,43 @@ export function ProductDetail() {
     canEditKnowledge,
   } = useProductDetail(id ?? '');
   const [activeTab, setActiveTab] = useState<ProductDetailTabKey>('general');
+  const [action, setAction] = useState<{
+    kind: 'status' | 'delete';
+    pending: boolean;
+    error: string | null;
+  } | null>(null);
+
+  const confirmAction = async () => {
+    if (!product || !action || action.pending) return;
+    const owner = action;
+    setAction({ ...owner, pending: true, error: null });
+    try {
+      if (owner.kind === 'status') {
+        await setStatus(product.status === 'Active' ? 'Legacy' : 'Active');
+        setAction(null);
+        return;
+      }
+      await deleteProduct();
+      navigate(ROUTES.masterDataProducts);
+    } catch (error) {
+      let message = 'ไม่สามารถดำเนินการกับสินค้านี้ได้ กรุณาลองใหม่';
+      if (error instanceof ProductCatalogManagementError) {
+        if (error.code === 'product_in_use') {
+          message = 'ไม่สามารถลบได้ เนื่องจากสินค้านี้มีประวัติงานบริการ';
+        } else if (error.code === 'product_reference_unknown') {
+          message =
+            'สินค้านี้เป็นข้อมูลเดิม ระบบยังพิสูจน์ประวัติการใช้งานไม่ได้ จึงไม่อนุญาตให้ลบถาวร';
+        } else if (error.code === 'product_not_legacy') {
+          message = 'ต้องเปลี่ยนสินค้าเป็นเลิกใช้ก่อนจึงจะลบถาวรได้';
+        }
+      }
+      setAction((current) =>
+        current?.kind === owner.kind
+          ? { ...current, pending: false, error: message }
+          : current
+      );
+    }
+  };
 
   if (!product) {
     return (
@@ -150,8 +191,36 @@ export function ProductDetail() {
             {product.sku ? ` · SKU ${product.sku}` : ''}
           </p>
         </div>
-        <ProductStatusBadge status={product.status} />
+        <ProductStatusBadge
+          status={product.status}
+          onClick={
+            canEdit
+              ? () => setAction({ kind: 'status', pending: false, error: null })
+              : undefined
+          }
+          ariaLabel={`เปลี่ยนสถานะ ${product.name}`}
+        />
       </div>
+
+      {canEdit && product.status === 'Legacy' && (
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {product.referenceTrackingVersion === 1 ? (
+            <button
+              type="button"
+              onClick={() => setAction({ kind: 'delete', pending: false, error: null })}
+              className="inline-flex items-center gap-2 rounded-full bg-red-50 px-4 py-2 text-sm font-medium text-red-700 ring-1 ring-red-200 transition hover:bg-red-100"
+            >
+              <Trash2 className="h-4 w-4" />
+              ลบสินค้าถาวร
+            </button>
+          ) : (
+            <p className="rounded-2xl bg-neutral-100 px-4 py-2 text-xs text-neutral-500">
+              ข้อมูลสินค้าเดิม: เลิกใช้ได้ แต่ยังไม่อนุญาตให้ลบถาวรเพราะไม่มี reference
+              ย้อนหลังที่พิสูจน์ได้
+            </p>
+          )}
+        </div>
+      )}
 
       <ProductDetailTabs activeTab={activeTab} onChange={setActiveTab} />
 
@@ -206,6 +275,37 @@ export function ProductDetail() {
             canEdit={canEditKnowledge}
           />
         </div>
+      )}
+
+      {action && (
+        <ProductActionConfirmModal
+          title={
+            action.kind === 'delete'
+              ? 'ลบสินค้าถาวร'
+              : product.status === 'Active'
+                ? 'เลิกใช้สินค้า'
+                : 'เปิดใช้งานสินค้า'
+          }
+          message={
+            action.kind === 'delete'
+              ? `ระบบจะตรวจประวัติงานบริการอีกครั้งก่อนลบ ${product.name} หากพบการอ้างอิงแม้แต่หนึ่งรายการ ระบบจะไม่ลบสินค้า`
+              : product.status === 'Active'
+                ? `ต้องการเปลี่ยน ${product.name} เป็นเลิกใช้หรือไม่? สินค้าจะไม่แสดงในงานบริการใหม่`
+                : `ต้องการเปิดใช้งาน ${product.name} อีกครั้งหรือไม่?`
+          }
+          confirmLabel={
+            action.kind === 'delete'
+              ? 'ลบถาวร'
+              : product.status === 'Active'
+                ? 'เลิกใช้สินค้า'
+                : 'เปิดใช้งาน'
+          }
+          destructive={action.kind === 'delete'}
+          pending={action.pending}
+          error={action.error}
+          onClose={() => setAction(null)}
+          onConfirm={() => void confirmAction()}
+        />
       )}
     </PageContainer>
   );

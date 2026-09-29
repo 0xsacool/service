@@ -46,4 +46,8 @@ export interface ProductMasterEntry {
   // stay undefined for anything never touched by an import.
   sku?: string;
   variant?: string;
+  // Decision #051 — present only on catalog rows created after stable
+  // Service Job catalog references became authoritative for hard-delete
+  // safety. Pre-cutover rows deliberately remain undefined/fail-closed.
+  referenceTrackingVersion?: 1;
 }

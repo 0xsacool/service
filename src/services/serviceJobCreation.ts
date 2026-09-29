@@ -61,6 +61,7 @@ export interface ServiceJobIntakePayload {
   product: string;
   productCategory: string;
   serialNumber: string;
+  catalogProductId?: string | null;
   problemDescription: string;
   problemChips: string[];
   accessories: string[];
@@ -116,6 +117,7 @@ export function buildServiceJobIntakePayload(
     product: `${input.product.productName} ${input.product.model}`.trim(),
     productCategory: input.product.category,
     serialNumber: input.product.serialNumber,
+    catalogProductId: input.product.catalogProductId ?? null,
     problemDescription: input.intake.problemDescription,
     problemChips: input.intake.problemChips,
     accessories: input.intake.accessories,
@@ -175,6 +177,7 @@ export function buildServerOwnedServiceJob(
     product: intake.product,
     productCategory: intake.productCategory,
     serialNumber: intake.serialNumber,
+    catalogProductId: intake.catalogProductId ?? null,
     issue,
     description,
     status: 'Received',

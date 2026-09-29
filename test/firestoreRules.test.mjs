@@ -404,6 +404,11 @@ test('existing authorized ServiceJob updates preserve privileged fields and deny
     })
   );
   await assertFails(
+    updateDoc(doc(brunoDb, 'serviceJobs', 'job-bruno'), {
+      catalogProductId: 'forged-product-id',
+    })
+  );
+  await assertFails(
     setDoc(doc(brunoDb, 'serviceJobs', 'job-token-set-on-create'), {
       ...serviceJob('bruno-thailand'),
       publicTrackingTokenHash: 'arbitrary-client-issued-token-hash',

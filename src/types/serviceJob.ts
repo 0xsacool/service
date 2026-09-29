@@ -64,6 +64,10 @@ export interface ServiceJob {
   product: string;
   productCategory: string;
   serialNumber: string;
+  // Decision #051 — immutable stable Product Master reference for jobs
+  // created from a catalog selection after the hard-delete safety cutover.
+  // Legacy/manual jobs may omit it or normalize to null.
+  catalogProductId?: string | null;
   issue: string;
   description: string;
   status: ServiceJobStatus;

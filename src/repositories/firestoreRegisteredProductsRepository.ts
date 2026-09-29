@@ -105,6 +105,7 @@ export function createFirestoreRegisteredProductsRepository(
           warrantyStatus: job.warranty ? 'in_warranty' : 'out_of_warranty',
           lastServiceDate: job.updatedAt,
           previousServiceCount: 1,
+          catalogProductId: job.catalogProductId ?? null,
         });
       }
 

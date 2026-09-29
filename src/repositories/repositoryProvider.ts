@@ -21,7 +21,10 @@ import { attachmentsRepository } from './attachmentsRepository';
 import { customersRepository } from './customersRepository';
 import { createMockProductImportRepository } from './mockProductImportRepository';
 import { productKnowledgeRepository } from './productKnowledgeRepository';
-import { productMasterRepository } from './productMasterRepository';
+import {
+  deleteMockProductMasterEntry,
+  productMasterRepository,
+} from './productMasterRepository';
 import { productsRepository } from './productsRepository';
 import { registeredProductsRepository } from './registeredProductsRepository';
 import { searchRepository } from './searchRepository';
@@ -69,6 +72,12 @@ export function createMockRepositoryProvider(): RepositoryProvider {
           status: request.status,
         });
       },
+      async setProductStatus(productId, status) {
+        productMasterRepository.updateProduct(productId, { status });
+      },
+      async deleteProduct(productId) {
+        deleteMockProductMasterEntry(productId);
+      },
     },
     productImport: createMockProductImportRepository(),
     productKnowledge: productKnowledgeRepository,
@@ -115,7 +124,11 @@ function createUnavailableRepositoryProvider(): RepositoryProvider {
       updateProduct: fail,
       refreshFromServer: reject,
     },
-    productCatalogManagement: { updateProduct: reject },
+    productCatalogManagement: {
+      updateProduct: reject,
+      setProductStatus: reject,
+      deleteProduct: reject,
+    },
     productImport: { commit: reject },
     productKnowledge: {
       getAllAccessories: () => [],
