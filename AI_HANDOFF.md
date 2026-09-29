@@ -8,7 +8,29 @@
 
 ---
 
-## Current production override — Product Quick Toggle + Safe Delete ACTIVATED (2026-09-29)
+## Current production override — CLEAN PRE-HANDOFF STATE (2026-09-29)
+
+Production business/test data has been intentionally reset before handoff. The
+final Firestore backend inventory contains **zero business documents**. The only
+remaining top-level data is protected configuration/master state:
+`staffProfiles` (1), `brandApprovalPolicies` (1), and `brands` (2). R2
+`service-tech-attachments-prod` is empty (0 objects / 0 B). Product Master and
+Dashboard visibly show zero data.
+
+A pre-reset reconstruction backup is retained outside the repository at
+`C:\\service-backups\\prehandoff-reset-20260929\\firestore-backup.json`
+(7,631,440 bytes; SHA-256
+`7885F6F64CA6614709F6211069173A307D3EFE44A4CCCC78ABD1D02496EBF7BB`).
+The source repository must not commit or expose that backup.
+
+Post-reset production smoke created synthetic
+`BRN-2026-000001` / `SR-2026-000001`, verifying clean sequence restart and
+core write health. The smoke data was then removed and backend inventory
+returned to zero business documents. Public Tracking remains disabled. Do not
+restore old test data unless the owner explicitly requests recovery from the
+backup.
+
+## Historical production override — Product Quick Toggle + Safe Delete ACTIVATED (2026-09-29)
 
 Current production source is
 `b41d1dbda4b6b5666cc11980afc60da36d64e382` on published branch

@@ -23,7 +23,35 @@ Platform: responsive web application (mobile through desktop), Thai-first for
 Version 1 (see [DECISIONS.md](DECISIONS.md) #003). The authenticated staff app
 is live at `https://luxace-service.web.app` on the Firestore + Worker runtime.
 
-## Current production Product Quick Toggle + Safe Delete activation (2026-09-29)
+## Current production pre-handoff clean reset (2026-09-29)
+
+Production business/test data has been reset to a clean handoff state while
+preserving system access/configuration. A reconstruction-grade Firestore backup
+was captured before deletion and moved outside the repository to
+`C:\\service-backups\\prehandoff-reset-20260929\\firestore-backup.json`
+(7,631,440 bytes, SHA-256
+`7885F6F64CA6614709F6211069173A307D3EFE44A4CCCC78ABD1D02496EBF7BB`).
+The pre-reset inventory contained 823 top-level documents: 819 business/test
+documents plus the protected system/master records `staffProfiles` (1),
+`brandApprovalPolicies` (1), and `brands` (2).
+
+Final direct Firestore verification shows no remaining business collections or
+documents; only those protected collections remain (4 documents total). R2
+bucket `service-tech-attachments-prod` is also empty (0 objects / 0 B).
+The reset therefore clears Product Master, customers, Service Jobs, Service
+Reports/approval/draft/idempotency artifacts, Product import/catalog state,
+public-tracking/intake artifacts, and business numbering state without changing
+staff access, Firebase Auth, Rules, IAM, Worker/Hosting configuration, or source
+code.
+
+A bounded post-reset smoke workflow successfully created
+`BRN-2026-000001` / `SR-2026-000001` for synthetic customer/product data,
+proving numbering restarted cleanly at 000001 and core production writes still
+work. The smoke data was then removed; a fresh backend inventory returned no
+business documents. Production UI independently shows Dashboard counters at 0
+and Product Master `0 from 0`. Public Tracking remains disabled.
+
+## Historical production Product Quick Toggle + Safe Delete activation (2026-09-29)
 
 Product Quick Toggle + Safe Hard Delete is live from source
 `b41d1dbda4b6b5666cc11980afc60da36d64e382` (published branch
