@@ -3,6 +3,7 @@ import type {
   CustomersRepository,
   ProductCatalogManagementRepository,
   ProductImportRepository,
+  ProductKnowledgeManagementRepository,
   ProductKnowledgeRepository,
   ProductMasterRepository,
   ProductsRepository,
@@ -16,6 +17,10 @@ import type { BrandId } from '../types';
 import type { WorkerTokenProvider } from '../auth/workerTokenProvider';
 import { backendKind } from '../config/backend';
 import { buildProductMasterEntry } from '../services/productMasterAdmin';
+import {
+  buildAccessoryDefinition,
+  buildCommonProblemDefinition,
+} from '../services/productKnowledgeAdmin';
 import { createMockApprovalConsoleRepository } from './mockApprovalConsoleRepository';
 import { filesBackendKind } from '../config/filesBackend';
 import { attachmentsRepository } from './attachmentsRepository';
@@ -48,6 +53,7 @@ export interface RepositoryProvider {
   productCatalogManagement: ProductCatalogManagementRepository;
   productImport: ProductImportRepository;
   productKnowledge: ProductKnowledgeRepository;
+  productKnowledgeManagement: ProductKnowledgeManagementRepository;
   attachments: AttachmentsRepository;
   serviceReports: ServiceReportsRepository;
   approvalConsole: ApprovalConsoleRepository;
@@ -98,6 +104,65 @@ export function createMockRepositoryProvider(): RepositoryProvider {
     },
     productImport: createMockProductImportRepository(),
     productKnowledge: productKnowledgeRepository,
+    productKnowledgeManagement: {
+      async createAccessory(productId, request) {
+        const created = buildAccessoryDefinition(
+          request.label,
+          new Set(productKnowledgeRepository.getAllAccessories().map((item) => item.id))
+        );
+        productKnowledgeRepository.createAccessory(created);
+        const product = productMasterRepository.getProductById(productId);
+        if (!product) throw unavailableError();
+        productMasterRepository.updateProduct(productId, {
+          accessoryIds: [...new Set([...product.accessoryIds, created.id])],
+        });
+        return created.id;
+      },
+      async setAccessoryAssociation(productId, accessoryId, include) {
+        const product = productMasterRepository.getProductById(productId);
+        if (!product) throw unavailableError();
+        productMasterRepository.updateProduct(productId, {
+          accessoryIds: include
+            ? [...new Set([...product.accessoryIds, accessoryId])]
+            : product.accessoryIds.filter((id) => id !== accessoryId),
+        });
+      },
+      async createCommonProblem(productId, request) {
+        const created = buildCommonProblemDefinition(
+          {
+            label: request.label,
+            status: request.status,
+            description: request.description ?? undefined,
+          },
+          new Set(
+            productKnowledgeRepository.getAllCommonProblems().map((item) => item.id)
+          )
+        );
+        productKnowledgeRepository.createCommonProblem(created);
+        const product = productMasterRepository.getProductById(productId);
+        if (!product) throw unavailableError();
+        productMasterRepository.updateProduct(productId, {
+          commonProblemIds: [...new Set([...product.commonProblemIds, created.id])],
+        });
+        return created.id;
+      },
+      async updateCommonProblem(problemId, request) {
+        productKnowledgeRepository.updateCommonProblem(problemId, {
+          label: request.label,
+          status: request.status,
+          description: request.description ?? undefined,
+        });
+      },
+      async setCommonProblemAssociation(productId, problemId, include) {
+        const product = productMasterRepository.getProductById(productId);
+        if (!product) throw unavailableError();
+        productMasterRepository.updateProduct(productId, {
+          commonProblemIds: include
+            ? [...new Set([...product.commonProblemIds, problemId])]
+            : product.commonProblemIds.filter((id) => id !== problemId),
+        });
+      },
+    },
     attachments: attachmentsRepository,
     serviceReports: serviceReportsRepository,
     approvalConsole: createMockApprovalConsoleRepository(),
@@ -156,6 +221,14 @@ function createUnavailableRepositoryProvider(): RepositoryProvider {
       getCommonProblemsByIds: () => [],
       createCommonProblem: fail,
       updateCommonProblem: fail,
+      refreshFromServer: reject,
+    },
+    productKnowledgeManagement: {
+      createAccessory: reject,
+      setAccessoryAssociation: reject,
+      createCommonProblem: reject,
+      updateCommonProblem: reject,
+      setCommonProblemAssociation: reject,
     },
     attachments: {
       getForJob: () => [],
@@ -228,6 +301,8 @@ async function createFirestoreBackedRepositoryProvider(
     await import('./workerProductImportRepository');
   const { createWorkerProductCatalogManagementRepository } =
     await import('./workerProductCatalogManagementRepository');
+  const { createWorkerProductKnowledgeRepositories } =
+    await import('./workerProductKnowledgeRepository');
   const { createFirestoreServiceReportsRepository } =
     await import('./firestoreServiceReportsRepository');
   const { createWorkerApprovalConsoleRepository } =
@@ -241,16 +316,19 @@ async function createFirestoreBackedRepositoryProvider(
   const customers = await activateWithDiagnostics('customers', () =>
     createFirestoreCustomersRepository(brandId)
   );
+  const productKnowledge = await createWorkerProductKnowledgeRepositories(tokenProvider);
   return {
     ...createUnavailableRepositoryProvider(),
     serviceJobs,
     customers,
     productMaster: await activateWithDiagnostics('productMaster', () =>
-      createFirestoreProductMasterRepository()
+      createFirestoreProductMasterRepository(productKnowledge.read)
     ),
     productCatalogManagement:
       createWorkerProductCatalogManagementRepository(tokenProvider),
     productImport: createWorkerProductImportRepository(tokenProvider),
+    productKnowledge: productKnowledge.read,
+    productKnowledgeManagement: productKnowledge.management,
     attachments: await activateWithDiagnostics('attachments', () =>
       resolveAttachmentsRepository(serviceJobs, tokenProvider)
     ),

@@ -8,6 +8,34 @@
 
 ---
 
+## Current source override — Product Knowledge Management pending deploy (2026-09-29)
+
+Real owner use of the first production Product (BOE021 / BOE021-WH) exposed
+that Accessories and Common Problems were still mock-only management surfaces.
+Decision #054 now makes these production-safe without opening browser Firestore
+writes.
+
+Definitions are reusable global masters: `accessories` and `commonProblems`.
+Products retain only `accessoryIds` / `commonProblemIds`. Authenticated staff
+may read definitions; every production create/edit/association write requires
+literal server-side `canManageProducts=true`. Create operations atomically
+create the definition and associate it with the current Product. Association
+toggles and common-problem edits are narrow Worker-mediated writes followed by
+authoritative Product/Knowledge refresh.
+
+The mobile Product Detail UI now exposes Add controls with pending/error states.
+Association routes use `PUT`; Worker CORS was corrected to allow `PUT` and
+the boundary is regression-tested. Common problems are retired with
+`Inactive` rather than hard-deleted; accessory edit/delete is intentionally
+not introduced in this slice.
+
+Targeted Product Knowledge tests, Firestore wire-shape tests, full Worker
+regression, Worker typecheck, root TypeScript, targeted ESLint, and production
+build pass. Production activation is pending guarded Worker promotion followed
+by Hosting-only deploy. Do not create synthetic Product Knowledge data for
+acceptance. Public Tracking must remain disabled and the seven protected config
+modifications/historical worktrees must remain untouched.
+
 ## Current production override — BRUNO Product Categories ACTIVATED (2026-09-29)
 
 Owner real-use review found that Product Master still exposed legacy Apple

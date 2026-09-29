@@ -13,22 +13,53 @@ export function AccessoriesTab({
 }: {
   product: ProductMasterEntry;
   allAccessories: AccessoryDefinition[];
-  onToggle: (accessoryId: string) => void;
-  onAdd: (label: string) => void;
+  onToggle: (accessoryId: string) => Promise<void>;
+  onAdd: (label: string) => Promise<void>;
   canEdit: boolean;
 }) {
   const [newLabel, setNewLabel] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [pendingToggleId, setPendingToggleId] = useState<string | null>(null);
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
+    if (pending) return;
     const result = validateNewAccessoryInput(newLabel);
     if (!result.valid) {
       setError(result.errors.label);
       return;
     }
-    onAdd(newLabel.trim());
-    setNewLabel('');
+    setPending(true);
     setError(null);
+    try {
+      await onAdd(newLabel.trim());
+      setNewLabel('');
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error && saveError.message
+          ? saveError.message
+          : 'ไม่สามารถเพิ่มอุปกรณ์เสริมได้ กรุณาลองใหม่'
+      );
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const handleToggle = async (accessoryId: string) => {
+    if (pendingToggleId) return;
+    setPendingToggleId(accessoryId);
+    setError(null);
+    try {
+      await onToggle(accessoryId);
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error && saveError.message
+          ? saveError.message
+          : 'ไม่สามารถเปลี่ยนอุปกรณ์เสริมของสินค้านี้ได้'
+      );
+    } finally {
+      setPendingToggleId(null);
+    }
   };
 
   return (
@@ -50,8 +81,8 @@ export function AccessoriesTab({
               <input
                 type="checkbox"
                 checked={checked}
-                onChange={() => onToggle(accessory.id)}
-                disabled={!canEdit}
+                onChange={() => void handleToggle(accessory.id)}
+                disabled={!canEdit || pendingToggleId !== null}
                 className="h-4 w-4 rounded border-neutral-300 text-brand-500 focus:ring-brand-400"
               />
               <span className="text-sm text-ink">{accessory.label}</span>
@@ -65,21 +96,39 @@ export function AccessoriesTab({
         )}
       </div>
 
+      {error && (
+        <p
+          role="alert"
+          className="mt-4 rounded-2xl bg-danger-50 px-4 py-3 text-sm text-danger-700"
+        >
+          {error}
+        </p>
+      )}
+
       {canEdit && (
-        <div className="mt-5 flex gap-2 border-t border-black/5 pt-5">
-          <div className="flex-1">
+        <div className="mt-5 flex flex-col gap-2 border-t border-black/5 pt-5 sm:flex-row">
+          <div className="min-w-0 flex-1">
             <input
               value={newLabel}
-              onChange={(e) => setNewLabel(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+              onChange={(e) => {
+                setNewLabel(e.target.value);
+                setError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleAdd();
+              }}
               placeholder="เพิ่มอุปกรณ์เสริมใหม่…"
+              disabled={pending}
               className={inputClass()}
             />
-            {error && <p className="mt-1.5 text-xs text-danger-600">{error}</p>}
           </div>
-          <PrimaryButton onClick={handleAdd} className="shrink-0 px-5 py-2.5 text-sm">
+          <PrimaryButton
+            onClick={() => void handleAdd()}
+            disabled={pending}
+            className="w-full shrink-0 px-5 py-2.5 text-sm sm:w-auto"
+          >
             <Plus className="h-4 w-4" />
-            เพิ่ม
+            {pending ? 'กำลังเพิ่ม...' : 'เพิ่ม'}
           </PrimaryButton>
         </div>
       )}

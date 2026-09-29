@@ -18,9 +18,12 @@ export function CommonProblemsTab({
 }: {
   product: ProductMasterEntry;
   allCommonProblems: CommonProblemDefinition[];
-  onToggle: (problemId: string) => void;
-  onAdd: (input: NewCommonProblemInput) => void;
-  onUpdateDefinition: (id: string, patch: Partial<CommonProblemDefinition>) => void;
+  onToggle: (problemId: string) => Promise<void>;
+  onAdd: (input: NewCommonProblemInput) => Promise<void>;
+  onUpdateDefinition: (
+    id: string,
+    patch: Partial<CommonProblemDefinition>
+  ) => Promise<void>;
   canEdit: boolean;
 }) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
@@ -28,10 +31,29 @@ export function CommonProblemsTab({
   const [editingProblem, setEditingProblem] = useState<CommonProblemDefinition | null>(
     null
   );
+  const [pendingToggleId, setPendingToggleId] = useState<string | null>(null);
+  const [toggleError, setToggleError] = useState<string | null>(null);
 
   const filtered = allCommonProblems.filter(
     (p) => statusFilter === 'All' || p.status === statusFilter
   );
+
+  const handleToggle = async (problemId: string) => {
+    if (pendingToggleId) return;
+    setPendingToggleId(problemId);
+    setToggleError(null);
+    try {
+      await onToggle(problemId);
+    } catch (error) {
+      setToggleError(
+        error instanceof Error && error.message
+          ? error.message
+          : 'ไม่สามารถเปลี่ยนปัญหาที่พบบ่อยของสินค้านี้ได้'
+      );
+    } finally {
+      setPendingToggleId(null);
+    }
+  };
 
   return (
     <GlassCard className="p-6">
@@ -40,7 +62,7 @@ export function CommonProblemsTab({
         {canEdit && (
           <PrimaryButton
             onClick={() => setShowAddModal(true)}
-            className="px-4 py-2.5 text-sm"
+            className="w-full px-4 py-2.5 text-sm sm:w-auto"
           >
             <Plus className="h-4 w-4" />
             เพิ่มปัญหา
@@ -51,7 +73,7 @@ export function CommonProblemsTab({
         ปัญหาที่พบบ่อยสำหรับสินค้านี้ หากไม่ใช้แล้วให้เปลี่ยนเป็นเลิกใช้แทนการลบ
       </p>
 
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
         {STATUS_FILTERS.map((f) => (
           <button
             key={f}
@@ -67,6 +89,15 @@ export function CommonProblemsTab({
         ))}
       </div>
 
+      {toggleError && (
+        <p
+          role="alert"
+          className="mb-4 rounded-2xl bg-danger-50 px-4 py-3 text-sm text-danger-700"
+        >
+          {toggleError}
+        </p>
+      )}
+
       <div className="space-y-2">
         {filtered.map((problem) => {
           const checked = product.commonProblemIds.includes(problem.id);
@@ -78,8 +109,8 @@ export function CommonProblemsTab({
               <input
                 type="checkbox"
                 checked={checked}
-                onChange={() => onToggle(problem.id)}
-                disabled={!canEdit}
+                onChange={() => void handleToggle(problem.id)}
+                disabled={!canEdit || pendingToggleId !== null}
                 className="mt-1 h-4 w-4 rounded border-neutral-300 text-brand-500 focus:ring-brand-400"
               />
               <div className="min-w-0 flex-1">
@@ -92,7 +123,7 @@ export function CommonProblemsTab({
                         : 'bg-neutral-100 text-neutral-500 ring-neutral-200'
                     }`}
                   >
-                    {problem.status}
+                    {problem.status === 'Active' ? 'ใช้งาน' : 'เลิกใช้'}
                   </span>
                 </div>
                 {problem.description && (
@@ -119,8 +150,8 @@ export function CommonProblemsTab({
       {canEdit && showAddModal && (
         <CommonProblemModal
           onClose={() => setShowAddModal(false)}
-          onSave={(input) => {
-            onAdd(input);
+          onSave={async (input) => {
+            await onAdd(input);
             setShowAddModal(false);
           }}
         />
@@ -130,8 +161,8 @@ export function CommonProblemsTab({
         <CommonProblemModal
           existing={editingProblem}
           onClose={() => setEditingProblem(null)}
-          onSave={(input) => {
-            onUpdateDefinition(editingProblem.id, input);
+          onSave={async (input) => {
+            await onUpdateDefinition(editingProblem.id, input);
             setEditingProblem(null);
           }}
         />

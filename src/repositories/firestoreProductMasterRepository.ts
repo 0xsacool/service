@@ -8,9 +8,8 @@ import {
 } from 'firebase/firestore';
 import { getFirestoreDb } from '../lib/firebase/firebase';
 import type { ProductMasterEntry } from '../types';
-import type { ProductMasterRepository } from './types';
+import type { ProductKnowledgeRepository, ProductMasterRepository } from './types';
 import { productCategories } from './mockData/productMaster.mock';
-import { productKnowledgeRepository } from './productKnowledgeRepository';
 import { fromFirestoreData, PRODUCTS_COLLECTION } from './firestore/productMasterMapping';
 import {
   describeFirestoreInitError,
@@ -56,7 +55,9 @@ export function rejectClientProductMutation(): never {
 // (which starts talking to Firestore and triggers the seed migration) only
 // happens when repositoryProvider.ts's 'firestore' case actually calls it —
 // never merely by this module being imported.
-export async function createFirestoreProductMasterRepository(): Promise<ProductMasterRepository> {
+export async function createFirestoreProductMasterRepository(
+  productKnowledge: ProductKnowledgeRepository
+): Promise<ProductMasterRepository> {
   const firestore = getFirestoreDb();
   let productsById = new Map<string, ProductMasterEntry>();
 
@@ -131,12 +132,12 @@ export async function createFirestoreProductMasterRepository(): Promise<ProductM
     getAccessoriesForProduct(productId) {
       const product = productsById.get(productId);
       if (!product) return [];
-      return productKnowledgeRepository.getAccessoriesByIds(product.accessoryIds);
+      return productKnowledge.getAccessoriesByIds(product.accessoryIds);
     },
     getCommonProblemsForProduct(productId) {
       const product = productsById.get(productId);
       if (!product) return [];
-      return productKnowledgeRepository.getCommonProblemsByIds(product.commonProblemIds);
+      return productKnowledge.getCommonProblemsByIds(product.commonProblemIds);
     },
     createProduct() {
       return rejectClientProductMutation();

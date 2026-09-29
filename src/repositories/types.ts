@@ -32,6 +32,10 @@ import type {
   ProductCatalogCreateRequest,
   ProductCatalogUpdateRequest,
 } from '../services/productCatalogManagement';
+import type {
+  AccessoryCreateRequest,
+  CommonProblemWriteRequest,
+} from '../services/productKnowledgeManagement';
 import type { ProductImportRowIssue } from '../services/productImportClassification';
 
 export type ServiceJobUpdate = Omit<
@@ -322,6 +326,52 @@ export interface ProductKnowledgeRepository {
     id: string,
     patch: Partial<CommonProblemDefinition>
   ): CommonProblemDefinition;
+  refreshFromServer(): Promise<void>;
+}
+
+export type ProductKnowledgeManagementErrorCode =
+  | 'authentication_required'
+  | 'forbidden'
+  | 'validation_failed'
+  | 'not_found'
+  | 'conflict'
+  | 'dependency_unavailable';
+
+export class ProductKnowledgeManagementError extends Error {
+  public readonly status: number | null;
+  public readonly code: ProductKnowledgeManagementErrorCode | null;
+  constructor(
+    message: string,
+    status: number | null,
+    code: ProductKnowledgeManagementErrorCode | null
+  ) {
+    super(message);
+    this.name = 'ProductKnowledgeManagementError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export interface ProductKnowledgeManagementRepository {
+  createAccessory(productId: string, request: AccessoryCreateRequest): Promise<string>;
+  setAccessoryAssociation(
+    productId: string,
+    accessoryId: string,
+    include: boolean
+  ): Promise<void>;
+  createCommonProblem(
+    productId: string,
+    request: CommonProblemWriteRequest
+  ): Promise<string>;
+  updateCommonProblem(
+    problemId: string,
+    request: CommonProblemWriteRequest
+  ): Promise<void>;
+  setCommonProblemAssociation(
+    productId: string,
+    problemId: string,
+    include: boolean
+  ): Promise<void>;
 }
 
 // The file itself is never part of the input's return shape — Attachment's

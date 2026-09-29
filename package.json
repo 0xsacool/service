@@ -27,6 +27,7 @@
     "test:return-form": "node --test --test-concurrency=1 test/productReturnForm.test.mjs",
     "test:return-form-guard": "node --test --test-concurrency=1 test/productReturnFormGuardRuntime.test.mjs",
     "test:product-categories": "node --test test/productCategories.test.mjs",
+    "test:product-knowledge": "node --test test/productKnowledgeManagement.test.mjs",
     "test:firestore-rules": "firebase emulators:exec --config firebase.rules-test.json --only firestore \"node --test test/firestoreRules.test.mjs\""
   },
   "dependencies": {

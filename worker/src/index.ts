@@ -42,6 +42,22 @@ import {
   ProductCatalogDuplicateError,
 } from './productCatalogCreation.ts';
 import {
+  parseAccessoryCreateRequest,
+  parseCommonProblemWriteRequest,
+  parseProductKnowledgeAssociationRequest,
+} from '../../src/services/productKnowledgeManagement.ts';
+import {
+  createAccessoryForProduct,
+  createCommonProblemForProduct,
+  listProductKnowledge,
+  ProductKnowledgeConflictError,
+  ProductKnowledgeNotFoundError,
+  ProductKnowledgeRetryExhaustedError,
+  ProductKnowledgeTooLargeError,
+  setProductKnowledgeAssociation,
+  updateCommonProblemDefinition,
+} from './productKnowledgeManagement.ts';
+import {
   deleteProductSafely,
   ProductDeleteInUseError,
   ProductDeleteNotFoundError,
@@ -134,7 +150,11 @@ const MAX_SERVICE_JOB_COMPLETION_BODY_BYTES = 1024;
 const PRODUCTS_PATH = '/products';
 const PRODUCTS_IMPORT_PATH = '/products/import';
 const PRODUCTS_PREFIX = '/products/';
+const PRODUCT_KNOWLEDGE_PATH = '/product-knowledge';
+const PRODUCT_KNOWLEDGE_COMMON_PROBLEMS_PREFIX =
+  '/product-knowledge/common-problems/';
 const MAX_PRODUCT_UPDATE_BODY_BYTES = 8 * 1024;
+const MAX_PRODUCT_KNOWLEDGE_BODY_BYTES = 8 * 1024;
 
 function isPublicTrackingEnabled(env: Env): boolean {
   return env.PUBLIC_TRACKING_ENABLED === 'true';
@@ -675,6 +695,179 @@ async function handleProductCreate(
 
 function isSafeProductId(value: string): boolean {
   return /^[A-Za-z0-9_-]{1,160}$/.test(value);
+}
+
+async function readProductKnowledgeJson(request: Request): Promise<unknown> {
+  const mediaType = request.headers
+    .get('Content-Type')
+    ?.split(';', 1)[0]
+    ?.trim()
+    .toLowerCase();
+  const contentLength = request.headers.get('Content-Length');
+  if (
+    !request.body ||
+    mediaType !== 'application/json' ||
+    (contentLength !== null &&
+      Number(contentLength) > MAX_PRODUCT_KNOWLEDGE_BODY_BYTES)
+  ) {
+    throw new SyntaxError('Invalid Product Knowledge request');
+  }
+  const raw = await readBodyWithLimit(
+    request.body,
+    MAX_PRODUCT_KNOWLEDGE_BODY_BYTES
+  );
+  return JSON.parse(new TextDecoder().decode(raw));
+}
+
+function productKnowledgeFailure(error: unknown): Response {
+  if (error instanceof ProductKnowledgeNotFoundError) {
+    return json({ code: 'not_found', error: 'Product Knowledge target not found' }, { status: 404 });
+  }
+  if (error instanceof ProductKnowledgeConflictError) {
+    return json({ code: 'conflict', error: 'A Product Knowledge item with this name already exists' }, { status: 409 });
+  }
+  if (
+    error instanceof FileTooLargeError ||
+    error instanceof SyntaxError
+  ) {
+    return json({ code: 'validation_failed', error: 'Invalid Product Knowledge request' }, { status: 400 });
+  }
+  if (
+    error instanceof ProductKnowledgeTooLargeError ||
+    error instanceof ProductKnowledgeRetryExhaustedError
+  ) {
+    return json({ code: 'dependency_unavailable', error: 'Unable to update Product Knowledge safely' }, { status: 503 });
+  }
+  console.error('[files-worker] Product Knowledge operation failed');
+  return json({ code: 'dependency_unavailable', error: 'Unable to update Product Knowledge' }, { status: 503 });
+}
+
+async function handleProductKnowledgeList(
+  request: Request,
+  env: Env,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  const authorization = await authorizeStaffCreation(request, env, dependencies);
+  if (authorization instanceof Response) return authorization;
+  try {
+    return json(await listProductKnowledge(authorization.client), { status: 200 });
+  } catch (error) {
+    return productKnowledgeFailure(error);
+  }
+}
+
+async function handleAccessoryCreate(
+  request: Request,
+  env: Env,
+  productId: string,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  if (!isSafeProductId(productId)) {
+    return json({ code: 'validation_failed', error: 'Invalid product id' }, { status: 400 });
+  }
+  const authorization = await authorizeProductManagement(request, env, dependencies);
+  if (authorization instanceof Response) return authorization;
+  try {
+    const parsed = parseAccessoryCreateRequest(await readProductKnowledgeJson(request));
+    if (!parsed) {
+      return json({ code: 'validation_failed', error: 'Invalid accessory request' }, { status: 400 });
+    }
+    const accessoryId = await createAccessoryForProduct({
+      productId,
+      request: parsed,
+      dataAccess: authorization.client,
+    });
+    return json({ accessoryId }, { status: 201 });
+  } catch (error) {
+    return productKnowledgeFailure(error);
+  }
+}
+
+async function handleCommonProblemCreate(
+  request: Request,
+  env: Env,
+  productId: string,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  if (!isSafeProductId(productId)) {
+    return json({ code: 'validation_failed', error: 'Invalid product id' }, { status: 400 });
+  }
+  const authorization = await authorizeProductManagement(request, env, dependencies);
+  if (authorization instanceof Response) return authorization;
+  try {
+    const parsed = parseCommonProblemWriteRequest(await readProductKnowledgeJson(request));
+    if (!parsed) {
+      return json({ code: 'validation_failed', error: 'Invalid common problem request' }, { status: 400 });
+    }
+    const problemId = await createCommonProblemForProduct({
+      productId,
+      request: parsed,
+      dataAccess: authorization.client,
+    });
+    return json({ problemId }, { status: 201 });
+  } catch (error) {
+    return productKnowledgeFailure(error);
+  }
+}
+
+async function handleProductKnowledgeAssociation(
+  request: Request,
+  env: Env,
+  productId: string,
+  kind: 'accessory' | 'commonProblem',
+  knowledgeId: string,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  if (!isSafeProductId(productId) || !isSafeProductId(knowledgeId)) {
+    return json({ code: 'validation_failed', error: 'Invalid Product Knowledge id' }, { status: 400 });
+  }
+  const authorization = await authorizeProductManagement(request, env, dependencies);
+  if (authorization instanceof Response) return authorization;
+  try {
+    const parsed = parseProductKnowledgeAssociationRequest(
+      await readProductKnowledgeJson(request)
+    );
+    if (!parsed) {
+      return json({ code: 'validation_failed', error: 'Invalid association request' }, { status: 400 });
+    }
+    await setProductKnowledgeAssociation({
+      productId,
+      kind,
+      knowledgeId,
+      include: parsed.include,
+      dataAccess: authorization.client,
+    });
+    return json({ productId, knowledgeId, include: parsed.include }, { status: 200 });
+  } catch (error) {
+    return productKnowledgeFailure(error);
+  }
+}
+
+async function handleCommonProblemUpdate(
+  request: Request,
+  env: Env,
+  problemId: string,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  if (!isSafeProductId(problemId)) {
+    return json({ code: 'validation_failed', error: 'Invalid common problem id' }, { status: 400 });
+  }
+  const authorization = await authorizeProductManagement(request, env, dependencies);
+  if (authorization instanceof Response) return authorization;
+  try {
+    const parsed = parseCommonProblemWriteRequest(await readProductKnowledgeJson(request));
+    if (!parsed) {
+      return json({ code: 'validation_failed', error: 'Invalid common problem request' }, { status: 400 });
+    }
+    await updateCommonProblemDefinition({
+      problemId,
+      request: parsed,
+      dataAccess: authorization.client,
+    });
+    return json({ problemId }, { status: 200 });
+  } catch (error) {
+    return productKnowledgeFailure(error);
+  }
 }
 
 async function handleProductUpdate(
@@ -1371,6 +1564,144 @@ export function createWorkerHandler(
 
     if (request.method === 'POST' && url.pathname === PRODUCTS_IMPORT_PATH) {
       return withCors(await handleProductImport(request, env, dependencies), request, env);
+    }
+
+    if (request.method === 'GET' && url.pathname === PRODUCT_KNOWLEDGE_PATH) {
+      return withCors(
+        await handleProductKnowledgeList(request, env, dependencies),
+        request,
+        env
+      );
+    }
+
+    if (
+      request.method === 'PATCH' &&
+      url.pathname.startsWith(PRODUCT_KNOWLEDGE_COMMON_PROBLEMS_PREFIX)
+    ) {
+      let problemId: string;
+      try {
+        problemId = decodeURIComponent(
+          url.pathname.slice(PRODUCT_KNOWLEDGE_COMMON_PROBLEMS_PREFIX.length)
+        );
+      } catch {
+        return withCors(
+          json(
+            { code: 'validation_failed', error: 'Invalid common problem id' },
+            { status: 400 }
+          ),
+          request,
+          env
+        );
+      }
+      return withCors(
+        await handleCommonProblemUpdate(request, env, problemId, dependencies),
+        request,
+        env
+      );
+    }
+
+    if (
+      (request.method === 'POST' || request.method === 'PUT') &&
+      url.pathname.startsWith(PRODUCTS_PREFIX)
+    ) {
+      let productKnowledgePath: string;
+      try {
+        productKnowledgePath = decodeURIComponent(
+          url.pathname.slice(PRODUCTS_PREFIX.length)
+        );
+      } catch {
+        return withCors(
+          json(
+            { code: 'validation_failed', error: 'Invalid Product Knowledge path' },
+            { status: 400 }
+          ),
+          request,
+          env
+        );
+      }
+
+      const parts = productKnowledgePath.split('/').filter(Boolean);
+      if (request.method === 'POST' && parts.length === 2) {
+        const productId = parts[0];
+        const collectionName = parts[1];
+        if (!productId || !collectionName) {
+          return withCors(
+            json(
+              { code: 'validation_failed', error: 'Invalid Product Knowledge path' },
+              { status: 400 }
+            ),
+            request,
+            env
+          );
+        }
+        if (collectionName === 'accessories') {
+          return withCors(
+            await handleAccessoryCreate(request, env, productId, dependencies),
+            request,
+            env
+          );
+        }
+        if (collectionName === 'common-problems') {
+          return withCors(
+            await handleCommonProblemCreate(request, env, productId, dependencies),
+            request,
+            env
+          );
+        }
+      }
+
+      if (request.method === 'PUT' && parts.length === 3) {
+        const productId = parts[0];
+        const collectionName = parts[1];
+        const knowledgeId = parts[2];
+        if (!productId || !collectionName || !knowledgeId) {
+          return withCors(
+            json(
+              { code: 'validation_failed', error: 'Invalid Product Knowledge path' },
+              { status: 400 }
+            ),
+            request,
+            env
+          );
+        }
+        if (collectionName === 'accessories') {
+          return withCors(
+            await handleProductKnowledgeAssociation(
+              request,
+              env,
+              productId,
+              'accessory',
+              knowledgeId,
+              dependencies
+            ),
+            request,
+            env
+          );
+        }
+        if (collectionName === 'common-problems') {
+          return withCors(
+            await handleProductKnowledgeAssociation(
+              request,
+              env,
+              productId,
+              'commonProblem',
+              knowledgeId,
+              dependencies
+            ),
+            request,
+            env
+          );
+        }
+      }
+
+      return withCors(
+        json(
+          { code: 'validation_failed', error: 'Invalid Product Knowledge path' },
+          { status: 400 }
+        ),
+        request,
+        env
+      );
     }
 
     if (

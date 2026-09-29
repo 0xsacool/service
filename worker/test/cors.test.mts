@@ -48,9 +48,10 @@ console.log('Running Worker CORS preflight regression test');
     'preflight echoes the exact requesting allowed origin',
     response.headers.get('Access-Control-Allow-Origin') === 'http://localhost:5173'
   );
+  const allowMethods = response.headers.get('Access-Control-Allow-Methods') ?? '';
   check(
     'preflight allows the methods this Worker actually serves',
-    (response.headers.get('Access-Control-Allow-Methods') ?? '').includes('POST')
+    allowMethods.includes('POST') && allowMethods.includes('PUT')
   );
 }
 

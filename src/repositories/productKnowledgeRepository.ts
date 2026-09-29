@@ -49,4 +49,7 @@ export const productKnowledgeRepository: ProductKnowledgeRepository = {
     commonProblemsById.set(id, updated);
     return updated;
   },
+  async refreshFromServer() {
+    // Mock state is already synchronously authoritative.
+  },
 };

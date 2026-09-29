@@ -6,15 +6,12 @@ import type {
   ProductMasterEntry,
 } from '../types';
 import { repositories } from '../repositories/repositoryProvider';
+import { ProductKnowledgeManagementError } from '../repositories/types';
 import {
   buildProductUpdateFromInput,
   type NewProductInput,
 } from '../services/productMasterAdmin';
-import {
-  buildAccessoryDefinition,
-  buildCommonProblemDefinition,
-  type NewCommonProblemInput,
-} from '../services/productKnowledgeAdmin';
+import type { NewCommonProblemInput } from '../services/productKnowledgeAdmin';
 import {
   canManageProductCatalog,
   canMutateProductCatalog,
@@ -32,21 +29,49 @@ export interface UseProductDetailResult {
   updateGeneral: (input: NewProductInput) => Promise<void>;
   setStatus: (status: ProductMasterEntry['status']) => Promise<void>;
   deleteProduct: () => Promise<void>;
-  toggleAccessory: (accessoryId: string) => void;
-  addAccessory: (label: string) => void;
-  toggleCommonProblem: (problemId: string) => void;
-  addCommonProblem: (input: NewCommonProblemInput) => void;
+  toggleAccessory: (accessoryId: string) => Promise<void>;
+  addAccessory: (label: string) => Promise<void>;
+  toggleCommonProblem: (problemId: string) => Promise<void>;
+  addCommonProblem: (input: NewCommonProblemInput) => Promise<void>;
   updateCommonProblemDefinition: (
     id: string,
     patch: Partial<CommonProblemDefinition>
-  ) => void;
+  ) => Promise<void>;
+}
+
+function productKnowledgeUiError(error: unknown): Error {
+  if (error instanceof ProductKnowledgeManagementError) {
+    if (error.code === 'conflict') {
+      return new Error('มีรายการชื่อเดียวกันอยู่ในข้อมูลความรู้สินค้าแล้ว', {
+        cause: error,
+      });
+    }
+    if (error.code === 'forbidden') {
+      return new Error('บัญชีนี้ไม่มีสิทธิ์จัดการข้อมูลความรู้สินค้า', {
+        cause: error,
+      });
+    }
+    if (error.code === 'not_found') {
+      return new Error('ไม่พบสินค้าหรือรายการข้อมูลความรู้ที่ต้องการ', {
+        cause: error,
+      });
+    }
+    if (error.code === 'validation_failed') {
+      return new Error('ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบแล้วลองอีกครั้ง', {
+        cause: error,
+      });
+    }
+  }
+  return new Error('ไม่สามารถบันทึกข้อมูลความรู้สินค้าได้ กรุณาลองใหม่', {
+    cause: error,
+  });
 }
 
 // Everything a Product Detail page needs, backed by the productMaster
 // (product identity) and productKnowledge (accessories/common problems
-// master catalogs) repositories, resolved through the Repository Provider —
-// mirrors useProductMaster's local-state-plus-resync pattern so the page
-// re-renders immediately after every mutation.
+// master catalogs) repositories, resolved through the Repository Provider.
+// Production writes are Worker-mediated through productKnowledgeManagement;
+// the browser never writes Product Knowledge or Product associations directly.
 export function useProductDetail(productId: string): UseProductDetailResult {
   const [product, setProduct] = useState<ProductMasterEntry | undefined>(() =>
     repositories.productMaster.getProductById(productId)
@@ -64,10 +89,25 @@ export function useProductDetail(productId: string): UseProductDetailResult {
   ).sort();
   const { staffProfile } = useAuthSession();
   const canEdit = canManageProductCatalog(staffProfile?.canManageProducts ?? false);
-  const canEditKnowledge = canMutateProductCatalog();
+  const canEditKnowledge = canEdit;
 
   const refreshProduct = () =>
     setProduct(repositories.productMaster.getProductById(productId));
+
+  const refreshKnowledge = () => {
+    setAllAccessories(repositories.productKnowledge.getAllAccessories());
+    setAllCommonProblems(repositories.productKnowledge.getAllCommonProblems());
+  };
+
+  const refreshProductFromServer = async () => {
+    await repositories.productMaster.refreshFromServer([productId]);
+    refreshProduct();
+  };
+
+  const refreshKnowledgeFromServer = async () => {
+    await repositories.productKnowledge.refreshFromServer();
+    refreshKnowledge();
+  };
 
   const updateGeneral = async (input: NewProductInput): Promise<void> => {
     if (!product) return;
@@ -89,82 +129,99 @@ export function useProductDetail(productId: string): UseProductDetailResult {
       warrantyMonths: input.warrantyMonths,
       status: input.status,
     });
-    await repositories.productMaster.refreshFromServer([product.id]);
-    refreshProduct();
+    await refreshProductFromServer();
   };
 
   const setStatus = async (status: ProductMasterEntry['status']): Promise<void> => {
     if (!product) return;
     await repositories.productCatalogManagement.setProductStatus(product.id, status);
-    await repositories.productMaster.refreshFromServer([product.id]);
-    refreshProduct();
+    await refreshProductFromServer();
   };
 
   const deleteProduct = async (): Promise<void> => {
     if (!product) return;
-    const productId = product.id;
-    await repositories.productCatalogManagement.deleteProduct(productId);
-    await repositories.productMaster.refreshFromServer([productId]);
+    const currentProductId = product.id;
+    await repositories.productCatalogManagement.deleteProduct(currentProductId);
+    await repositories.productMaster.refreshFromServer([currentProductId]);
     setProduct(undefined);
   };
 
-  const setProductAssociation = (
-    field: 'accessoryIds' | 'commonProblemIds',
-    id: string,
-    include: boolean
-  ) => {
+  const toggleAccessory = async (accessoryId: string): Promise<void> => {
     if (!product) return;
-    const current = product[field];
-    const next = include
-      ? [...current, id]
-      : current.filter((existing) => existing !== id);
-    repositories.productMaster.updateProduct(product.id, { [field]: next });
-    refreshProduct();
+    try {
+      await repositories.productKnowledgeManagement.setAccessoryAssociation(
+        product.id,
+        accessoryId,
+        !product.accessoryIds.includes(accessoryId)
+      );
+      await refreshProductFromServer();
+    } catch (error) {
+      throw productKnowledgeUiError(error);
+    }
   };
 
-  const toggleAccessory = (accessoryId: string) => {
+  const addAccessory = async (label: string): Promise<void> => {
     if (!product) return;
-    setProductAssociation(
-      'accessoryIds',
-      accessoryId,
-      !product.accessoryIds.includes(accessoryId)
-    );
+    try {
+      await repositories.productKnowledgeManagement.createAccessory(product.id, {
+        version: 1,
+        label: label.trim(),
+      });
+      await Promise.all([refreshKnowledgeFromServer(), refreshProductFromServer()]);
+    } catch (error) {
+      throw productKnowledgeUiError(error);
+    }
   };
 
-  // Newly created accessories/problems are assumed relevant to the product
-  // the admin was looking at when they added them, so they're associated
-  // immediately rather than left for a second toggle.
-  const addAccessory = (label: string) => {
-    const existingIds = new Set(allAccessories.map((a) => a.id));
-    const created = buildAccessoryDefinition(label, existingIds);
-    repositories.productKnowledge.createAccessory(created);
-    setAllAccessories(repositories.productKnowledge.getAllAccessories());
-    setProductAssociation('accessoryIds', created.id, true);
-  };
-
-  const toggleCommonProblem = (problemId: string) => {
+  const toggleCommonProblem = async (problemId: string): Promise<void> => {
     if (!product) return;
-    setProductAssociation(
-      'commonProblemIds',
-      problemId,
-      !product.commonProblemIds.includes(problemId)
-    );
+    try {
+      await repositories.productKnowledgeManagement.setCommonProblemAssociation(
+        product.id,
+        problemId,
+        !product.commonProblemIds.includes(problemId)
+      );
+      await refreshProductFromServer();
+    } catch (error) {
+      throw productKnowledgeUiError(error);
+    }
   };
 
-  const addCommonProblem = (input: NewCommonProblemInput) => {
-    const existingIds = new Set(allCommonProblems.map((p) => p.id));
-    const created = buildCommonProblemDefinition(input, existingIds);
-    repositories.productKnowledge.createCommonProblem(created);
-    setAllCommonProblems(repositories.productKnowledge.getAllCommonProblems());
-    setProductAssociation('commonProblemIds', created.id, true);
+  const addCommonProblem = async (input: NewCommonProblemInput): Promise<void> => {
+    if (!product) return;
+    try {
+      await repositories.productKnowledgeManagement.createCommonProblem(product.id, {
+        version: 1,
+        label: input.label.trim(),
+        status: input.status,
+        description: input.description?.trim() || null,
+      });
+      await Promise.all([refreshKnowledgeFromServer(), refreshProductFromServer()]);
+    } catch (error) {
+      throw productKnowledgeUiError(error);
+    }
   };
 
-  const updateCommonProblemDefinition = (
+  const updateCommonProblemDefinition = async (
     id: string,
     patch: Partial<CommonProblemDefinition>
-  ) => {
-    repositories.productKnowledge.updateCommonProblem(id, patch);
-    setAllCommonProblems(repositories.productKnowledge.getAllCommonProblems());
+  ): Promise<void> => {
+    const existing = allCommonProblems.find((problem) => problem.id === id);
+    if (!existing) return;
+    try {
+      await repositories.productKnowledgeManagement.updateCommonProblem(id, {
+        version: 1,
+        label: (patch.label ?? existing.label).trim(),
+        status: patch.status ?? existing.status,
+        description:
+          patch.description === undefined
+            ? (existing.description ?? null)
+            : patch.description?.trim() || null,
+      });
+      await refreshKnowledgeFromServer();
+    } catch (error) {
+      throw productKnowledgeUiError(error);
+    }
   };
 
   return {

@@ -12,9 +12,6 @@ import {
 
 const STATUS_OPTIONS: CommonProblemStatus[] = ['Active', 'Inactive'];
 
-// Serves both "Add Problem" (no `existing`) and "Edit" (pre-filled from
-// `existing`) — one modal, one validation path, instead of two near-
-// identical forms.
 export function CommonProblemModal({
   existing,
   onClose,
@@ -22,14 +19,17 @@ export function CommonProblemModal({
 }: {
   existing?: CommonProblemDefinition;
   onClose: () => void;
-  onSave: (input: NewCommonProblemInput) => void;
+  onSave: (input: NewCommonProblemInput) => Promise<void>;
 }) {
   const [label, setLabel] = useState(existing?.label ?? '');
   const [status, setStatus] = useState<CommonProblemStatus>(existing?.status ?? 'Active');
   const [description, setDescription] = useState(existing?.description ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [pending, setPending] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (pending) return;
     const input: NewCommonProblemInput = {
       label: label.trim(),
       status,
@@ -42,7 +42,20 @@ export function CommonProblemModal({
       return;
     }
 
-    onSave(input);
+    setErrors({});
+    setSaveError(null);
+    setPending(true);
+    try {
+      await onSave(input);
+    } catch (error) {
+      setSaveError(
+        error instanceof Error && error.message
+          ? error.message
+          : 'ไม่สามารถบันทึกปัญหาที่พบบ่อยได้ กรุณาลองใหม่'
+      );
+    } finally {
+      setPending(false);
+    }
   };
 
   return (
@@ -55,8 +68,12 @@ export function CommonProblemModal({
         <Field label="ชื่อปัญหา">
           <input
             value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="e.g. Rice Burns"
+            onChange={(e) => {
+              setLabel(e.target.value);
+              setSaveError(null);
+            }}
+            placeholder="เช่น เตาไม่ร้อน"
+            disabled={pending}
             className={inputClass()}
           />
           {errors.label && (
@@ -71,6 +88,7 @@ export function CommonProblemModal({
                 key={option}
                 type="button"
                 onClick={() => setStatus(option)}
+                disabled={pending}
                 className={`rounded-full px-4 py-2 text-sm font-medium transition-all ${
                   status === option
                     ? 'bg-brand-500 text-white shadow-sm'
@@ -86,17 +104,36 @@ export function CommonProblemModal({
         <Field label="รายละเอียด" hint="ไม่บังคับ">
           <textarea
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(e) => {
+              setDescription(e.target.value);
+              setSaveError(null);
+            }}
             rows={3}
             placeholder="รายละเอียดเพิ่มเติมสำหรับเจ้าหน้าที่…"
+            disabled={pending}
             className={inputClass()}
           />
         </Field>
 
+        {saveError && (
+          <p
+            role="alert"
+            className="rounded-2xl bg-danger-50 px-4 py-3 text-sm text-danger-700"
+          >
+            {saveError}
+          </p>
+        )}
+
         <div className="flex justify-end gap-3 pt-2">
-          <SecondaryButton onClick={onClose}>ยกเลิก</SecondaryButton>
-          <PrimaryButton onClick={handleSubmit}>
-            {existing ? 'บันทึกการเปลี่ยนแปลง' : 'เพิ่มปัญหา'}
+          <SecondaryButton onClick={onClose} disabled={pending}>
+            ยกเลิก
+          </SecondaryButton>
+          <PrimaryButton onClick={() => void handleSubmit()} disabled={pending}>
+            {pending
+              ? 'กำลังบันทึก...'
+              : existing
+                ? 'บันทึกการเปลี่ยนแปลง'
+                : 'เพิ่มปัญหา'}
           </PrimaryButton>
         </div>
       </div>

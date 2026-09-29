@@ -34,6 +34,11 @@ import type {
   ProductCatalogCreateCommitInput,
   ProductCatalogCreateDataAccess,
 } from './productCatalogCreation.ts';
+import type { ProductKnowledgeDataAccess } from './productKnowledgeManagement.ts';
+import type {
+  AccessoryDefinition,
+  CommonProblemDefinition,
+} from '../../src/types/productMaster.ts';
 import type { CatalogProduct } from '../../src/services/productIdentity.ts';
 import type { ProductCatalogDeletionDataAccess } from './productCatalogDeletion.ts';
 import type { ProductCatalogUpdateRequest } from '../../src/services/productCatalogManagement.ts';
@@ -99,7 +104,8 @@ export interface FirestoreClient
     ServiceReportFinalizationDataAccess,
     ProductImportDataAccess,
     ProductCatalogCreateDataAccess,
-    ProductCatalogDeletionDataAccess {
+    ProductCatalogDeletionDataAccess,
+    ProductKnowledgeDataAccess {
   listAttachments(): Promise<AttachmentRetentionRecord[]>;
   // F5d-15 — a single-document read, added for the deletion executor's
   // required "re-read current metadata immediately before deleting" step
@@ -473,6 +479,40 @@ export function createFirestoreClient(env: Env): FirestoreClient {
     update: { name: resourceName(collection, id), fields: fields(value) },
     currentDocument: { exists: false },
   });
+
+  async function listKnowledgeDocuments(
+    collectionName: 'accessories' | 'commonProblems',
+    transaction?: AllocationTransaction
+  ): Promise<FirestoreDocument[]> {
+    const token = await getAccessToken(env);
+    const documents: FirestoreDocument[] = [];
+    let pageToken: string | undefined;
+
+    do {
+      const url = new URL(`${baseUrl}/${collectionName}`);
+      url.searchParams.set('pageSize', '300');
+      if (transaction) url.searchParams.set('transaction', transaction.id);
+      if (pageToken) url.searchParams.set('pageToken', pageToken);
+      const response = await fetch(url.toString(), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) {
+        throw new FirestoreRequestError(
+          `listKnowledgeDocuments("${collectionName}")`,
+          response.status,
+          await response.text()
+        );
+      }
+      const body = (await response.json()) as {
+        documents?: FirestoreDocument[];
+        nextPageToken?: string;
+      };
+      documents.push(...(body.documents ?? []));
+      pageToken = body.nextPageToken;
+    } while (pageToken);
+
+    return documents;
+  }
 
   // F5d-56B (Terra F5d-56A blocker, Objective 4): the full body after
   // token acquisition — fetch(), the not-ok check, response.json(), and
@@ -1329,6 +1369,292 @@ export function createFirestoreClient(env: Env): FirestoreClient {
         }
         throw new FirestoreRequestError(
           `commitProductCatalogCreate("${input.productId}")`,
+          response.status,
+          body
+        );
+      }
+    },
+
+    async listAccessoryDefinitions(transaction) {
+      const docs = await listKnowledgeDocuments('accessories', transaction);
+      return docs
+        .map((doc): AccessoryDefinition | null => {
+          const id = doc.name.split('/').pop() ?? '';
+          const label = valueToJson(doc.fields?.label);
+          return id && typeof label === 'string' && label.length > 0
+            ? { id, label }
+            : null;
+        })
+        .filter((item): item is AccessoryDefinition => item !== null);
+    },
+
+    async listCommonProblemDefinitions(transaction) {
+      const docs = await listKnowledgeDocuments('commonProblems', transaction);
+      return docs
+        .map((doc): CommonProblemDefinition | null => {
+          const id = doc.name.split('/').pop() ?? '';
+          const label = valueToJson(doc.fields?.label);
+          const status = valueToJson(doc.fields?.status);
+          const description = valueToJson(doc.fields?.description);
+          if (
+            !id ||
+            typeof label !== 'string' ||
+            label.length === 0 ||
+            (status !== 'Active' && status !== 'Inactive')
+          ) {
+            return null;
+          }
+          return {
+            id,
+            label,
+            status,
+            ...(typeof description === 'string' && description.length > 0
+              ? { description }
+              : {}),
+          };
+        })
+        .filter((item): item is CommonProblemDefinition => item !== null);
+    },
+
+    async getProductKnowledgeTarget(transaction, productId) {
+      const doc = await getDocument(
+        env,
+        baseUrl,
+        'products',
+        productId,
+        transaction
+      );
+      if (!doc) return null;
+      const accessoryIds = valueToJson(doc.fields?.accessoryIds);
+      const commonProblemIds = valueToJson(doc.fields?.commonProblemIds);
+      return {
+        accessoryIds: Array.isArray(accessoryIds)
+          ? accessoryIds.filter((value): value is string => typeof value === 'string')
+          : [],
+        commonProblemIds: Array.isArray(commonProblemIds)
+          ? commonProblemIds.filter((value): value is string => typeof value === 'string')
+          : [],
+      };
+    },
+
+    async getAccessoryDefinition(transaction, accessoryId) {
+      const doc = await getDocument(
+        env,
+        baseUrl,
+        'accessories',
+        accessoryId,
+        transaction
+      );
+      if (!doc) return null;
+      const label = valueToJson(doc.fields?.label);
+      return typeof label === 'string' && label.length > 0
+        ? { id: accessoryId, label }
+        : null;
+    },
+
+    async getCommonProblemDefinition(transaction, problemId) {
+      const doc = await getDocument(
+        env,
+        baseUrl,
+        'commonProblems',
+        problemId,
+        transaction
+      );
+      if (!doc) return null;
+      const label = valueToJson(doc.fields?.label);
+      const status = valueToJson(doc.fields?.status);
+      const description = valueToJson(doc.fields?.description);
+      if (
+        typeof label !== 'string' ||
+        label.length === 0 ||
+        (status !== 'Active' && status !== 'Inactive')
+      ) {
+        return null;
+      }
+      return {
+        id: problemId,
+        label,
+        status,
+        ...(typeof description === 'string' && description.length > 0
+          ? { description }
+          : {}),
+      };
+    },
+
+    async commitAccessoryCreate(transaction, input) {
+      const token = await getAccessToken(env);
+      const timestamp = new FirestoreTimestampValue(input.now);
+      const writes = [
+        createWrite('accessories', input.accessory.id, {
+          label: input.accessory.label,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        }),
+        {
+          update: {
+            name: resourceName('products', input.productId),
+            fields: fields({
+              accessoryIds: input.accessoryIds,
+              updatedAt: timestamp,
+            }),
+          },
+          updateMask: { fieldPaths: ['accessoryIds', 'updatedAt'] },
+          currentDocument: { exists: true },
+        },
+      ];
+      const response = await fetch(`${baseUrl}:commit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ transaction: transaction.id, writes }),
+      });
+      if (!response.ok) {
+        const body = await response.text();
+        if (
+          response.status === 409 &&
+          sanitizedGoogleErrorStatus(body) === 'ABORTED'
+        ) {
+          throw new TransactionConflictError();
+        }
+        throw new FirestoreRequestError(
+          `commitAccessoryCreate("${input.accessory.id}")`,
+          response.status,
+          body
+        );
+      }
+    },
+
+    async commitCommonProblemCreate(transaction, input) {
+      const token = await getAccessToken(env);
+      const timestamp = new FirestoreTimestampValue(input.now);
+      const writes = [
+        createWrite('commonProblems', input.problem.id, {
+          label: input.problem.label,
+          status: input.problem.status,
+          description: input.problem.description ?? null,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        }),
+        {
+          update: {
+            name: resourceName('products', input.productId),
+            fields: fields({
+              commonProblemIds: input.commonProblemIds,
+              updatedAt: timestamp,
+            }),
+          },
+          updateMask: { fieldPaths: ['commonProblemIds', 'updatedAt'] },
+          currentDocument: { exists: true },
+        },
+      ];
+      const response = await fetch(`${baseUrl}:commit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ transaction: transaction.id, writes }),
+      });
+      if (!response.ok) {
+        const body = await response.text();
+        if (
+          response.status === 409 &&
+          sanitizedGoogleErrorStatus(body) === 'ABORTED'
+        ) {
+          throw new TransactionConflictError();
+        }
+        throw new FirestoreRequestError(
+          `commitCommonProblemCreate("${input.problem.id}")`,
+          response.status,
+          body
+        );
+      }
+    },
+
+    async commitProductKnowledgeAssociation(transaction, input) {
+      const token = await getAccessToken(env);
+      const timestamp = new FirestoreTimestampValue(input.now);
+      const response = await fetch(`${baseUrl}:commit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          transaction: transaction.id,
+          writes: [
+            {
+              update: {
+                name: resourceName('products', input.productId),
+                fields: fields({
+                  [input.field]: input.ids,
+                  updatedAt: timestamp,
+                }),
+              },
+              updateMask: { fieldPaths: [input.field, 'updatedAt'] },
+              currentDocument: { exists: true },
+            },
+          ],
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.text();
+        if (
+          response.status === 409 &&
+          sanitizedGoogleErrorStatus(body) === 'ABORTED'
+        ) {
+          throw new TransactionConflictError();
+        }
+        throw new FirestoreRequestError(
+          `commitProductKnowledgeAssociation("${input.productId}")`,
+          response.status,
+          body
+        );
+      }
+    },
+
+    async commitCommonProblemUpdate(transaction, input) {
+      const token = await getAccessToken(env);
+      const timestamp = new FirestoreTimestampValue(input.now);
+      const response = await fetch(`${baseUrl}:commit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          transaction: transaction.id,
+          writes: [
+            {
+              update: {
+                name: resourceName('commonProblems', input.problem.id),
+                fields: fields({
+                  label: input.problem.label,
+                  status: input.problem.status,
+                  description: input.problem.description ?? null,
+                  updatedAt: timestamp,
+                }),
+              },
+              updateMask: {
+                fieldPaths: ['label', 'status', 'description', 'updatedAt'],
+              },
+              currentDocument: { exists: true },
+            },
+          ],
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.text();
+        if (
+          response.status === 409 &&
+          sanitizedGoogleErrorStatus(body) === 'ABORTED'
+        ) {
+          throw new TransactionConflictError();
+        }
+        throw new FirestoreRequestError(
+          `commitCommonProblemUpdate("${input.problem.id}")`,
           response.status,
           body
         );

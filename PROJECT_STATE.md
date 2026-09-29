@@ -51,6 +51,39 @@ work. The smoke data was then removed; a fresh backend inventory returned no
 business documents. Production UI independently shows Dashboard counters at 0
 and Product Master `0 from 0`. Public Tracking remains disabled.
 
+## Current source change pending production activation — Product Knowledge Management (2026-09-29)
+
+Real owner use of the first Product Master row (BRUNO Compact Hot Plate 1200W,
+model BOE021, SKU BOE021-WH) exposed the next production gap: the Accessories
+and Common Problems tabs rendered their read-only states, but their existing Add
+controls were hidden because Product Knowledge still used the mock-only direct
+mutation gate.
+
+Decision #054 now implements production-safe Product Knowledge management.
+Authenticated staff read reusable `accessories` and `commonProblems`
+definitions through the Worker; every create/edit/association write requires
+server-side `canManageProducts=true`. New definitions are atomically created
+and associated with the current Product in one retryable Firestore transaction.
+Association toggles update only the relevant Product id array, and common-problem
+edits are global reusable-definition edits. The browser performs no direct
+Firestore Product/Knowledge write and waits for authoritative server refresh
+before reporting success.
+
+The mobile UI now exposes the existing accessory input/Add control and
+Common Problem Add/Edit controls with pending/error states. A discovered CORS
+boundary defect was fixed before rollout: association writes use `PUT`, so
+`PUT` is now explicitly included in the Worker CORS method allowlist with
+regression coverage.
+
+Deterministic evidence passes: Product Knowledge route/security tests, Firestore
+atomic wire-shape tests, Product Knowledge frontend tests, full Worker regression,
+Worker typecheck, root TypeScript, targeted ESLint, and the production build
+(`/assets/index-XYDq5gyI.js`). Scoped Prettier/diff checks remain part of the
+final source gate. Production activation is pending guarded Worker promotion
+then Hosting-only deploy. No synthetic Product Knowledge write is permitted for
+rollout acceptance; the owner will enter the first real accessory/problem after
+the controls are live. Public Tracking must remain OFF.
+
 ## Current production BRUNO Product Categories activation (2026-09-29)
 
 Owner real-use review of the Product Master Add modal found that the inherited
