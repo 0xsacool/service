@@ -51,14 +51,25 @@ work. The smoke data was then removed; a fresh backend inventory returned no
 business documents. Production UI independently shows Dashboard counters at 0
 and Product Master `0 from 0`. Public Tracking remains disabled.
 
-## Current source change pending production activation — Product Master Direct Add (2026-09-29)
+## Current production Product Master Direct Add activation (2026-09-29)
 
 Real-use testing after the clean reset confirmed that Product Master needs a direct
-single-product bootstrap path. The source now implements Decision #052:
-authorized staff with `canManageProducts=true` see the existing **เพิ่มสินค้า**
-action in Firestore mode, while the actual create is performed only by the
-authenticated Worker `POST /products` route. The browser Product repository
-still rejects direct Firestore creates.
+single-product bootstrap path. Decision #052 is now live from source
+`a1afbf34c759ba3be42280cfd2f03c70f7974cb2`: authorized staff with
+`canManageProducts=true` see **เพิ่มสินค้า** in Firestore mode, while the
+actual create is performed only by authenticated Worker `POST /products`.
+The browser Product repository still rejects direct Firestore creates.
+
+Worker candidate `edafa1e0-6892-4526-9118-f85f0a43b00f` passed the
+production-version guard before promotion and now receives 100% traffic.
+Post-promotion probes are health 200, unauthenticated D24/D25 401/401, and both
+Public Tracking routes 404; Public Tracking therefore remains disabled.
+Hosting-only deployment from the locally previewed production build completed
+successfully and live `index.html` matches the local artifact reference to
+`/assets/index-ExKXxw_D.js`. Credentialed production UI verification loaded
+Product Master as FIRESTORE + WORKER, still 0/0 rows, and confirmed the
+**เพิ่มสินค้า** action is visible. An unauthenticated live `POST /products`
+returns 401, proving the new route is deployed and fail-closed before any write.
 
 The Worker validates the exact bounded create contract, requires a real SKU and
 known category, reuses Product Import identity matching to reject duplicates,
@@ -66,10 +77,9 @@ and commits the new Product plus catalog revision atomically in a retryable
 Firestore transaction. New direct-created rows carry
 `referenceTrackingVersion=1`, empty Product-knowledge associations, and
 server timestamps. The UI waits for a server-confirmed targeted refresh before
-closing the Add Product modal. Worker typecheck, direct-create route/wire tests,
-frontend Product Catalog regression, root production build, and full Worker
-regression pass. Production Worker/Hosting deployment has **not** occurred yet;
-that remains an explicit owner deploy gate. Public Tracking remains disabled.
+closing the Add Product modal. No synthetic production Product was created for
+acceptance; the owner will use the first real Product creation as the positive
+write acceptance. No Firestore Rules or IAM change was made.
 
 ## Historical production Product Quick Toggle + Safe Delete activation (2026-09-29)
 

@@ -8,29 +8,31 @@
 
 ---
 
-## Current source override — Product Master Direct Add pending deploy (2026-09-29)
+## Current production override — Product Master Direct Add ACTIVATED (2026-09-29)
 
 Real-use testing after the clean reset found that the empty Product Master could
-not be bootstrapped one item at a time in production: the existing Add Product
-UI was mock-only and the production browser repository intentionally rejected
-direct creates. Decision #052 now adds a production-safe direct-create source
-path without widening browser Firestore access.
+not be bootstrapped one item at a time in production. Decision #052 is now live
+from source `a1afbf34c759ba3be42280cfd2f03c70f7974cb2` without widening
+browser Firestore access.
 
-Authorized staff with literal `canManageProducts=true` use the existing
-**เพิ่มสินค้า** modal. The frontend calls the Product Management repository,
-which sends authenticated `POST /products` to the Worker. The Worker performs
-exact validation, requires SKU and a known category, rejects normalized
-duplicate identity, allocates the Product ID, and transactionally commits the
-reference-tracked Product plus `productCatalogState` revision. The browser then
-performs a server-confirmed targeted refresh before showing success.
+Authorized staff with literal `canManageProducts=true` use **เพิ่มสินค้า**.
+The frontend calls the Product Management repository, which sends authenticated
+`POST /products` to the Worker. The Worker performs exact validation, requires
+SKU and a known category, rejects normalized duplicate identity, allocates the
+Product ID, and transactionally commits the reference-tracked Product plus
+`productCatalogState` revision. The browser then performs a server-confirmed
+targeted refresh before showing success.
 
-This source change is validated locally but is **not yet deployed to
-production**. The currently live runtime remains the Safe Delete release below.
-No Firestore Rules/IAM change is required; Public Tracking must remain disabled.
-Do not create synthetic production Product data for acceptance. After explicit
-owner deploy approval, deploy Worker before Hosting, verify Public Tracking
-still off, then let the owner create the first real Product as the acceptance
-write.
+Production Worker version `edafa1e0-6892-4526-9118-f85f0a43b00f` passed the
+guard and is at 100% traffic. Live probes are health 200, D24/D25 unauthenticated
+401/401, and Public Tracking 404/404. Hosting-only deployment completed from a
+local production preview that cleared `BackendConfigurationGate`; live
+`index.html` references `/assets/index-ExKXxw_D.js`, matching the local
+artifact. Credentialed Product Master verification shows FIRESTORE + WORKER,
+0/0 rows, and the **เพิ่มสินค้า** action. Unauthenticated live `POST /products`
+returns 401. No Rules/IAM mutation and no synthetic Product write occurred.
+The first positive create acceptance must use a real owner-entered Product;
+do not create synthetic production Product data merely for testing.
 
 ## Current production override — CLEAN PRE-HANDOFF STATE (2026-09-29)
 
