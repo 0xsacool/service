@@ -51,24 +51,33 @@ work. The smoke data was then removed; a fresh backend inventory returned no
 business documents. Production UI independently shows Dashboard counters at 0
 and Product Master `0 from 0`. Public Tracking remains disabled.
 
-## Current source change pending production activation — BRUNO Product Categories (2026-09-29)
+## Current production BRUNO Product Categories activation (2026-09-29)
 
 Owner real-use review of the Product Master Add modal found that the inherited
 category picker still exposed legacy Apple-oriented categories. Decision #053
-replaces the canonical selectable list with ten BRUNO-focused, Thai-first
+is now live from source `7a0d281ab998a3f3a6554b59134dcc90a280eddc`.
+The canonical selectable list contains exactly ten BRUNO-focused, Thai-first
 bilingual categories while preserving the existing BRUNO ids
 `hot-plate`, `toaster`, `rice-cooker`, `kettle`, `blender`, and
-`fan`. New ids are `coffee`, `food-maker`, `kitchen-appliance`, and
+`fan`; new ids are `coffee`, `food-maker`, `kitchen-appliance`, and
 `other`.
 
 Legacy Apple ids are no longer selectable or valid for new Worker Direct Add
 requests. Previous BRUNO spreadsheet labels remain import-compatible through
 bounded aliases, including the earlier short English names. The shared category
-test is available as `npm run test:product-categories`; targeted taxonomy
-coverage, full Worker regression, Worker typecheck, targeted ESLint, and the
-production build pass. No production data migration or synthetic Product write
-is needed because the live Product Master is still empty. Worker/Hosting
-activation is pending the guarded rollout; Public Tracking must remain OFF.
+test is available as `npm run test:product-categories`; taxonomy coverage,
+full Worker regression, Worker typecheck, targeted ESLint, Prettier, and the
+production build pass.
+
+Guarded Worker version `c6b683d0-1c9a-463e-a84d-6534c31db8cc` receives
+100% traffic. Post-promotion probes are health 200, unauthenticated D24/D25
+401/401, Direct Add 401, and both Public Tracking routes 404. Hosting-only
+deployment serves main asset `/assets/index-CTlihzct.js` (live 200).
+Credentialed production UI verification shows Product Master FIRESTORE + WORKER,
+still 0/0 rows, and both the list filter and Add Product modal expose exactly
+the ten BRUNO categories with no Smartphone/Laptop/Tablet/Smartwatch/Headphones.
+No production data migration, synthetic Product write, Rules/IAM mutation, or
+Public Tracking change occurred.
 
 ## Current production Product Master Direct Add activation (2026-09-29)
 

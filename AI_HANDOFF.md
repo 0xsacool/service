@@ -8,24 +8,30 @@
 
 ---
 
-## Current source override — BRUNO Product Categories pending deploy (2026-09-29)
+## Current production override — BRUNO Product Categories ACTIVATED (2026-09-29)
 
 Owner real-use review found that Product Master still exposed legacy Apple
-category choices. Decision #053 now defines the canonical new-selection
-taxonomy as ten BRUNO-focused, Thai-first bilingual categories:
+category choices. Decision #053 is now live from source
+`7a0d281ab998a3f3a6554b59134dcc90a280eddc`. The canonical new-selection
+taxonomy is exactly ten BRUNO-focused, Thai-first bilingual categories:
 `hot-plate`, `toaster`, `rice-cooker`, `kettle`, `blender`,
 `coffee`, `food-maker`, `fan`, `kitchen-appliance`, and `other`.
 The six existing BRUNO ids are preserved; Smartphone/Laptop/Tablet/Smartwatch/
-Headphones are removed from new selection and Worker Direct Add validation.
+Headphones are absent from new selection and Worker Direct Add validation.
 
 Older BRUNO import labels such as Hot Plate, Toaster, Rice Cooker, Kettle,
 Blender, and Fan remain accepted through bounded aliases; aliases cannot escape
-a caller-supplied allowlist. The live Product Master is still empty, so this
-change requires no production data migration and must not create a synthetic
-Product merely for acceptance. Source regression/build gates pass. Production
-activation is pending guarded Worker promotion followed by Hosting-only deploy.
-Public Tracking must remain disabled and the seven protected config
-modifications/historical worktrees must remain untouched.
+a caller-supplied allowlist. Guarded Worker version
+`c6b683d0-1c9a-463e-a84d-6534c31db8cc` is at 100% traffic. Live probes are
+health 200, D24/D25 unauthenticated 401/401, Public Tracking 404/404, and
+Direct Add without auth 401. Hosting-only deployment serves
+`/assets/index-CTlihzct.js` (200).
+
+Credentialed production Product Master verification shows FIRESTORE + WORKER,
+0/0 rows, and exactly the approved ten categories in both the page filter and
+Add Product modal. No synthetic Product, migration, Rules/IAM mutation, or
+Public Tracking change occurred. The seven protected config modifications and
+historical worktrees remain untouched.
 
 ## Current production override — Product Master Direct Add ACTIVATED (2026-09-29)
 

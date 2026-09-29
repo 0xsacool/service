@@ -1195,4 +1195,4 @@ Import compatibility is preserved through aliases for the previous short BRUNO E
 
 **Impact:** Browser Product Master filters/forms and Worker Direct Add validation continue sharing one static source of truth. No Firestore migration, Rules/IAM change, Product write, or Public Tracking change is required.
 
-**Status:** Owner approved implementation and production rollout on 2026-09-29. Source/tests are complete and deterministic gates pass; production activation is pending the guarded Worker then Hosting rollout.
+**Status:** Owner approved implementation and production rollout on 2026-09-29. Source `7a0d281ab998a3f3a6554b59134dcc90a280eddc` is live. Guarded Worker version `c6b683d0-1c9a-463e-a84d-6534c31db8cc` receives 100% traffic and Hosting serves `/assets/index-CTlihzct.js`. Credentialed production verification confirms exactly the ten approved BRUNO categories in both Product Master filter and Add Product modal, with all five legacy Apple choices absent. Product Master remains 0/0, Public Tracking remains disabled, and no synthetic Product, migration, Rules/IAM mutation, protected-config change, or historical-worktree cleanup occurred.
