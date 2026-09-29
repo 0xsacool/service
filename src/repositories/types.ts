@@ -27,6 +27,7 @@ import type {
   ServiceJobIntakePayload,
 } from '../services/serviceJobCreation';
 import type { ProductImportRequest } from '../services/productImportRequest';
+import type { ProductCatalogUpdateRequest } from '../services/productCatalogManagement';
 import type { ProductImportRowIssue } from '../services/productImportClassification';
 
 export type ServiceJobUpdate = Omit<
@@ -256,6 +257,32 @@ export interface ProductImportCommitResult {
 // ServiceReportsRepository.createDraft: only the caller (the wizard
 // controller) knows whether a given commit() call is a fresh attempt or a
 // same-key retry of an ambiguous prior outcome.
+export type ProductCatalogManagementErrorCode =
+  | 'authentication_required'
+  | 'forbidden'
+  | 'validation_failed'
+  | 'not_found'
+  | 'dependency_unavailable';
+
+export class ProductCatalogManagementError extends Error {
+  public readonly status: number | null;
+  public readonly code: ProductCatalogManagementErrorCode | null;
+  constructor(
+    message: string,
+    status: number | null,
+    code: ProductCatalogManagementErrorCode | null
+  ) {
+    super(message);
+    this.name = 'ProductCatalogManagementError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export interface ProductCatalogManagementRepository {
+  updateProduct(productId: string, request: ProductCatalogUpdateRequest): Promise<void>;
+}
+
 export interface ProductImportRepository {
   commit(
     request: ProductImportRequest,

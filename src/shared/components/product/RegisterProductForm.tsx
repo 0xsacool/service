@@ -17,6 +17,7 @@ import { Field } from '../Field';
 import { FormSection } from '../FormSection';
 import { PrimaryButton, SecondaryButton } from '../Button';
 import { inputClass } from '../../../utils/inputClass';
+import { ProductCatalogCombobox } from './ProductCatalogCombobox';
 
 const CATALOG_NONE = '';
 const CATALOG_MANUAL = 'manual';
@@ -61,18 +62,15 @@ export function RegisterProductForm({
 
   const usingManualEntry = catalogSelection === CATALOG_MANUAL || catalog.length === 0;
 
-  const handleCatalogChange = (id: string) => {
-    setCatalogSelection(id);
-    const matched = catalog.find((product) => product.id === id);
-    if (matched) {
-      setEntry((current) => ({
-        ...current,
-        brand: matched.brand,
-        productName: matched.name,
-        model: matched.model,
-        category: matched.categoryId,
-      }));
-    }
+  const handleCatalogProduct = (matched: ProductMasterEntry) => {
+    setCatalogSelection(matched.id);
+    setEntry((current) => ({
+      ...current,
+      brand: matched.brand,
+      productName: matched.name,
+      model: matched.model,
+      category: matched.categoryId,
+    }));
   };
 
   const handleConfirm = () => {
@@ -105,20 +103,16 @@ export function RegisterProductForm({
       headingId="register-product-heading"
     >
       {catalog.length > 0 && (
-        <Field label="เลือกจากรายการสินค้า">
-          <select
-            value={catalogSelection}
-            onChange={(e) => handleCatalogChange(e.target.value)}
-            className={inputClass()}
-          >
-            <option value={CATALOG_NONE}>เลือกสินค้าจากรายการ…</option>
-            {catalog.map((product) => (
-              <option key={product.id} value={product.id}>
-                {product.brand} — {product.name} {product.model}
-              </option>
-            ))}
-            <option value={CATALOG_MANUAL}>ไม่พบในรายการ / กรอกเอง</option>
-          </select>
+        <Field
+          label="ค้นหาและเลือกสินค้า"
+          hint="ค้นหาได้จากรุ่น SKU ชื่อสินค้า หรือแบรนด์ — แสดงเฉพาะสินค้าที่ใช้งาน"
+        >
+          <ProductCatalogCombobox
+            products={catalog}
+            selected={matchedCatalogEntry}
+            onSelect={handleCatalogProduct}
+            onManual={() => setCatalogSelection(CATALOG_MANUAL)}
+          />
         </Field>
       )}
 

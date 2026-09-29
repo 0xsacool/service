@@ -15,7 +15,11 @@ import {
   buildCommonProblemDefinition,
   type NewCommonProblemInput,
 } from '../services/productKnowledgeAdmin';
-import { canMutateProductCatalog } from '../services/productCatalogAccess';
+import {
+  canManageProductCatalog,
+  canMutateProductCatalog,
+} from '../services/productCatalogAccess';
+import { useAuthSession } from '../auth/authSessionContext';
 
 export interface UseProductDetailResult {
   product: ProductMasterEntry | undefined;
@@ -24,7 +28,8 @@ export interface UseProductDetailResult {
   allAccessories: AccessoryDefinition[];
   allCommonProblems: CommonProblemDefinition[];
   canEdit: boolean;
-  updateGeneral: (input: NewProductInput) => void;
+  canEditKnowledge: boolean;
+  updateGeneral: (input: NewProductInput) => Promise<void>;
   toggleAccessory: (accessoryId: string) => void;
   addAccessory: (label: string) => void;
   toggleCommonProblem: (problemId: string) => void;
@@ -55,17 +60,34 @@ export function useProductDetail(productId: string): UseProductDetailResult {
   const brands = Array.from(
     new Set(repositories.productMaster.getProducts().map((p) => p.brand))
   ).sort();
-  const canEdit = canMutateProductCatalog();
+  const { staffProfile } = useAuthSession();
+  const canEdit = canManageProductCatalog(staffProfile?.canManageProducts ?? false);
+  const canEditKnowledge = canMutateProductCatalog();
 
   const refreshProduct = () =>
     setProduct(repositories.productMaster.getProductById(productId));
 
-  const updateGeneral = (input: NewProductInput) => {
+  const updateGeneral = async (input: NewProductInput): Promise<void> => {
     if (!product) return;
-    repositories.productMaster.updateProduct(
-      product.id,
-      buildProductUpdateFromInput(input)
-    );
+    if (canMutateProductCatalog()) {
+      repositories.productMaster.updateProduct(
+        product.id,
+        buildProductUpdateFromInput(input)
+      );
+      refreshProduct();
+      return;
+    }
+    await repositories.productCatalogManagement.updateProduct(product.id, {
+      version: 1,
+      brand: input.brand,
+      categoryId: input.categoryId,
+      model: input.model,
+      sku: input.sku || null,
+      productName: input.productName,
+      warrantyMonths: input.warrantyMonths,
+      status: input.status,
+    });
+    await repositories.productMaster.refreshFromServer([product.id]);
     refreshProduct();
   };
 
@@ -135,6 +157,7 @@ export function useProductDetail(productId: string): UseProductDetailResult {
     allAccessories,
     allCommonProblems,
     canEdit,
+    canEditKnowledge,
     updateGeneral,
     toggleAccessory,
     addAccessory,

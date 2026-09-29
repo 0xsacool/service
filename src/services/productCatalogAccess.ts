@@ -13,6 +13,18 @@ export function canMutateProductCatalog(): boolean {
   return canMutateProductCatalogForBackend(backendKind);
 }
 
+export function canManageProductCatalogForBackend(
+  kind: 'mock' | 'firestore' | null,
+  canManageProducts: boolean
+): boolean {
+  if (kind === 'mock') return true;
+  return kind === 'firestore' && canManageProducts;
+}
+
+export function canManageProductCatalog(canManageProducts: boolean): boolean {
+  return canManageProductCatalogForBackend(backendKind, canManageProducts);
+}
+
 // PI-3 Slice 2 — deliberately separate from canMutateProductCatalogForBackend
 // above, not a reuse of it: Production Import (this predicate) and direct
 // Add/Edit (that one) are two independently-gated capabilities. Mock mode

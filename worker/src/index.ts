@@ -29,6 +29,7 @@ import {
   type FirebaseTokenVerifier,
 } from './firebaseAuth.ts';
 import { getAuthorizedStaffProfile, isServiceJobInBrand, isStaffAuthorizedForServiceJob, type StaffProfile } from './staffAuthorization.ts';
+import { parseProductCatalogUpdateRequest } from '../../src/services/productCatalogManagement.ts';
 import {
   CatalogTooLargeError,
   IdempotencyMismatchError,
@@ -106,6 +107,8 @@ const MAX_SERVICE_JOB_COMPLETION_BODY_BYTES = 1024;
 // PI-3 — privileged Product Master import. Exact path, no prefix, so it can
 // never collide with anything else.
 const PRODUCTS_IMPORT_PATH = '/products/import';
+const PRODUCTS_PREFIX = '/products/';
+const MAX_PRODUCT_UPDATE_BODY_BYTES = 8 * 1024;
 
 function isPublicTrackingEnabled(env: Env): boolean {
   return env.PUBLIC_TRACKING_ENABLED === 'true';
@@ -520,6 +523,112 @@ async function handleProductImport(
     console.error('[files-worker] Product import failed');
     return json(
       { code: 'dependency_unavailable', error: 'Unable to complete the product import' },
+      { status: 503 }
+    );
+  }
+}
+
+async function authorizeProductManagement(
+  request: Request,
+  env: Env,
+  dependencies: WorkerDependencies
+): Promise<{ profile: StaffProfile; client: FirestoreClient } | Response> {
+  const token = readBearerToken(request.headers.get('Authorization'));
+  if (!token) {
+    return json(
+      { code: 'authentication_required', error: 'Authentication is required' },
+      { status: 401 }
+    );
+  }
+
+  let uid: string;
+  try {
+    uid = (await dependencies.tokenVerifier.verify(token, env.FIRESTORE_PROJECT_ID)).uid;
+  } catch {
+    return json(
+      { code: 'authentication_required', error: 'Authentication is required' },
+      { status: 401 }
+    );
+  }
+
+  try {
+    const client = dependencies.createFirestoreClient(env);
+    const profile = await getAuthorizedStaffProfile(uid, client);
+    if (!profile?.canManageProducts) {
+      return json(
+        { code: 'forbidden', error: 'This account may not manage products' },
+        { status: 403 }
+      );
+    }
+    return { profile, client };
+  } catch {
+    return json(
+      { code: 'forbidden', error: 'This account may not manage products' },
+      { status: 403 }
+    );
+  }
+}
+
+function isSafeProductId(value: string): boolean {
+  return /^[A-Za-z0-9_-]{1,160}$/.test(value);
+}
+
+async function handleProductUpdate(
+  request: Request,
+  env: Env,
+  productId: string,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  if (!isSafeProductId(productId)) {
+    return json({ code: 'validation_failed', error: 'Invalid product id' }, { status: 400 });
+  }
+
+  const authorization = await authorizeProductManagement(request, env, dependencies);
+  if (authorization instanceof Response) return authorization;
+
+  const mediaType = request.headers.get('Content-Type')?.split(';', 1)[0]?.trim().toLowerCase();
+  const contentLength = request.headers.get('Content-Length');
+  if (
+    !request.body ||
+    mediaType !== 'application/json' ||
+    (contentLength !== null && Number(contentLength) > MAX_PRODUCT_UPDATE_BODY_BYTES)
+  ) {
+    return json(
+      { code: 'validation_failed', error: 'Invalid product update request' },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const raw = await readBodyWithLimit(request.body, MAX_PRODUCT_UPDATE_BODY_BYTES);
+    const parsed = parseProductCatalogUpdateRequest(
+      JSON.parse(new TextDecoder().decode(raw))
+    );
+    if (!parsed) {
+      return json(
+        { code: 'validation_failed', error: 'Invalid product update request' },
+        { status: 400 }
+      );
+    }
+    const updated = await authorization.client.updateProductCatalogEntry(
+      productId,
+      parsed,
+      new Date().toISOString()
+    );
+    if (!updated) {
+      return json({ code: 'not_found', error: 'Product not found' }, { status: 404 });
+    }
+    return json({ productId }, { status: 200 });
+  } catch (error) {
+    if (error instanceof FileTooLargeError || error instanceof SyntaxError) {
+      return json(
+        { code: 'validation_failed', error: 'Invalid product update request' },
+        { status: 400 }
+      );
+    }
+    console.error('[files-worker] Product catalog update failed');
+    return json(
+      { code: 'dependency_unavailable', error: 'Unable to update product' },
       { status: 503 }
     );
   }
@@ -1032,6 +1141,31 @@ export function createWorkerHandler(
 
     if (request.method === 'POST' && url.pathname === PRODUCTS_IMPORT_PATH) {
       return withCors(await handleProductImport(request, env, dependencies), request, env);
+    }
+
+    if (request.method === 'PATCH' && url.pathname.startsWith(PRODUCTS_PREFIX)) {
+      let productId: string;
+      try {
+        productId = decodeURIComponent(url.pathname.slice(PRODUCTS_PREFIX.length));
+      } catch {
+        return withCors(
+          json({ code: 'validation_failed', error: 'Invalid product id' }, { status: 400 }),
+          request,
+          env
+        );
+      }
+      if (!productId || productId.includes('/')) {
+        return withCors(
+          json({ code: 'validation_failed', error: 'Invalid product id' }, { status: 400 }),
+          request,
+          env
+        );
+      }
+      return withCors(
+        await handleProductUpdate(request, env, productId, dependencies),
+        request,
+        env
+      );
     }
 
     if (request.method === 'POST' && url.pathname === SERVICE_JOBS_PATH) {

@@ -12,12 +12,13 @@ import {
 } from 'lucide-react';
 import type { ProductCategory, ProductMasterEntry } from '../../../../../types';
 import type { NewProductInput } from '../../../../../services/productMasterAdmin';
-import { validateNewProductInput } from '../../../../../validation';
+import { validateProductEditInput } from '../../../../../validation';
 import {
   GlassCard,
   Row,
   PrimaryButton,
   SecondaryButton,
+  AsyncErrorAlert,
 } from '../../../../../shared/components';
 import { ProductStatusBadge } from '../ProductStatusBadge';
 import { ProductFieldsForm } from '../ProductFieldsForm';
@@ -44,12 +45,14 @@ export function GeneralTab({
   product: ProductMasterEntry;
   categories: ProductCategory[];
   brands: string[];
-  onSave: (input: NewProductInput) => void;
+  onSave: (input: NewProductInput) => Promise<void>;
   canEdit: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [value, setValue] = useState<NewProductInput>(() => toInput(product));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const categoryName =
     categories.find((c) => c.id === product.categoryId)?.name ?? 'ไม่ระบุหมวดหมู่';
@@ -57,6 +60,7 @@ export function GeneralTab({
   const startEditing = () => {
     setValue(toInput(product));
     setErrors({});
+    setSaveError(null);
     setIsEditing(true);
   };
 
@@ -64,7 +68,7 @@ export function GeneralTab({
     setValue((current) => ({ ...current, ...patch }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const input: NewProductInput = {
       ...value,
       brand: value.brand.trim(),
@@ -73,14 +77,22 @@ export function GeneralTab({
       productName: value.productName.trim(),
     };
 
-    const result = validateNewProductInput(input);
+    const result = validateProductEditInput(input);
     if (!result.valid) {
       setErrors(result.errors);
       return;
     }
 
-    onSave(input);
-    setIsEditing(false);
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await onSave(input);
+      setIsEditing(false);
+    } catch {
+      setSaveError('ไม่สามารถบันทึกการแก้ไขสินค้าได้ กรุณาลองใหม่อีกครั้ง');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (isEditing) {
@@ -93,11 +105,14 @@ export function GeneralTab({
           errors={errors}
           onChange={handleChange}
         />
+        <AsyncErrorAlert message={saveError} className="mt-4" />
         <div className="mt-6 flex justify-end gap-3 border-t border-black/5 pt-4">
-          <SecondaryButton onClick={() => setIsEditing(false)}>ยกเลิก</SecondaryButton>
-          <PrimaryButton onClick={handleSave}>
+          <SecondaryButton onClick={() => setIsEditing(false)} disabled={isSaving}>
+            ยกเลิก
+          </SecondaryButton>
+          <PrimaryButton onClick={() => void handleSave()} disabled={isSaving}>
             <Check className="h-4 w-4" />
-            บันทึกการเปลี่ยนแปลง
+            {isSaving ? 'กำลังบันทึก…' : 'บันทึกการเปลี่ยนแปลง'}
           </PrimaryButton>
         </div>
       </GlassCard>

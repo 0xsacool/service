@@ -31,6 +31,7 @@ import type {
   ProductImportDataAccess,
 } from './productImport.ts';
 import type { CatalogProduct } from '../../src/services/productIdentity.ts';
+import type { ProductCatalogUpdateRequest } from '../../src/services/productCatalogManagement.ts';
 import type { ServiceJob } from '../../src/types/serviceJob.ts';
 import { isValidServiceReport } from '../../src/services/serviceReport.ts';
 import type { ServiceReport } from '../../src/types/serviceReport.ts';
@@ -129,6 +130,11 @@ export interface FirestoreClient
   // that was explicitly rejected (Option A) in favor of retaining the
   // metadata permanently as an audit record.
   markAttachmentDeleted(docId: string, deletedAt: string): Promise<void>;
+  updateProductCatalogEntry(
+    productId: string,
+    request: ProductCatalogUpdateRequest,
+    updatedAt: string
+  ): Promise<boolean>;
 }
 
 function resolveDatabasePath(env: Env): string {
@@ -927,7 +933,8 @@ export function createFirestoreClient(env: Env): FirestoreClient {
         uid,
         documentUid,
         doc.fields?.brandId?.stringValue,
-        doc.fields?.canImportProducts?.booleanValue
+        doc.fields?.canImportProducts?.booleanValue,
+        doc.fields?.canManageProducts?.booleanValue
       );
     },
 
@@ -1085,12 +1092,46 @@ export function createFirestoreClient(env: Env): FirestoreClient {
       }
     },
 
-    // --- PI-3: privileged Product Master import -----------------------
-    //
-    // These are the only product WRITE capability that exists anywhere.
-    // Firestore Rules deny browser writes to `products` unconditionally, so
-    // this client is the sole writer. There is deliberately no delete.
+    // --- Privileged Product Master writes -----------------------------
+    // Firestore Rules still deny every browser write to `products`. Product
+    // edits and imports are both Worker-mediated; hard delete remains absent.
+    async updateProductCatalogEntry(productId, request, updatedAt) {
+      const token = await getAccessToken(env);
+      const url = new URL(`${baseUrl}/products/${encodeURIComponent(productId)}`);
+      const patch = {
+        brand: request.brand,
+        categoryId: request.categoryId,
+        model: request.model,
+        sku: request.sku,
+        productName: request.productName,
+        warrantyMonths: request.warrantyMonths,
+        status: request.status,
+        updatedAt: new FirestoreTimestampValue(updatedAt),
+      };
+      for (const field of Object.keys(patch)) {
+        url.searchParams.append('updateMask.fieldPaths', field);
+      }
+      url.searchParams.set('currentDocument.exists', 'true');
+      const response = await fetch(url.toString(), {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ fields: fields(patch) }),
+      });
+      if (response.status === 404) return false;
+      if (!response.ok) {
+        throw new FirestoreRequestError(
+          `updateProductCatalogEntry("${productId}")`,
+          response.status,
+          await response.text()
+        );
+      }
+      return true;
+    },
 
+    // --- PI-3: privileged Product Master import -----------------------
     async getProductImport(transaction, key) {
       const doc = await getDocument(env, baseUrl, 'productImports', key, transaction);
       if (!doc) return null;

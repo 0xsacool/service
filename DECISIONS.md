@@ -1130,3 +1130,19 @@ and deployment phase.
 **Status:** Decided in N7.5 source-of-truth reconciliation. Source
 implementation is still pending; no production mutation is authorized by this
 decision.
+
+---
+
+## 050 - Product Catalog maintenance is privileged Worker-mediated CRUD-lite; Legacy is the normal retirement path and hard delete stays separately gated
+
+**Reason:** Production use exposed two catalog-management problems. Staff need to correct Product Master metadata and retire obsolete/test catalog rows, while New Service Job becomes unusable with hundreds of products if product selection is a native `<select>`. Existing Decisions #030/#043 intentionally keep `products` global and deny every browser Firestore write; #043 authorizes only bulk import and explicitly excludes general CRUD. The owner has now approved a narrower Product Catalog Management workflow before N10.
+
+**Decision:** `products` remains a global reference catalog and `Product.brand` remains manufacturer/display metadata, never staff authorization scope. Direct browser Firestore writes remain denied. Production Product Master edits are a new privileged Worker-mediated operation, authorized by a dedicated fail-closed `canManageProducts: true` staff capability. The editable V1 field set is exactly `brand`, `categoryId`, `model`, `sku`, `productName`, `warrantyMonths`, and `status`; `status` remains only `Active | Legacy`. Accessory/problem associations remain outside this production edit operation.
+
+`Legacy` is the normal retirement mechanism. Legacy products remain durable for historical references and Product Master review/export, but new Service Job catalog selection offers only Active products. The New Service Job catalog selector is a searchable combobox over the global Active catalog, matching manufacturer/brand, model, SKU, and product name with bounded results; no BRN/JLC filtering is added because #030 deliberately separates Product metadata from authorization brand.
+
+Hard delete is not part of this source phase. A future delete may remove only a Product proven to have no Service Job/history reference, and must be enforced by a privileged backend check immediately before deletion. The current Worker IAM custom role has no `datastore.entities.delete`, and this phase does not change IAM, Firestore Rules, or add a delete endpoint. Production hard delete therefore remains blocked behind a separately approved IAM + backend safety gate.
+
+**Impact:** #043's statement that Import is the only catalog-mutating path is superseded only for the approved Worker-mediated edit operation above; its import invariants remain unchanged. `canImportProducts` remains import-only and does not imply edit rights. Firestore Rules continue to deny browser create/update/delete on `products/{productId}`.
+
+**Status:** Source implementation was approved and certified on 2026-09-29. The owner separately approved production activation and `canManageProducts` provisioning on 2026-09-29. Product hard delete remains separately gated and is not authorized by that rollout approval.

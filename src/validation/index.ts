@@ -9,7 +9,10 @@ export {
   serviceIntakeMetadataError,
   serviceEventMetadataDraftError,
 } from './serviceIntakeValidation';
-export { validateNewProductInput } from './productMasterValidation';
+export {
+  validateNewProductInput,
+  validateProductEditInput,
+} from './productMasterValidation';
 export { validateNewCustomerInput } from './customerValidation';
 export {
   validateNewAccessoryInput,

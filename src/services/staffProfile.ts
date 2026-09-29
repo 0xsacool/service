@@ -15,6 +15,7 @@ export interface CoreStaffProfile {
   uid: string;
   brandId: BrandId;
   canImportProducts: boolean;
+  canManageProducts: boolean;
 }
 
 export interface RepairReportActorProfile extends CoreStaffProfile {
@@ -26,11 +27,16 @@ export function parseCanImportProducts(value: unknown): boolean {
   return value === true;
 }
 
+export function parseCanManageProducts(value: unknown): boolean {
+  return value === true;
+}
+
 export function parseCoreStaffProfile(
   requestedUid: string,
   documentUid: string,
   brandId: unknown,
-  canImportProducts?: unknown
+  canImportProducts?: unknown,
+  canManageProducts?: unknown
 ): CoreStaffProfile | null {
   if (
     requestedUid.length === 0 ||
@@ -43,6 +49,7 @@ export function parseCoreStaffProfile(
     uid: requestedUid,
     brandId,
     canImportProducts: parseCanImportProducts(canImportProducts),
+    canManageProducts: parseCanManageProducts(canManageProducts),
   };
 }
 

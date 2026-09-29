@@ -1,6 +1,7 @@
 import type {
   AttachmentsRepository,
   CustomersRepository,
+  ProductCatalogManagementRepository,
   ProductImportRepository,
   ProductKnowledgeRepository,
   ProductMasterRepository,
@@ -40,6 +41,7 @@ export interface RepositoryProvider {
   search: SearchRepository;
   registeredProducts: RegisteredProductsRepository;
   productMaster: ProductMasterRepository;
+  productCatalogManagement: ProductCatalogManagementRepository;
   productImport: ProductImportRepository;
   productKnowledge: ProductKnowledgeRepository;
   attachments: AttachmentsRepository;
@@ -55,6 +57,19 @@ export function createMockRepositoryProvider(): RepositoryProvider {
     search: searchRepository,
     registeredProducts: registeredProductsRepository,
     productMaster: productMasterRepository,
+    productCatalogManagement: {
+      async updateProduct(productId, request) {
+        productMasterRepository.updateProduct(productId, {
+          brand: request.brand,
+          categoryId: request.categoryId,
+          model: request.model,
+          sku: request.sku ?? undefined,
+          name: request.productName,
+          warrantyMonths: request.warrantyMonths,
+          status: request.status,
+        });
+      },
+    },
     productImport: createMockProductImportRepository(),
     productKnowledge: productKnowledgeRepository,
     attachments: attachmentsRepository,
@@ -100,6 +115,7 @@ function createUnavailableRepositoryProvider(): RepositoryProvider {
       updateProduct: fail,
       refreshFromServer: reject,
     },
+    productCatalogManagement: { updateProduct: reject },
     productImport: { commit: reject },
     productKnowledge: {
       getAllAccessories: () => [],
@@ -179,6 +195,8 @@ async function createFirestoreBackedRepositoryProvider(
     await import('./firestoreProductMasterRepository');
   const { createWorkerProductImportRepository } =
     await import('./workerProductImportRepository');
+  const { createWorkerProductCatalogManagementRepository } =
+    await import('./workerProductCatalogManagementRepository');
   const { createFirestoreServiceReportsRepository } =
     await import('./firestoreServiceReportsRepository');
   const { createWorkerApprovalConsoleRepository } =
@@ -199,6 +217,8 @@ async function createFirestoreBackedRepositoryProvider(
     productMaster: await activateWithDiagnostics('productMaster', () =>
       createFirestoreProductMasterRepository()
     ),
+    productCatalogManagement:
+      createWorkerProductCatalogManagementRepository(tokenProvider),
     productImport: createWorkerProductImportRepository(tokenProvider),
     attachments: await activateWithDiagnostics('attachments', () =>
       resolveAttachmentsRepository(serviceJobs, tokenProvider)

@@ -379,6 +379,7 @@ check('route errors never echo bearer tokens', !(await invalidTokenResponse.text
 // left to the shape of the code.
 const {
   parseCanImportProducts,
+  parseCanManageProducts,
   parseCoreStaffProfile,
   parseRepairReportActorProfile,
 } = await import('../../src/services/staffProfile.ts');
@@ -386,8 +387,14 @@ const {
 const PROFILE_UID = 'staff-uid-0001';
 const PROFILE_BRAND = 'bruno-thailand';
 
-function core(canImportProducts: unknown) {
-  return parseCoreStaffProfile(PROFILE_UID, PROFILE_UID, PROFILE_BRAND, canImportProducts);
+function core(canImportProducts: unknown, canManageProducts: unknown = false) {
+  return parseCoreStaffProfile(
+    PROFILE_UID,
+    PROFILE_UID,
+    PROFILE_BRAND,
+    canImportProducts,
+    canManageProducts
+  );
 }
 
 for (const role of ['technician', 'approver', 'admin'] as const) {
@@ -398,6 +405,11 @@ for (const role of ['technician', 'approver', 'admin'] as const) {
 }
 
 const capabilityOnly = core(true);
+const manageOnly = core(false, true);
+check(
+  'Product Manage capability is independent from Product Import',
+  manageOnly?.canManageProducts === true && manageOnly.canImportProducts === false
+);
 check(
   'the capability alone grants Product Import with no Repair role present',
   capabilityOnly?.canImportProducts === true
@@ -419,7 +431,10 @@ check(
 for (const value of [false, undefined, null, 'true', 1, {}, []] as const) {
   check(
     `a non-literal-true capability (${JSON.stringify(value) ?? 'undefined'}) is denied`,
-    parseCanImportProducts(value) === false && core(value)?.canImportProducts === false
+    parseCanImportProducts(value) === false &&
+      parseCanManageProducts(value) === false &&
+      core(value, value)?.canImportProducts === false &&
+      core(value, value)?.canManageProducts === false
   );
 }
 
@@ -433,11 +448,18 @@ check(
   malformedRole?.canImportProducts === true
 );
 
-const unknownFieldProfile = parseCoreStaffProfile(PROFILE_UID, PROFILE_UID, PROFILE_BRAND, true);
+const unknownFieldProfile = parseCoreStaffProfile(
+  PROFILE_UID,
+  PROFILE_UID,
+  PROFILE_BRAND,
+  true,
+  true
+);
 check(
-  'the core profile parser exposes exactly uid, brandId and canImportProducts',
+  'the core profile parser exposes exactly the two bounded Product capabilities',
   unknownFieldProfile !== null &&
-    Object.keys(unknownFieldProfile).sort().join(',') === 'brandId,canImportProducts,uid'
+    Object.keys(unknownFieldProfile).sort().join(',') ===
+      'brandId,canImportProducts,canManageProducts,uid'
 );
 check(
   'an unknown staff document field is ignored rather than failing provisioning',

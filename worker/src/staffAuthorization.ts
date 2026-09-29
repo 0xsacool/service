@@ -1,6 +1,7 @@
 import { isCanonicalBrandId, type BrandId } from './brands.ts';
 import {
-  parseCanImportProducts as parseCapability,
+  parseCanImportProducts as parseImportCapability,
+  parseCanManageProducts as parseManageCapability,
   parseCoreStaffProfile,
   parseRepairReportActorProfile as parseActorProfile,
   type RepairReportActorProfile,
@@ -15,6 +16,7 @@ export interface StaffProfile {
   // (DECISIONS.md #030), so this grants one specific ability and implies
   // nothing else.
   canImportProducts: boolean;
+  canManageProducts: boolean;
 }
 
 export interface ServiceJobAuthorizationRecord {
@@ -39,16 +41,27 @@ export interface StaffAuthorizationDataAccess {
 // "does not have this permission", which is the fail-closed answer for the
 // permission itself without taking any unrelated capability away.
 export function parseCanImportProducts(value: unknown): boolean {
-  return parseCapability(value);
+  return parseImportCapability(value);
+}
+
+export function parseCanManageProducts(value: unknown): boolean {
+  return parseManageCapability(value);
 }
 
 export function parseStaffProfile(
   requestedUid: string,
   documentUid: string,
   brandId: unknown,
-  canImportProducts?: unknown
+  canImportProducts?: unknown,
+  canManageProducts?: unknown
 ): StaffProfile | null {
-  return parseCoreStaffProfile(requestedUid, documentUid, brandId, canImportProducts);
+  return parseCoreStaffProfile(
+    requestedUid,
+    documentUid,
+    brandId,
+    canImportProducts,
+    canManageProducts
+  );
 }
 
 export function parseRepairReportStaffProfile(
@@ -57,13 +70,15 @@ export function parseRepairReportStaffProfile(
   brandId: unknown,
   role: unknown,
   displayName: unknown,
-  canImportProducts?: unknown
+  canImportProducts?: unknown,
+  canManageProducts?: unknown
 ): RepairReportActorProfile | null {
   const core = parseCoreStaffProfile(
     requestedUid,
     documentUid,
     brandId,
-    canImportProducts
+    canImportProducts,
+    canManageProducts
   );
   return core ? parseActorProfile(core, role, displayName) : null;
 }

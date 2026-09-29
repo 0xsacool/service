@@ -99,6 +99,7 @@ export function ProductDetail() {
     addCommonProblem,
     updateCommonProblemDefinition,
     canEdit,
+    canEditKnowledge,
   } = useProductDetail(id ?? '');
   const [activeTab, setActiveTab] = useState<ProductDetailTabKey>('general');
 
@@ -186,7 +187,7 @@ export function ProductDetail() {
             allAccessories={allAccessories}
             onToggle={toggleAccessory}
             onAdd={addAccessory}
-            canEdit={canEdit}
+            canEdit={canEditKnowledge}
           />
         </div>
       )}
@@ -202,7 +203,7 @@ export function ProductDetail() {
             onToggle={toggleCommonProblem}
             onAdd={addCommonProblem}
             onUpdateDefinition={updateCommonProblemDefinition}
-            canEdit={canEdit}
+            canEdit={canEditKnowledge}
           />
         </div>
       )}

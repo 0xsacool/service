@@ -2,6 +2,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { getFirestoreDb } from '../lib/firebase/firebase';
 import {
   parseCanImportProducts,
+  parseCanManageProducts,
   parseCoreStaffProfile,
   parseRepairReportActorProfile,
   type CoreStaffProfile,
@@ -12,7 +13,7 @@ export interface StaffProfile extends CoreStaffProfile {
   repairReportActor?: RepairReportActorProfile | null;
 }
 export type { CoreStaffProfile, RepairReportActorProfile };
-export { parseCanImportProducts, parseRepairReportActorProfile };
+export { parseCanImportProducts, parseCanManageProducts, parseRepairReportActorProfile };
 
 export interface StaffProfileReader {
   getOwnProfile(uid: string): Promise<StaffProfile | null>;
@@ -28,6 +29,7 @@ export function parseStaffProfile(
   documentUid: string,
   brandId: unknown,
   canImportProducts?: unknown,
+  canManageProducts?: unknown,
   role?: unknown,
   displayName?: unknown
 ): StaffProfile | null {
@@ -35,7 +37,8 @@ export function parseStaffProfile(
     requestedUid,
     documentUid,
     brandId,
-    canImportProducts
+    canImportProducts,
+    canManageProducts
   );
   return core
     ? {
@@ -58,6 +61,7 @@ export function createFirestoreStaffProfileReader(): StaffProfileReader {
         snapshot.id,
         data.brandId,
         data.canImportProducts,
+        data.canManageProducts,
         data.role,
         data.displayName
       );

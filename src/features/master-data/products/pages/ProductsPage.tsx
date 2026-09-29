@@ -65,7 +65,7 @@ export function ProductsPage() {
     canImportProductCatalog,
   } = useProductMaster();
 
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('Active');
   const [categoryFilter, setCategoryFilter] = useState<string>('All');
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [showAddModal, setShowAddModal] = useState(false);

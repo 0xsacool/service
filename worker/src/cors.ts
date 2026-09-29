@@ -24,7 +24,7 @@ export function corsHeaders(request: Request, env: Env): Record<string, string> 
   const headers: Record<string, string> = { Vary: 'Origin' };
   if (origin) {
     headers['Access-Control-Allow-Origin'] = origin;
-    headers['Access-Control-Allow-Methods'] = 'GET, POST, DELETE, OPTIONS';
+    headers['Access-Control-Allow-Methods'] = 'GET, POST, PATCH, DELETE, OPTIONS';
     // Authorization carries the Firebase ID token on every authenticated
     // route (files, and now POST /service-jobs); Idempotency-Key is
     // required on POST /service-jobs. Both are non-CORS-safelisted request
