@@ -20,6 +20,7 @@ import { bumpDataVersion } from './dataVersion';
 import { bangkokIsoDate, bangkokNumberingYear } from '../services/bangkokTime';
 import { isTrustworthyServiceJobClosedAt } from '../services/serviceJobClosure';
 import { isValidReturnFormNumber } from '../services/productReturnForm';
+import { appendServiceJobStatusTimelineEvent } from '../services/serviceJobTimeline';
 
 // Session-only persistence, same pattern as productMasterRepository.ts — a
 // Map (not the previous mockServiceJobs/createdServiceJobs array split)
@@ -154,6 +155,7 @@ export const serviceJobsRepository: ServiceJobsRepository = {
       returnFormNumber: formatReturnFormNumber(year, nextServiceJobSequence(highest)),
       closedAt: now.toISOString(),
       updatedAt: bangkokIsoDate(now),
+      timeline: appendServiceJobStatusTimelineEvent(existing.timeline, 'Completed', now),
     };
     jobsById.set(id, updated);
     bumpDataVersion();

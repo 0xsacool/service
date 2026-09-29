@@ -8,6 +8,7 @@ import type { ServiceJobUpdate } from '../repositories/types';
 import type { BackendKind } from '../config/backend';
 import { toIsoDate } from '../utils/formatDate';
 import { resolveServiceEventMetadataInvariants } from './serviceEventMetadataInvariants';
+import { appendServiceJobStatusTimelineEvent } from './serviceJobTimeline';
 
 // F5d-70 Phase 5B — every field here is optional: undefined means "pristine,
 // not part of this save" (approved conflict policy — LOCAL LAST WRITE WINS,
@@ -38,9 +39,9 @@ export interface ServiceJobEdits {
 // bumping updatedAt or deciding closedAt (mirrors buildServiceJob's role
 // for the create path in serviceJobCreation.ts). Only the fields the
 // existing UI actually lets a staff member edit — status and notes, plus
-// technician only in Mock mode — are included as direct edits; timeline is
-// deliberately left out of the patch so it passes through the repository's
-// merge untouched.
+// technician only in Mock mode — are included as direct edits. N9.3 also
+// appends one timeline event when (and only when) the authoritative status
+// changes, matching BUSINESS_RULES.md's append-only status-history contract.
 // `current` is required so the caller cannot overwrite the durable closure
 // anchor, and so a pristine (not-dirty) metadata group can still be resolved
 // against its own real invariant inputs below — never against `null`
@@ -53,7 +54,8 @@ export interface ServiceJobEdits {
 export function buildServiceJobUpdate(
   edits: ServiceJobEdits,
   current: ServiceJob,
-  backendKind: BackendKind | null
+  backendKind: BackendKind | null,
+  now: Date = new Date()
 ): ServiceJobUpdate {
   // Each atomic group's dirty signal is still "the group's first field is
   // present" — but unlike before, a PRISTINE group is resolved from
@@ -79,6 +81,15 @@ export function buildServiceJobUpdate(
   });
   return {
     ...(edits.status !== undefined ? { status: edits.status } : {}),
+    ...(edits.status !== undefined && edits.status !== current.status
+      ? {
+          timeline: appendServiceJobStatusTimelineEvent(
+            current.timeline,
+            edits.status,
+            now
+          ),
+        }
+      : {}),
     ...(edits.notes !== undefined ? { notes: edits.notes } : {}),
     ...(backendKind === 'mock' && edits.technician !== undefined
       ? { technician: edits.technician }
@@ -105,7 +116,7 @@ export function buildServiceJobUpdate(
     ...(edits.externalEvidenceNote !== undefined
       ? { externalEvidenceNote: edits.externalEvidenceNote }
       : {}),
-    updatedAt: toIsoDate(new Date()),
+    updatedAt: toIsoDate(now),
     closedAt: current.closedAt,
   };
 }

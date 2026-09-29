@@ -144,13 +144,33 @@ const TIMELINE_TEXT: Record<string, { title: string; description: string }> = {
     title: 'กำลังตรวจสอบ',
     description: 'กำลังจัดช่างเพื่อตรวจสอบสินค้า',
   },
+  'Awaiting parts': {
+    title: 'รออะไหล่',
+    description: 'กำลังรออะไหล่ที่จำเป็นสำหรับงานบริการ',
+  },
   'In repair': {
     title: 'กำลังดำเนินการซ่อม',
-    description: 'การซ่อมจะเริ่มหลังการตรวจสอบเสร็จสิ้น',
+    description: 'กำลังดำเนินการซ่อมสินค้า',
+  },
+  'Quality check': {
+    title: 'ตรวจสอบคุณภาพ',
+    description: 'กำลังตรวจสอบความเรียบร้อยหลังการซ่อม',
   },
   'Ready for pickup': {
     title: 'พร้อมรับสินค้า',
-    description: 'ระบบจะแจ้งลูกค้าเมื่อสินค้าพร้อมรับ',
+    description: 'สินค้าพร้อมส่งคืนให้ลูกค้า',
+  },
+  Completed: {
+    title: 'เสร็จสิ้น',
+    description: 'ส่งคืนสินค้าให้ลูกค้าและปิดงานบริการแล้ว',
+  },
+  Cancelled: {
+    title: 'ยกเลิก',
+    description: 'งานบริการถูกยกเลิกและปิดแล้ว',
+  },
+  Rejected: {
+    title: 'ไม่รับดำเนินการ',
+    description: 'งานบริการถูกปฏิเสธและปิดแล้ว',
   },
 };
 

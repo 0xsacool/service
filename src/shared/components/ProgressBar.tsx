@@ -1,11 +1,13 @@
-import type { TimelineEvent } from '../../types';
+import type { ServiceJobStatus } from '../../types';
+import { statusLabel } from '../../services/serviceJobPresentation';
+import { serviceJobProgressState } from '../../services/serviceJobTimeline';
 
-export function ProgressBar({ events }: { events: TimelineEvent[] }) {
-  const completed = events.filter((e) => e.done).length;
-  const total = events.length;
-  const progress = total === 0 ? 0 : Math.round((completed / total) * 100);
-  const progressText =
-    total === 0 ? 'ยังไม่มีขั้นตอน' : `เสร็จสิ้น ${completed} จาก ${total} ขั้นตอน`;
+export function ProgressBar({ status }: { status: ServiceJobStatus }) {
+  const { completed, total, progress, terminalException } =
+    serviceJobProgressState(status);
+  const progressText = terminalException
+    ? `ปิดงาน: ${statusLabel(status)}`
+    : `เสร็จสิ้น ${completed} จาก ${total} ขั้นตอน`;
 
   return (
     <>

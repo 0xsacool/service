@@ -89,6 +89,7 @@ function keydown(target, key) {
 test('Timeline and ProgressBar expose current-step and numeric progress semantics', async () => {
   const events = [
     {
+      status: 'Received',
       title: 'Received',
       description: 'รับสินค้าแล้ว',
       date: '2026-09-28T03:00:00.000Z',
@@ -97,6 +98,7 @@ test('Timeline and ProgressBar expose current-step and numeric progress semantic
       current: false,
     },
     {
+      status: 'Diagnosing',
       title: 'Diagnosing',
       description: 'กำลังตรวจสอบ',
       date: '—',
@@ -110,8 +112,12 @@ test('Timeline and ProgressBar expose current-step and numeric progress semantic
     createElement(
       Fragment,
       null,
-      createElement(Timeline, { events, showCurrentBadge: true }),
-      createElement(ProgressBar, { events })
+      createElement(Timeline, {
+        events,
+        currentStatus: 'Diagnosing',
+        showCurrentBadge: true,
+      }),
+      createElement(ProgressBar, { status: 'Diagnosing' })
     )
   );
 
@@ -125,8 +131,8 @@ test('Timeline and ProgressBar expose current-step and numeric progress semantic
   assert.ok(progress);
   assert.equal(progress.getAttribute('aria-valuemin'), '0');
   assert.equal(progress.getAttribute('aria-valuemax'), '100');
-  assert.equal(progress.getAttribute('aria-valuenow'), '50');
-  assert.equal(progress.getAttribute('aria-valuetext'), 'เสร็จสิ้น 1 จาก 2 ขั้นตอน');
+  assert.equal(progress.getAttribute('aria-valuenow'), '29');
+  assert.equal(progress.getAttribute('aria-valuetext'), 'เสร็จสิ้น 2 จาก 7 ขั้นตอน');
 
   await mounted.unmount();
 });

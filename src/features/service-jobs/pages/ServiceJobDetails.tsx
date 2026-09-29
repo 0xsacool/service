@@ -510,7 +510,7 @@ function ServiceJobDetailsView({
 
       {/* Progress */}
       <GlassCard className="p-5 animate-[rise_0.45s_cubic-bezier(0.22,1,0.36,1)_both]">
-        <ProgressBar events={claim.timeline} />
+        <ProgressBar status={claim.status} />
       </GlassCard>
 
       <div className="service-report-section-host">
@@ -561,10 +561,14 @@ function ServiceJobDetailsView({
 
           {/* Timeline */}
           <GlassCard className="p-6 sm:p-8 animate-[rise_0.55s_cubic-bezier(0.22,1,0.36,1)_both]">
-            <h2 className="mb-5 text-lg font-semibold tracking-tight text-ink">
+            <h2 className="mb-2 text-lg font-semibold tracking-tight text-ink">
               ประวัติการดำเนินงาน
             </h2>
-            <Timeline events={claim.timeline} />
+            <p className="mb-5 text-sm text-neutral-600">
+              ขั้นตอนปัจจุบัน:{' '}
+              <span className="font-semibold text-ink">{statusLabel(claim.status)}</span>
+            </p>
+            <Timeline events={claim.timeline} currentStatus={claim.status} />
           </GlassCard>
 
           {/* Notes */}

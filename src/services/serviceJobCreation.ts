@@ -5,26 +5,17 @@ import type {
   OrderVerification,
   RegisteredProduct,
   ServiceIntakeData,
-  TimelineEvent,
 } from '../types';
 import { isCanonicalBrandId, type BrandId } from '../types';
 import type { NewDurableServiceJob } from '../repositories/types';
 import type { BackendKind } from '../config/backend';
 import type { CreatePathAssertion } from '../config/runtimeDiagnostics';
-import { formatTime } from '../utils/formatDate';
 import { bangkokIsoDate } from './bangkokTime';
 import { resolveServiceEventMetadataInvariants } from './serviceEventMetadataInvariants';
+import { createServiceJobStatusTimelineEvent } from './serviceJobTimeline';
 
-export function createReceivedTimelineEvent(receivedAt: Date): TimelineEvent {
-  return {
-    status: 'Received',
-    title: 'Claim received',
-    description: 'Product received at the service counter and logged into the system.',
-    date: bangkokIsoDate(receivedAt),
-    time: formatTime(receivedAt),
-    done: true,
-    current: true,
-  };
+export function createReceivedTimelineEvent(receivedAt: Date) {
+  return createServiceJobStatusTimelineEvent('Received', receivedAt);
 }
 
 // F5d-65 — the customer half of intake is now one of two shapes: an already

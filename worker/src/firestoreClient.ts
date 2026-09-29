@@ -707,10 +707,17 @@ export function createFirestoreClient(env: Env): FirestoreClient {
                   closedAt: new FirestoreTimestampValue(input.closedAt),
                   updatedAt: input.updatedAt,
                   returnFormNumber: input.returnFormNumber,
+                  timeline: input.timeline,
                 }),
               },
               updateMask: {
-                fieldPaths: ['status', 'closedAt', 'updatedAt', 'returnFormNumber'],
+                fieldPaths: [
+                  'status',
+                  'closedAt',
+                  'updatedAt',
+                  'returnFormNumber',
+                  'timeline',
+                ],
               },
               currentDocument: { exists: true },
             },

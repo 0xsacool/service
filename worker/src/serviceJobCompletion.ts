@@ -5,6 +5,7 @@ import {
 } from '../../src/services/productReturnForm.ts';
 import type { BrandId } from './brands.ts';
 import type { ServiceJob } from '../../src/types/serviceJob.ts';
+import { appendServiceJobStatusTimelineEvent } from '../../src/services/serviceJobTimeline.ts';
 import {
   TransactionConflictError,
   type AllocationTransaction,
@@ -47,6 +48,7 @@ export interface ServiceJobCompletionDataAccess {
       year: number;
       closedAt: string;
       updatedAt: string;
+      timeline: ServiceJob['timeline'];
     }
   ): Promise<void>;
 }
@@ -106,6 +108,11 @@ export async function completeServiceJob(input: {
     const returnFormNumber = formatReturnFormNumber(year, sequence);
     const closedAt = completedAt.toISOString();
     const updatedAt = bangkokIsoDate(completedAt);
+    const timeline = appendServiceJobStatusTimelineEvent(
+      current.timeline,
+      'Completed',
+      completedAt
+    );
 
     try {
       await input.dataAccess.commitServiceJobCompletion(transaction, {
@@ -116,6 +123,7 @@ export async function completeServiceJob(input: {
         year,
         closedAt,
         updatedAt,
+        timeline,
       });
       return {
         ...current,
@@ -123,6 +131,7 @@ export async function completeServiceJob(input: {
         returnFormNumber,
         closedAt,
         updatedAt,
+        timeline,
       };
     } catch (error) {
       if (

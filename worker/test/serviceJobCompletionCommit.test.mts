@@ -33,6 +33,16 @@ try {
       year: 2027,
       closedAt: '2026-12-31T18:30:00.000Z',
       updatedAt: '2027-01-01',
+      timeline: [
+        {
+          status: 'Completed',
+          title: 'Completed',
+          description: 'closed',
+          date: '2027-01-01',
+          time: '01:30',
+          done: true,
+        },
+      ],
     }
   );
 
@@ -63,6 +73,7 @@ try {
     'closedAt',
     'updatedAt',
     'returnFormNumber',
+    'timeline',
   ]);
   assert.equal(jobWrite?.currentDocument?.exists, true);
   assert.deepEqual(jobWrite?.update?.fields?.status, { stringValue: 'Completed' });
@@ -71,6 +82,13 @@ try {
   });
   assert.deepEqual(jobWrite?.update?.fields?.returnFormNumber, {
     stringValue: 'RT-2027-000009',
+  });
+  const timeline = jobWrite?.update?.fields?.timeline as {
+    arrayValue?: { values?: Array<{ mapValue?: { fields?: Record<string, unknown> } }> };
+  };
+  assert.equal(timeline.arrayValue?.values?.length, 1);
+  assert.deepEqual(timeline.arrayValue?.values?.[0]?.mapValue?.fields?.status, {
+    stringValue: 'Completed',
   });
 
   assert.equal(

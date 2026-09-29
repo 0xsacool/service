@@ -75,6 +75,7 @@ function createCompletionStore(initial: ServiceJob, currentSequence = 0) {
         returnFormNumber: input.returnFormNumber,
         closedAt: input.closedAt,
         updatedAt: input.updatedAt,
+        timeline: input.timeline,
       };
     },
   };
@@ -101,6 +102,9 @@ function createCompletionStore(initial: ServiceJob, currentSequence = 0) {
   assert.equal(completed.status, 'Completed');
   assert.equal(completed.returnFormNumber, 'RT-2027-000009');
   assert.equal(completed.closedAt, '2026-12-31T18:30:00.000Z');
+  assert.equal(completed.timeline.length, 1);
+  assert.equal(completed.timeline[0]?.status, 'Completed');
+  assert.equal(completed.timeline[0]?.date, '2027-01-01');
   assert.equal(store.commits.length, 1);
   assert.equal(store.sequence, 9);
 
@@ -111,6 +115,7 @@ function createCompletionStore(initial: ServiceJob, currentSequence = 0) {
     now: () => new Date('2027-01-01T20:00:00.000Z'),
   });
   assert.equal(replay.returnFormNumber, 'RT-2027-000009');
+  assert.equal(replay.timeline.length, 1);
   assert.equal(store.commits.length, 1);
   assert.equal(store.sequence, 9);
 }
@@ -213,6 +218,7 @@ function routeHandler(state: RouteState) {
       sequence: number;
       closedAt: string;
       updatedAt: string;
+      timeline: ServiceJob['timeline'];
     }) {
       state.commits += 1;
       state.sequence = input.sequence;
@@ -223,6 +229,7 @@ function routeHandler(state: RouteState) {
         returnFormNumber: input.returnFormNumber,
         closedAt: input.closedAt,
         updatedAt: input.updatedAt,
+        timeline: input.timeline,
       };
     },
   } as unknown as FirestoreClient;
