@@ -8,6 +8,25 @@
 
 ---
 
+## Current source override — BRUNO Product Categories pending deploy (2026-09-29)
+
+Owner real-use review found that Product Master still exposed legacy Apple
+category choices. Decision #053 now defines the canonical new-selection
+taxonomy as ten BRUNO-focused, Thai-first bilingual categories:
+`hot-plate`, `toaster`, `rice-cooker`, `kettle`, `blender`,
+`coffee`, `food-maker`, `fan`, `kitchen-appliance`, and `other`.
+The six existing BRUNO ids are preserved; Smartphone/Laptop/Tablet/Smartwatch/
+Headphones are removed from new selection and Worker Direct Add validation.
+
+Older BRUNO import labels such as Hot Plate, Toaster, Rice Cooker, Kettle,
+Blender, and Fan remain accepted through bounded aliases; aliases cannot escape
+a caller-supplied allowlist. The live Product Master is still empty, so this
+change requires no production data migration and must not create a synthetic
+Product merely for acceptance. Source regression/build gates pass. Production
+activation is pending guarded Worker promotion followed by Hosting-only deploy.
+Public Tracking must remain disabled and the seven protected config
+modifications/historical worktrees must remain untouched.
+
 ## Current production override — Product Master Direct Add ACTIVATED (2026-09-29)
 
 Real-use testing after the clean reset found that the empty Product Master could

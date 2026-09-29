@@ -51,6 +51,25 @@ work. The smoke data was then removed; a fresh backend inventory returned no
 business documents. Production UI independently shows Dashboard counters at 0
 and Product Master `0 from 0`. Public Tracking remains disabled.
 
+## Current source change pending production activation — BRUNO Product Categories (2026-09-29)
+
+Owner real-use review of the Product Master Add modal found that the inherited
+category picker still exposed legacy Apple-oriented categories. Decision #053
+replaces the canonical selectable list with ten BRUNO-focused, Thai-first
+bilingual categories while preserving the existing BRUNO ids
+`hot-plate`, `toaster`, `rice-cooker`, `kettle`, `blender`, and
+`fan`. New ids are `coffee`, `food-maker`, `kitchen-appliance`, and
+`other`.
+
+Legacy Apple ids are no longer selectable or valid for new Worker Direct Add
+requests. Previous BRUNO spreadsheet labels remain import-compatible through
+bounded aliases, including the earlier short English names. The shared category
+test is available as `npm run test:product-categories`; targeted taxonomy
+coverage, full Worker regression, Worker typecheck, targeted ESLint, and the
+production build pass. No production data migration or synthetic Product write
+is needed because the live Product Master is still empty. Worker/Hosting
+activation is pending the guarded rollout; Public Tracking must remain OFF.
+
 ## Current production Product Master Direct Add activation (2026-09-29)
 
 Real-use testing after the clean reset confirmed that Product Master needs a direct

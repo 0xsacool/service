@@ -166,6 +166,31 @@ async function post(
 }
 
 {
+  const state = createState();
+  const result = await post(state, {
+    body: { ...validBody, categoryId: 'smartphone' },
+  });
+  check('removed Apple category fails server validation', result.status === 400);
+  check('removed Apple category performs no commit', state.commitAttempts === 0);
+}
+
+{
+  const state = createState({ revision: 2 });
+  const result = await post(state, {
+    body: {
+      ...validBody,
+      categoryId: 'coffee',
+      model: 'BHK301',
+      sku: 'BHK301',
+      productName: 'BRUNO Coffee Grinder',
+    },
+  });
+  check('new BRUNO coffee category is accepted', result.status === 201);
+  check('new BRUNO coffee category commits once', state.commits.length === 1);
+  check('new BRUNO coffee category is preserved', state.commits[0]?.request.categoryId === 'coffee');
+}
+
+{
   const state = createState({
     catalog: [
       {

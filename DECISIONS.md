@@ -1180,3 +1180,19 @@ Duplicate protection reuses the same normalized Product identity rules as Produc
 **Impact:** Decisions #043/#050 are superseded only where they previously said production Add remained unavailable. Bulk Import keeps its separate `canImportProducts` permission and all-or-nothing/idempotency rules. Existing edit/status/delete behavior under `canManageProducts` is unchanged. Firestore Rules are not widened, no IAM permission is added, Public Tracking remains disabled, and this does not introduce Product Instance/N10.
 
 **Status:** Owner approved implementation and rollout on 2026-09-29. Source `a1afbf34c759ba3be42280cfd2f03c70f7974cb2` is live; guarded Worker version `edafa1e0-6892-4526-9118-f85f0a43b00f` receives 100% traffic and Hosting serves the matching Direct Add frontend. Production read-only acceptance confirms the Add action is visible, the new route denies unauthenticated requests with 401, and Public Tracking remains disabled. No synthetic Product was created; the first owner-entered real Product is the positive write acceptance.
+
+---
+
+## 053 - Product Master category taxonomy is BRUNO-focused, bilingual, and backward-compatible for BRUNO imports
+
+**Reason:** The first owner use of Product Master Direct Add showed that the inherited category picker mixed relevant BRUNO appliance categories with legacy Apple-oriented choices such as Smartphone, Laptop, Tablet, Smartwatch, and Headphones. That taxonomy was appropriate only for historical mock data and was confusing for BRUNO Thailand operations.
+
+**Decision:** New Product Master selection uses exactly ten BRUNO-focused categories: `hot-plate`, `toaster`, `rice-cooker`, `kettle`, `blender`, `coffee`, `food-maker`, `fan`, `kitchen-appliance`, and `other`. Display labels are Thai-first with English in parentheses. The six existing BRUNO ids are deliberately preserved so no BRUNO catalog migration is required; four new ids cover missing families.
+
+The legacy Apple category ids are removed from the canonical selectable/Worker validation allowlist and therefore cannot be used for new Product Master rows. Historical mock fixtures may still contain those ids for test-data lineage, but they do not re-enter the production picker or Worker allowlist.
+
+Import compatibility is preserved through aliases for the previous short BRUNO English labels (`Hot Plate`, `Toaster`, `Rice Cooker`, `Kettle`, `Blender`, `Fan`) plus concise Thai/English forms for the expanded categories. Alias resolution is constrained by the caller's allowed category list, so an alias can never bypass a restricted allowlist.
+
+**Impact:** Browser Product Master filters/forms and Worker Direct Add validation continue sharing one static source of truth. No Firestore migration, Rules/IAM change, Product write, or Public Tracking change is required.
+
+**Status:** Owner approved implementation and production rollout on 2026-09-29. Source/tests are complete and deterministic gates pass; production activation is pending the guarded Worker then Hosting rollout.

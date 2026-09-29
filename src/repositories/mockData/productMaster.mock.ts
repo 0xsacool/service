@@ -16,11 +16,11 @@ import type {
 // the 7 existing seed customers' Product Selection cards render identically
 // to before this sprint — only the mechanism producing them changed.
 
-// PI-3 — the canonical list moved to src/services/productCategories.ts so
-// the privileged Worker can share it byte-for-byte with the browser preview.
-// Re-exported here unchanged: every existing importer of this fixture
-// (productMasterRepository.ts, firestoreProductMasterRepository.ts) keeps
-// working with no change, and there is still exactly one definition.
+// The canonical selectable category list lives in
+// src/services/productCategories.ts so the privileged Worker and browser share
+// one allowlist. This mock fixture re-exports the current list; its historical
+// Apple seed products may retain legacy category ids for mock-data lineage,
+// but those ids are no longer offered or accepted for new Product Master data.
 export { productCategories } from '../../services/productCategories';
 
 export const accessoriesMaster: AccessoryDefinition[] = [

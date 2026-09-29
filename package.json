@@ -26,6 +26,7 @@
     "test:trusted-print-ui": "node --test --test-concurrency=1 test/trustedPrintContract.test.mjs test/trustedPrintUi.test.mjs",
     "test:return-form": "node --test --test-concurrency=1 test/productReturnForm.test.mjs",
     "test:return-form-guard": "node --test --test-concurrency=1 test/productReturnFormGuardRuntime.test.mjs",
+    "test:product-categories": "node --test test/productCategories.test.mjs",
     "test:firestore-rules": "firebase emulators:exec --config firebase.rules-test.json --only firestore \"node --test test/firestoreRules.test.mjs\""
   },
   "dependencies": {
