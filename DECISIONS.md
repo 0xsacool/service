@@ -1164,3 +1164,19 @@ The Worker custom IAM role adds exactly `datastore.entities.delete` to its exist
 **Impact:** Existing old/test Product rows can still be retired instantly with `Legacy`, but cannot be hard-deleted under this safety contract unless a later separately approved historical-cleanup mechanism can establish their provenance without heuristics. This is intentional: the approved no-history-delete rule is stronger than convenience. New imported rows are fully reference-trackable and can later be safely deleted if never used. This decision does not implement Product Instance/N10.
 
 **Status:** Approved by the owner on 2026-09-29 for implementation and production rollout, including the narrowly-scoped Worker IAM delete permission. Public Tracking state is unrelated and must remain disabled.
+
+---
+
+## 052 - Product Master direct single-create is Worker-mediated, capability-gated, duplicate-safe, and transactionally revisioned
+
+**Reason:** The first real-use workflow after the pre-handoff clean reset exposed a practical catalog bootstrap gap: Product Master was intentionally empty, the existing bulk-import path required a prepared file, and the visible "Add Product" implementation was mock-only because production direct client Product mutation remained denied. Staff need to add one real catalog model at a time without weakening the browser Firestore boundary or fabricating import files.
+
+**Decision:** Production Product Master single-create is a privileged Worker operation at `POST /products`, authorized server-side only when the authenticated staff profile has literal `canManageProducts=true`. The browser never writes `products` directly; `firestoreProductMasterRepository.createProduct()` remains denied in production. The frontend uses the existing Product Management repository seam, waits for the Worker result, performs a server-confirmed targeted Product Master refresh, and only then treats the new row as visible/successful.
+
+The direct-create contract is exact and bounded. `brand`, `categoryId`, `model`, `sku`, `productName`, `warrantyMonths`, and `status` are accepted; SKU is required for this manual-create path, status remains `Active | Legacy`, and category must be one of the known Product Master categories. The Worker allocates the Product document ID; no client-chosen document ID is accepted.
+
+Duplicate protection reuses the same normalized Product identity rules as Product Import. Inside one retryable Firestore transaction the Worker reads the authoritative catalog and `productCatalogState/current`, rejects an existing/ambiguous SKU or identity, then atomically creates the Product with `currentDocument.exists=false` and advances the catalog revision. New rows are born reference-trackable (`referenceTrackingVersion=1`) with empty accessory/common-problem associations and Firestore timestamps, so Decision #051 safe-delete rules can reason about their future reference state. Transaction conflicts re-read and re-check the catalog before retry, preventing a stale pre-check from becoming the authorization for a later write.
+
+**Impact:** Decisions #043/#050 are superseded only where they previously said production Add remained unavailable. Bulk Import keeps its separate `canImportProducts` permission and all-or-nothing/idempotency rules. Existing edit/status/delete behavior under `canManageProducts` is unchanged. Firestore Rules are not widened, no IAM permission is added, Public Tracking remains disabled, and this does not introduce Product Instance/N10.
+
+**Status:** Owner approved implementation on 2026-09-29. Source implementation and deterministic regression coverage are complete; production activation remains a separate deploy gate and must not occur without explicit owner approval.

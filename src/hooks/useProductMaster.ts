@@ -7,14 +7,10 @@ import type {
   ProductImportContext,
   ProductImportRecord,
 } from '../imports/products';
-import {
-  buildProductMasterEntry,
-  type NewProductInput,
-} from '../services/productMasterAdmin';
+import type { NewProductInput } from '../services/productMasterAdmin';
 import {
   canImportProductCatalog,
   canManageProductCatalog,
-  canMutateProductCatalog,
 } from '../services/productCatalogAccess';
 import { computeCatalogFingerprint } from '../services/productCatalogFingerprint';
 import {
@@ -29,7 +25,7 @@ import {
   persistAttempt,
   readPersistedAttempt,
 } from '../services/productImportPendingAttempt';
-import { ProductImportError } from '../repositories/types';
+import { ProductCatalogManagementError, ProductImportError } from '../repositories/types';
 import { useAuthSession } from '../auth/authSessionContext';
 
 export interface ImportCommitResult {
@@ -46,7 +42,7 @@ export interface UseProductMasterResult {
   canEdit: boolean;
   canManageProducts: boolean;
   canImportProductCatalog: boolean;
-  addProduct: (input: NewProductInput) => ProductMasterEntry;
+  addProduct: (input: NewProductInput) => Promise<ProductMasterEntry>;
   setProductStatus: (
     productId: string,
     status: ProductMasterEntry['status']
@@ -114,19 +110,52 @@ export function useProductMaster(): UseProductMasterResult {
   );
   const categories = repositories.productMaster.getCategories();
   const brands = Array.from(new Set(products.map((p) => p.brand))).sort();
-  const canEdit = canMutateProductCatalog();
   const { staffProfile } = useAuthSession();
   const canManageProducts = canManageProductCatalog(
     staffProfile?.canManageProducts ?? false
   );
+  const canEdit = canManageProducts;
   const canImport = canImportProductCatalog(staffProfile?.canImportProducts ?? false);
 
-  const addProduct = (input: NewProductInput): ProductMasterEntry => {
-    const existingIds = new Set(products.map((p) => p.id));
-    const entry = buildProductMasterEntry(input, existingIds);
-    repositories.productMaster.createProduct(entry);
-    setProducts(repositories.productMaster.getProducts());
-    return entry;
+  const addProduct = async (input: NewProductInput): Promise<ProductMasterEntry> => {
+    try {
+      const productId = await repositories.productCatalogManagement.createProduct({
+        version: 1,
+        brand: input.brand,
+        categoryId: input.categoryId,
+        model: input.model,
+        sku: input.sku,
+        productName: input.productName,
+        warrantyMonths: input.warrantyMonths,
+        status: input.status,
+      });
+      await repositories.productMaster.refreshFromServer([productId]);
+      const fresh = repositories.productMaster.getProducts();
+      setProducts(fresh);
+      const created = fresh.find((product) => product.id === productId);
+      if (!created) {
+        throw new Error('Created product was not returned by the authoritative catalog');
+      }
+      return created;
+    } catch (error) {
+      if (error instanceof ProductCatalogManagementError) {
+        if (error.code === 'conflict') {
+          throw new Error(
+            'มีสินค้าที่ใช้ SKU หรือรหัสสินค้าเดียวกันอยู่ในข้อมูลหลักแล้ว',
+            { cause: error }
+          );
+        }
+        if (error.code === 'forbidden') {
+          throw new Error('บัญชีนี้ไม่มีสิทธิ์เพิ่มข้อมูลหลักสินค้า', { cause: error });
+        }
+        if (error.code === 'validation_failed') {
+          throw new Error('ข้อมูลสินค้าไม่ถูกต้อง กรุณาตรวจสอบแล้วลองอีกครั้ง', {
+            cause: error,
+          });
+        }
+      }
+      throw new Error('ไม่สามารถเพิ่มสินค้าได้ กรุณาลองใหม่', { cause: error });
+    }
   };
 
   const setProductStatus = async (

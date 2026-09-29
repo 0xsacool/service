@@ -1,25 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { after, test } from 'node:test';
-import { createServer } from 'vite';
-
-const vite = await createServer({
-  appType: 'custom',
-  server: { middlewareMode: true, hmr: false },
-});
-
-after(async () => {
-  await vite.close();
-});
-
-const { searchActiveProductCatalog } = await vite.ssrLoadModule(
-  '/src/services/productCatalogSearch.ts'
-);
-const { parseProductCatalogStatusRequest, parseProductCatalogUpdateRequest } =
-  await vite.ssrLoadModule('/src/services/productCatalogManagement.ts');
-const { canManageProductCatalogForBackend } = await vite.ssrLoadModule(
-  '/src/services/productCatalogAccess.ts'
-);
+import { test } from 'node:test';
+import { searchActiveProductCatalog } from '../src/services/productCatalogSearch.ts';
+import {
+  parseProductCatalogCreateRequest,
+  parseProductCatalogStatusRequest,
+  parseProductCatalogUpdateRequest,
+} from '../src/services/productCatalogManagement.ts';
 
 function product(id, overrides = {}) {
   return {
@@ -95,6 +82,32 @@ test('product update contract is exact, normalized, and status-bounded', () => {
   assert.equal(parseProductCatalogUpdateRequest({ ...parsed, sku: null })?.sku, null);
 });
 
+test('direct-create contract requires a real SKU and keeps the exact bounded field set', () => {
+  const parsed = parseProductCatalogCreateRequest({
+    version: 1,
+    brand: ' BRUNO ',
+    categoryId: ' hot-plate ',
+    model: ' BOE021 ',
+    sku: ' BOE021-SHPK ',
+    productName: ' Compact Hot Plate ',
+    warrantyMonths: 12,
+    status: 'Active',
+  });
+  assert.deepEqual(parsed, {
+    version: 1,
+    brand: 'BRUNO',
+    categoryId: 'hot-plate',
+    model: 'BOE021',
+    sku: 'BOE021-SHPK',
+    productName: 'Compact Hot Plate',
+    warrantyMonths: 12,
+    status: 'Active',
+  });
+  assert.equal(parseProductCatalogCreateRequest({ ...parsed, sku: '' }), null);
+  assert.equal(parseProductCatalogCreateRequest({ ...parsed, sku: null }), null);
+  assert.equal(parseProductCatalogCreateRequest({ ...parsed, extra: true }), null);
+});
+
 test('quick status contract accepts only exact Active/Legacy requests', () => {
   assert.deepEqual(parseProductCatalogStatusRequest({ version: 1, status: 'Legacy' }), {
     version: 1,
@@ -107,11 +120,32 @@ test('quick status contract accepts only exact Active/Legacy requests', () => {
   );
 });
 
-test('production Product edit capability is distinct from legacy direct mutation gate', () => {
-  assert.equal(canManageProductCatalogForBackend('mock', false), true);
-  assert.equal(canManageProductCatalogForBackend('firestore', false), false);
-  assert.equal(canManageProductCatalogForBackend('firestore', true), true);
-  assert.equal(canManageProductCatalogForBackend(null, true), false);
+test('production Product management remains capability-gated instead of opening direct client mutation', async () => {
+  const source = await readFile(
+    new URL('../src/services/productCatalogAccess.ts', import.meta.url),
+    'utf8'
+  );
+  assert.match(source, /kind === 'firestore' && canManageProducts/);
+  assert.match(source, /canMutateProductCatalogForBackend/);
+  assert.match(source, /return kind === 'mock'/);
+});
+
+test('Product Master direct add uses privileged management capability and Worker repository seam', async () => {
+  const hookSource = await readFile(
+    new URL('../src/hooks/useProductMaster.ts', import.meta.url),
+    'utf8'
+  );
+  const pageSource = await readFile(
+    new URL(
+      '../src/features/master-data/products/pages/ProductsPage.tsx',
+      import.meta.url
+    ),
+    'utf8'
+  );
+  assert.match(hookSource, /const canEdit = canManageProducts/);
+  assert.match(hookSource, /productCatalogManagement\.createProduct/);
+  assert.match(hookSource, /refreshFromServer\(\[productId\]\)/);
+  assert.match(pageSource, /await addProduct\(input\)/);
 });
 
 test('Product Master defaults to Active so retired Legacy rows do not clutter normal use', async () => {

@@ -30,9 +30,17 @@ import {
 } from './firebaseAuth.ts';
 import { getAuthorizedStaffProfile, isServiceJobInBrand, isStaffAuthorizedForServiceJob, type StaffProfile } from './staffAuthorization.ts';
 import {
+  parseProductCatalogCreateRequest,
   parseProductCatalogStatusRequest,
   parseProductCatalogUpdateRequest,
 } from '../../src/services/productCatalogManagement.ts';
+import {
+  createProductCatalogEntry,
+  ProductCatalogCreateCatalogTooLargeError,
+  ProductCatalogCreateRetryExhaustedError,
+  ProductCatalogCreateValidationError,
+  ProductCatalogDuplicateError,
+} from './productCatalogCreation.ts';
 import {
   deleteProductSafely,
   ProductDeleteInUseError,
@@ -123,6 +131,7 @@ const MAX_SERVICE_REPORT_INPUT_BYTES = 200 * 1024;
 const MAX_SERVICE_JOB_COMPLETION_BODY_BYTES = 1024;
 // PI-3 — privileged Product Master import. Exact path, no prefix, so it can
 // never collide with anything else.
+const PRODUCTS_PATH = '/products';
 const PRODUCTS_IMPORT_PATH = '/products/import';
 const PRODUCTS_PREFIX = '/products/';
 const MAX_PRODUCT_UPDATE_BODY_BYTES = 8 * 1024;
@@ -582,6 +591,84 @@ async function authorizeProductManagement(
     return json(
       { code: 'forbidden', error: 'This account may not manage products' },
       { status: 403 }
+    );
+  }
+}
+
+async function handleProductCreate(
+  request: Request,
+  env: Env,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  const authorization = await authorizeProductManagement(request, env, dependencies);
+  if (authorization instanceof Response) return authorization;
+
+  const mediaType = request.headers.get('Content-Type')?.split(';', 1)[0]?.trim().toLowerCase();
+  const contentLength = request.headers.get('Content-Length');
+  if (
+    !request.body ||
+    mediaType !== 'application/json' ||
+    (contentLength !== null && Number(contentLength) > MAX_PRODUCT_UPDATE_BODY_BYTES)
+  ) {
+    return json(
+      { code: 'validation_failed', error: 'Invalid product create request' },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const raw = await readBodyWithLimit(request.body, MAX_PRODUCT_UPDATE_BODY_BYTES);
+    const parsed = parseProductCatalogCreateRequest(
+      JSON.parse(new TextDecoder().decode(raw))
+    );
+    if (!parsed) {
+      return json(
+        { code: 'validation_failed', error: 'Invalid product create request' },
+        { status: 400 }
+      );
+    }
+
+    const result = await createProductCatalogEntry({
+      request: parsed,
+      dataAccess: authorization.client,
+    });
+    return json({ productId: result.productId }, { status: 201 });
+  } catch (error) {
+    if (
+      error instanceof ProductCatalogCreateValidationError ||
+      error instanceof FileTooLargeError ||
+      error instanceof SyntaxError
+    ) {
+      return json(
+        { code: 'validation_failed', error: 'Invalid product create request' },
+        { status: 400 }
+      );
+    }
+    if (error instanceof ProductCatalogDuplicateError) {
+      return json(
+        {
+          code: 'conflict',
+          error: 'A product with the same SKU or product identity already exists',
+        },
+        { status: 409 }
+      );
+    }
+    if (error instanceof ProductCatalogCreateCatalogTooLargeError) {
+      return json(
+        { code: 'dependency_unavailable', error: 'The product catalog is too large to update safely' },
+        { status: 503 }
+      );
+    }
+    if (error instanceof ProductCatalogCreateRetryExhaustedError) {
+      return json(
+        { code: 'dependency_unavailable', error: 'The catalog kept changing; try again' },
+        { status: 503 }
+      );
+    }
+    console.error('[files-worker] Product catalog create failed');
+    return json(
+      { code: 'dependency_unavailable', error: 'Unable to create product' },
+      { status: 503 }
     );
   }
 }
@@ -1276,6 +1363,10 @@ export function createWorkerHandler(
         request,
         env
       );
+    }
+
+    if (request.method === 'POST' && url.pathname === PRODUCTS_PATH) {
+      return withCors(await handleProductCreate(request, env, dependencies), request, env);
     }
 
     if (request.method === 'POST' && url.pathname === PRODUCTS_IMPORT_PATH) {

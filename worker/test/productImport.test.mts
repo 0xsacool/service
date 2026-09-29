@@ -650,12 +650,15 @@ function product(overrides: Partial<CatalogProduct> = {}): CatalogProduct {
   );
   check('GET /products/import is not routed (404)', wrongMethod.status === 404);
 
-  const unrelated = await handler.fetch!(
+  const directCreate = await handler.fetch!(
     new Request('https://worker.test/products', { method: 'POST' }),
     env,
     {} as ExecutionContext
   );
-  check('POST /products (no /import) is not routed (404)', unrelated.status === 404);
+  check(
+    'POST /products is a distinct authenticated direct-create route, not Product Import',
+    directCreate.status === 401
+  );
 }
 
 if (failures > 0) {

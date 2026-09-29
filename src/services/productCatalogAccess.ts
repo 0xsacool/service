@@ -1,7 +1,7 @@
 import { backendKind } from '../config/backend';
 
 export const PRODUCT_CATALOG_READ_ONLY_MESSAGE =
-  'การแก้ไขข้อมูลสินค้าในระบบจริงยังไม่พร้อมใช้งาน ต้องดำเนินการผ่านขั้นตอนที่ได้รับสิทธิ์เท่านั้น';
+  'บัญชีนี้ไม่มีสิทธิ์จัดการข้อมูลหลักสินค้า';
 
 export function canMutateProductCatalogForBackend(
   kind: 'mock' | 'firestore' | null
@@ -25,14 +25,12 @@ export function canManageProductCatalog(canManageProducts: boolean): boolean {
   return canManageProductCatalogForBackend(backendKind, canManageProducts);
 }
 
-// PI-3 Slice 2 — deliberately separate from canMutateProductCatalogForBackend
-// above, not a reuse of it: Production Import (this predicate) and direct
-// Add/Edit (that one) are two independently-gated capabilities. Mock mode
-// has no per-staff capability to check, so it is always import-capable, same
-// as it is always edit-capable; Firestore/production mode instead reflects
-// the signed-in staff's own canImportProducts flag, while direct Add/Edit
-// stays unconditionally unavailable there. Nothing in this function can make
-// canMutateProductCatalog() return true in Firestore mode.
+// Product Import and Product Management remain independently gated.
+// canMutateProductCatalog() is intentionally still mock-only because it means
+// direct client/local mutation (used by Product Knowledge and legacy mock
+// paths). Production Product create/edit/status/delete instead use the
+// Worker-mediated canManageProductCatalog() boundary above; import uses its
+// separate canImportProducts capability here.
 export function canImportProductCatalogForBackend(
   kind: 'mock' | 'firestore' | null,
   canImportProducts: boolean

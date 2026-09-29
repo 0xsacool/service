@@ -51,6 +51,26 @@ work. The smoke data was then removed; a fresh backend inventory returned no
 business documents. Production UI independently shows Dashboard counters at 0
 and Product Master `0 from 0`. Public Tracking remains disabled.
 
+## Current source change pending production activation — Product Master Direct Add (2026-09-29)
+
+Real-use testing after the clean reset confirmed that Product Master needs a direct
+single-product bootstrap path. The source now implements Decision #052:
+authorized staff with `canManageProducts=true` see the existing **เพิ่มสินค้า**
+action in Firestore mode, while the actual create is performed only by the
+authenticated Worker `POST /products` route. The browser Product repository
+still rejects direct Firestore creates.
+
+The Worker validates the exact bounded create contract, requires a real SKU and
+known category, reuses Product Import identity matching to reject duplicates,
+and commits the new Product plus catalog revision atomically in a retryable
+Firestore transaction. New direct-created rows carry
+`referenceTrackingVersion=1`, empty Product-knowledge associations, and
+server timestamps. The UI waits for a server-confirmed targeted refresh before
+closing the Add Product modal. Worker typecheck, direct-create route/wire tests,
+frontend Product Catalog regression, root production build, and full Worker
+regression pass. Production Worker/Hosting deployment has **not** occurred yet;
+that remains an explicit owner deploy gate. Public Tracking remains disabled.
+
 ## Historical production Product Quick Toggle + Safe Delete activation (2026-09-29)
 
 Product Quick Toggle + Safe Hard Delete is live from source

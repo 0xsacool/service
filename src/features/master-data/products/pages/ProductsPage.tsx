@@ -377,8 +377,8 @@ export function ProductsPage() {
           categories={categories}
           brands={brands}
           onClose={() => setShowAddModal(false)}
-          onCreate={(input) => {
-            addProduct(input);
+          onCreate={async (input) => {
+            await addProduct(input);
             setShowAddModal(false);
           }}
         />

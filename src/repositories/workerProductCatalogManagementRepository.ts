@@ -3,7 +3,10 @@ import {
   type WorkerTokenProvider,
 } from '../auth/workerTokenProvider';
 import { getFilesWorkerBaseUrl } from '../config/workerUrl';
-import type { ProductCatalogUpdateRequest } from '../services/productCatalogManagement';
+import type {
+  ProductCatalogCreateRequest,
+  ProductCatalogUpdateRequest,
+} from '../services/productCatalogManagement';
 import {
   ProductCatalogManagementError,
   type ProductCatalogManagementErrorCode,
@@ -34,6 +37,58 @@ export function createWorkerProductCatalogManagementRepository(
   const baseUrl = getFilesWorkerBaseUrl();
 
   return {
+    async createProduct(request: ProductCatalogCreateRequest) {
+      let response: Response;
+      try {
+        response = await fetchWithWorkerToken(tokenProvider, `${baseUrl}/products`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(request),
+        });
+      } catch (error) {
+        throw new ProductCatalogManagementError(
+          error instanceof Error
+            ? error.message
+            : 'Network error during product creation',
+          null,
+          null
+        );
+      }
+
+      if (!response.ok) {
+        let body: { code?: unknown; error?: unknown } = {};
+        try {
+          body = (await response.json()) as { code?: unknown; error?: unknown };
+        } catch {
+          // Keep the safe fallback below when a provider returns a non-JSON error body.
+        }
+        throw new ProductCatalogManagementError(
+          typeof body.error === 'string' ? body.error : 'Unable to create product',
+          response.status,
+          errorCode(body.code)
+        );
+      }
+
+      let body: { productId?: unknown };
+      try {
+        body = (await response.json()) as { productId?: unknown };
+      } catch {
+        throw new ProductCatalogManagementError(
+          'Unable to confirm the created product',
+          null,
+          null
+        );
+      }
+      if (typeof body.productId !== 'string' || body.productId.length === 0) {
+        throw new ProductCatalogManagementError(
+          'Unable to confirm the created product',
+          null,
+          null
+        );
+      }
+      return body.productId;
+    },
+
     async setProductStatus(productId, status) {
       let response: Response;
       try {

@@ -28,7 +28,10 @@ import type {
   ServiceJobIntakePayload,
 } from '../services/serviceJobCreation';
 import type { ProductImportRequest } from '../services/productImportRequest';
-import type { ProductCatalogUpdateRequest } from '../services/productCatalogManagement';
+import type {
+  ProductCatalogCreateRequest,
+  ProductCatalogUpdateRequest,
+} from '../services/productCatalogManagement';
 import type { ProductImportRowIssue } from '../services/productImportClassification';
 
 export type ServiceJobUpdate = Omit<
@@ -289,6 +292,7 @@ export class ProductCatalogManagementError extends Error {
 }
 
 export interface ProductCatalogManagementRepository {
+  createProduct(request: ProductCatalogCreateRequest): Promise<string>;
   updateProduct(productId: string, request: ProductCatalogUpdateRequest): Promise<void>;
   setProductStatus(productId: string, status: ProductStatus): Promise<void>;
   deleteProduct(productId: string): Promise<void>;

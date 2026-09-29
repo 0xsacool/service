@@ -22,6 +22,13 @@ export interface ProductCatalogUpdateRequest {
   status: ProductStatus;
 }
 
+export interface ProductCatalogCreateRequest extends Omit<
+  ProductCatalogUpdateRequest,
+  'sku'
+> {
+  sku: string;
+}
+
 const ALLOWED_KEYS = new Set([
   'version',
   'brand',
@@ -108,6 +115,14 @@ export function parseProductCatalogUpdateRequest(
     warrantyMonths: Number(warrantyMonths),
     status,
   };
+}
+
+export function parseProductCatalogCreateRequest(
+  input: unknown
+): ProductCatalogCreateRequest | null {
+  const parsed = parseProductCatalogUpdateRequest(input);
+  if (!parsed?.sku) return null;
+  return { ...parsed, sku: parsed.sku };
 }
 
 export function productCatalogUpdateFromEntry(

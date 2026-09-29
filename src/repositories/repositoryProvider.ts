@@ -15,6 +15,7 @@ import type { ApprovalConsoleRepository } from './workerServiceReportReadReposit
 import type { BrandId } from '../types';
 import type { WorkerTokenProvider } from '../auth/workerTokenProvider';
 import { backendKind } from '../config/backend';
+import { buildProductMasterEntry } from '../services/productMasterAdmin';
 import { createMockApprovalConsoleRepository } from './mockApprovalConsoleRepository';
 import { filesBackendKind } from '../config/filesBackend';
 import { attachmentsRepository } from './attachmentsRepository';
@@ -61,6 +62,22 @@ export function createMockRepositoryProvider(): RepositoryProvider {
     registeredProducts: registeredProductsRepository,
     productMaster: productMasterRepository,
     productCatalogManagement: {
+      async createProduct(request) {
+        const entry = buildProductMasterEntry(
+          {
+            brand: request.brand,
+            categoryId: request.categoryId,
+            model: request.model,
+            sku: request.sku,
+            productName: request.productName,
+            warrantyMonths: request.warrantyMonths,
+            status: request.status,
+          },
+          new Set(productMasterRepository.getProducts().map((product) => product.id))
+        );
+        productMasterRepository.createProduct(entry);
+        return entry.id;
+      },
       async updateProduct(productId, request) {
         productMasterRepository.updateProduct(productId, {
           brand: request.brand,
@@ -125,6 +142,7 @@ function createUnavailableRepositoryProvider(): RepositoryProvider {
       refreshFromServer: reject,
     },
     productCatalogManagement: {
+      createProduct: reject,
       updateProduct: reject,
       setProductStatus: reject,
       deleteProduct: reject,

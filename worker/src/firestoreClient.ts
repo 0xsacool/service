@@ -30,6 +30,10 @@ import type {
   ProductImportCommitInput,
   ProductImportDataAccess,
 } from './productImport.ts';
+import type {
+  ProductCatalogCreateCommitInput,
+  ProductCatalogCreateDataAccess,
+} from './productCatalogCreation.ts';
 import type { CatalogProduct } from '../../src/services/productIdentity.ts';
 import type { ProductCatalogDeletionDataAccess } from './productCatalogDeletion.ts';
 import type { ProductCatalogUpdateRequest } from '../../src/services/productCatalogManagement.ts';
@@ -94,6 +98,7 @@ export interface FirestoreClient
     ServiceReportCreationDataAccess,
     ServiceReportFinalizationDataAccess,
     ProductImportDataAccess,
+    ProductCatalogCreateDataAccess,
     ProductCatalogDeletionDataAccess {
   listAttachments(): Promise<AttachmentRetentionRecord[]>;
   // F5d-15 — a single-document read, added for the deletion executor's
@@ -1271,6 +1276,63 @@ export function createFirestoreClient(env: Env): FirestoreClient {
         );
       }
       return true;
+    },
+
+    async commitProductCatalogCreate(
+      transaction,
+      input: ProductCatalogCreateCommitInput
+    ) {
+      const token = await getAccessToken(env);
+      const timestamp = new FirestoreTimestampValue(input.now);
+      const writes = [
+        createWrite('products', input.productId, {
+          brand: input.request.brand,
+          categoryId: input.request.categoryId,
+          model: input.request.model,
+          sku: input.request.sku,
+          productName: input.request.productName,
+          status: input.request.status,
+          warrantyMonths: input.request.warrantyMonths,
+          accessoryIds: [],
+          commonProblemIds: [],
+          referenceTrackingVersion: 1,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        }),
+        {
+          update: {
+            name: resourceName('productCatalogState', 'current'),
+            fields: fields({
+              revision: input.nextCatalogRevision,
+              updatedAt: timestamp,
+            }),
+          },
+        },
+      ];
+
+      const response = await fetch(`${baseUrl}:commit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ transaction: transaction.id, writes }),
+      });
+
+      if (!response.ok) {
+        const body = await response.text();
+        if (
+          response.status === 409 &&
+          sanitizedGoogleErrorStatus(body) === 'ABORTED'
+        ) {
+          throw new TransactionConflictError();
+        }
+        throw new FirestoreRequestError(
+          `commitProductCatalogCreate("${input.productId}")`,
+          response.status,
+          body
+        );
+      }
     },
 
     // --- PI-3: privileged Product Master import -----------------------

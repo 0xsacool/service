@@ -24,16 +24,20 @@ export function AddProductModal({
   categories: ProductCategory[];
   brands: string[];
   onClose: () => void;
-  onCreate: (input: NewProductInput) => void;
+  onCreate: (input: NewProductInput) => Promise<void>;
 }) {
   const [value, setValue] = useState<NewProductInput>(EMPTY_INPUT);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [pending, setPending] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleChange = (patch: Partial<NewProductInput>) => {
     setValue((current) => ({ ...current, ...patch }));
+    setSubmitError(null);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (pending) return;
     const input: NewProductInput = {
       ...value,
       brand: value.brand.trim(),
@@ -48,7 +52,20 @@ export function AddProductModal({
       return;
     }
 
-    onCreate(input);
+    setErrors({});
+    setSubmitError(null);
+    setPending(true);
+    try {
+      await onCreate(input);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : 'ไม่สามารถเพิ่มสินค้าได้ กรุณาลองใหม่'
+      );
+    } finally {
+      setPending(false);
+    }
   };
 
   return (
@@ -62,9 +79,22 @@ export function AddProductModal({
           onChange={handleChange}
         />
 
+        {submitError && (
+          <p
+            role="alert"
+            className="rounded-2xl bg-danger-50 px-4 py-3 text-sm text-danger-700"
+          >
+            {submitError}
+          </p>
+        )}
+
         <div className="flex justify-end gap-3 pt-2">
-          <SecondaryButton onClick={onClose}>ยกเลิก</SecondaryButton>
-          <PrimaryButton onClick={handleSubmit}>เพิ่มสินค้า</PrimaryButton>
+          <SecondaryButton onClick={onClose} disabled={pending}>
+            ยกเลิก
+          </SecondaryButton>
+          <PrimaryButton onClick={handleSubmit} disabled={pending}>
+            {pending ? 'กำลังเพิ่มสินค้า...' : 'เพิ่มสินค้า'}
+          </PrimaryButton>
         </div>
       </div>
     </Modal>
