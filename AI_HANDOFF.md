@@ -8,7 +8,36 @@
 
 ---
 
-## Current production override — Product Master UX ACTIVATED (2026-09-29)
+## Current production override — Product Quick Toggle + Safe Delete ACTIVATED (2026-09-29)
+
+Current production source is
+`b41d1dbda4b6b5666cc11980afc60da36d64e382` on published branch
+`product-safe-delete-20260929`. Product status can be toggled directly from
+Product Master list/detail with confirmation. Authenticated hard delete is
+available only for `Legacy` Products that carry `referenceTrackingVersion=1`
+and have zero transactional `service_jobs.catalogProductId` references.
+Existing pre-cutover Products without that marker remain retirement-only.
+
+The Worker remains the only Product mutation boundary. Browser Product writes
+are still denied. The custom Worker IAM role adds exactly
+`datastore.entities.delete`; Service Job `catalogProductId` is immutable in
+browser Rules so a historical reference cannot be edited away to bypass the
+delete guard. Production deployment `6da85e72-40a7-4569-bd2e-24245ccc77b0`
+routes 100% to version `6c1251ef-0f52-44ed-912f-0f373411efcd`. Public Tracking
+remains disabled.
+
+Positive production acceptance used only synthetic Product
+`safe-delete-accept-20260929-1649`. It was verified Legacy/reference-tracked
+with zero Service Job references, deleted by the owner through the authenticated
+UI, then independently verified absent by direct Firestore read (404) with the
+reference query still returning zero. Unauthenticated DELETE returns 401.
+
+Hosting rollout briefly reproduced the known missing-gitignored-env failure in
+the isolated worktree. The exact published source was rebuilt with the approved
+production VITE environment and Hosting-only redeployed; live main asset is now
+`/assets/index-DJ5kKwv0.js`. Temporary env copies were removed after the build.
+
+## Historical production override — Product Master UX ACTIVATED (2026-09-29)
 
 Production runtime source is
 `8c5f1c95e3601032e3dd5d66a0f7044a5089a1b6` (tag

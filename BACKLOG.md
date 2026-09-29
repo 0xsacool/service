@@ -1,10 +1,10 @@
 # Service Tech Backlog
 
-> Authoritative active-work index reconciled against repository source, deterministic tests, and the accepted production state after Product Master UX activation on 2026-09-29. Historical roadmap and decision entries remain useful for lineage, but this file is the current backlog source of truth. See `PROJECT_STATE.md` for runtime history and `DECISIONS.md` for architectural decisions.
+> Authoritative active-work index reconciled against repository source, deterministic tests, and the accepted production state after Product Quick Toggle + Safe Delete activation on 2026-09-29. Historical roadmap and decision entries remain useful for lineage, but this file is the current backlog source of truth. See `PROJECT_STATE.md` for runtime history and `DECISIONS.md` for architectural decisions.
 
 ## Baseline
 
-- Current production runtime source checkpoint: `8c5f1c95e3601032e3dd5d66a0f7044a5089a1b6` (tag `product-master-ux-rollout-20260929`). Product Master general edit/Active-Legacy retirement and the searchable Active-only New Service Job picker are activated.
+- Current production runtime source checkpoint: `b41d1dbda4b6b5666cc11980afc60da36d64e382` (`product-safe-delete-20260929`). Product Master general edit/search, Quick Toggle Active/Legacy, and reference-safe Legacy-only hard delete are activated. Worker deployment `6da85e72-40a7-4569-bd2e-24245ccc77b0` routes 100% to version `6c1251ef-0f52-44ed-912f-0f373411efcd`.
 - Accepted production Worker: version `fc50c9b0-864e-4ce7-80ec-6755e5843ee8`, deployment `0ad13c8e-3549-4424-99b5-6846abc34707`, 100% traffic.
 - Accepted production Hosting: corrected configured artifact has byte-identical local/live `index.html` SHA-256 `2C0A6299A8D4B95530D72C3DBF52E516ADFCAA5035EF5B39AA9C07C84FF91F22` and main asset `/assets/index-Cb3QHLAJ.js`. The first rollout Hosting build reproduced the N9.6 isolated-worktree environment failure and was immediately superseded by a rebuild from the same committed source with the approved gitignored production VITE environment.
 - Production owner capability: the single `staffProfiles` record has literal `canManageProducts=true`; authenticated UI acceptance toggled a retained synthetic test Product `Active -> Legacy -> Active` and verified complete restoration.
@@ -34,7 +34,8 @@
 - **N9.3 timeline stabilization.** Current step/progress are derived from authoritative `ServiceJob.status`, timeline remains append-only history, ordinary status saves append exactly one new history event, trusted completion appends `Completed` once and is replay-safe, and stale persisted `event.current` no longer controls the UI. Focused and broader validation passed before publication.
 - **N9.4/N9.5 controlled publication and main reconciliation.** Commit `98a219dc2b83f8c7d4b7115395808454b7294668` and tag `n9-4-timeline-rollout-20260929` were published; Worker `f5fdd517-ff6f-4e4d-a001-1903c9f17929` was guard-checked and promoted to 100%. Local `C:\service` master was then fast-forwarded to the same source without changing the seven pre-existing Codex/Astra config modifications or historical worktrees.
 - **N9.6/N9.6R1 production UI acceptance and Hosting recovery.** Initial acceptance found the N9.4 Hosting artifact fail-closed at `BackendConfigurationGate` because the isolated build worktree lacked gitignored production `.env/.env.local`. N9.6R1 rebuilt the exact same source from `C:\service` with the approved local VITE environment, validated it locally, deployed Hosting only, and then confirmed production dashboard/auth plus `BRN-2026-000013` as `Completed`, `7/7`, `100%`, current step `Completed`. No production business-data write occurred.
-- **Product Master UX source + production activation.** Runtime source `8c5f1c95e3601032e3dd5d66a0f7044a5089a1b6` (tag `product-master-ux-rollout-20260929`) adds Worker-mediated Product general edit with dedicated `canManageProducts`, Active/Legacy retirement, an Active-default Product Master list, and a bounded accessible Active-only catalog search in New Service Job. Production Worker/Hosting were rolled out and credentialed UI acceptance toggled a retained synthetic test Product to Legacy and back to Active. Public Tracking stayed off; no Rules/IAM/index/Cron or hard-delete scope was added.
+- **Product Master UX source + production activation.** Runtime source `8c5f1c95e3601032e3dd5d66a0f7044a5089a1b6` (tag `product-master-ux-rollout-20260929`) added Worker-mediated Product general edit with dedicated `canManageProducts`, Active/Legacy retirement, an Active-default Product Master list, and a bounded accessible Active-only catalog search in New Service Job. This checkpoint is historical and is superseded by the Safe Delete runtime below.
+- **Product Quick Toggle + Safe Hard Delete production activation.** Source `b41d1dbda4b6b5666cc11980afc60da36d64e382` activates confirmation-gated list/detail status toggles and Worker-only hard delete for reference-tracked Legacy Products only. Delete is transactional and fails closed unless the Product has `referenceTrackingVersion=1` and zero `service_jobs.catalogProductId` references at delete time. IAM adds only `datastore.entities.delete`; browser Product writes remain denied. Synthetic acceptance `safe-delete-accept-20260929-1649` was deleted through the authenticated production UI and independently verified absent (Firestore 404, reference count 0). Public Tracking remains off.
 
 ## ACTIVE
 
@@ -43,7 +44,6 @@ N9.2-N9.7 are closed after timeline stabilization, controlled publication, Hosti
 ## BLOCKED / DEFERRED
 
 - **Public Tracking activation.** Implementation exists but production activation remains deliberately deferred/disabled. Activation is a separate production phase.
-- **Product Master hard delete.** Legacy is the active production retirement path. Permanent Product deletion remains separately gated until a privileged backend can prove immediately before delete that no Service Job/history reference exists and the Worker IAM change for `datastore.entities.delete` is explicitly approved.
 - **Admin / Staff Role Management UI.** Approval role enforcement exists, but account/role lifecycle administration does not. Browser `staffProfiles` writes remain denied; privileged provisioning architecture must be explicitly scoped.
 - **BRUNO / JLC full visual identity.** Generic visual tokens remain until brand assets/palette/theming direction are supplied.
 - **Durable Product Instance / server-side serial uniqueness.** Current Registered Products are derived from Service Job history; durable physical-unit identity and authoritative serial-conflict enforcement need an architecture decision.
@@ -78,7 +78,7 @@ The following statements may remain in historical context but must not be used a
 
 ## Recommended sequence
 
-1. Preserve Product Master UX runtime source `8c5f1c95e3601032e3dd5d66a0f7044a5089a1b6`, Worker `fc50c9b0-864e-4ce7-80ec-6755e5843ee8`, and the corrected configured Hosting artifact unless a new explicitly scoped phase is approved.
+1. Preserve Safe Delete runtime source `b41d1dbda4b6b5666cc11980afc60da36d64e382`, the current guarded Worker, and configured Hosting artifact `/assets/index-DJ5kKwv0.js` unless a new explicitly scoped phase is approved.
 2. Any future production Hosting build must use the approved production VITE environment and pass a local production-preview configuration-gate check before deploy; do not build release Hosting from a clean isolated worktree that lacks gitignored `.env/.env.local`.
 3. Public Tracking activation remains a separate production decision even though the live Worker carries visible plain-text `false` and passes the deployment guard.
 4. Treat broader real-browser assistive-technology/device/print-pagination work as separate verification/polish, then revisit deferred operational/product work only after its dependency or owner decision is resolved.

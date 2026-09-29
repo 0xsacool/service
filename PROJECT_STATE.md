@@ -23,7 +23,45 @@ Platform: responsive web application (mobile through desktop), Thai-first for
 Version 1 (see [DECISIONS.md](DECISIONS.md) #003). The authenticated staff app
 is live at `https://luxace-service.web.app` on the Firestore + Worker runtime.
 
-## Current production Product Master UX activation (2026-09-29)
+## Current production Product Quick Toggle + Safe Delete activation (2026-09-29)
+
+Product Quick Toggle + Safe Hard Delete is live from source
+`b41d1dbda4b6b5666cc11980afc60da36d64e382` (published branch
+`product-safe-delete-20260929`). Staff with literal
+`canManageProducts=true` can change `Active <-> Legacy` directly from both
+the Product Master list and Product detail, with confirmation. Browser
+Firestore writes to `products` remain denied; all status/delete mutations go
+through the authenticated Worker.
+
+Hard delete is fail-closed. A Product must already be `Legacy`, must carry
+`referenceTrackingVersion == 1`, and the Worker transaction must prove zero
+`service_jobs.catalogProductId == productId` references immediately before
+delete. The same transaction owns the Product read, reference query, catalog
+revision update, and document delete/retry boundary. Existing pre-cutover rows
+without the reference-tracking marker may be retired but cannot be hard-deleted.
+The Worker IAM role adds only `datastore.entities.delete`; Firestore Rules still
+deny browser Product create/update/delete, and `catalogProductId` is immutable
+on Service Job browser updates. Production Worker deployment
+`6da85e72-40a7-4569-bd2e-24245ccc77b0` routes 100% traffic to version
+`6c1251ef-0f52-44ed-912f-0f373411efcd`.
+
+Production acceptance used synthetic Product
+`safe-delete-accept-20260929-1649`. Before delete it was independently verified
+as `Legacy`, `referenceTrackingVersion=1`, with zero Service Job references.
+The owner then deleted it through the authenticated production UI. A direct
+Firestore verification afterwards returned Product 404 and reference query 0,
+proving the positive delete path completed and left no synthetic Product behind.
+Unauthenticated production DELETE returns 401.
+
+The first Safe Delete Hosting release repeated the known isolated-worktree
+configuration failure and showed `BackendConfigurationGate`. It was recovered
+without a source change by rebuilding the exact published source with the
+approved gitignored production VITE environment, previewing the configured
+artifact, and redeploying Hosting. Live Hosting now serves
+`/assets/index-DJ5kKwv0.js`; temporary env copies were removed from the isolated
+worktree. Public Tracking remains disabled.
+
+## Historical production Product Master UX activation (2026-09-29)
 
 Product Master UX production activation is complete on runtime source
 `8c5f1c95e3601032e3dd5d66a0f7044a5089a1b6` (tag
