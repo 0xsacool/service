@@ -167,9 +167,13 @@ test('Service Job UI exposes Drive archive after a durable job exists while lega
 });
 
 test('OAuth production support pages are public Service Tech routes', async () => {
-  const [app, routes, privacy, terms] = await Promise.all([
+  const [app, routes, about, privacy, terms] = await Promise.all([
     readFile(new URL('../src/app/App.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/constants/routes.ts', import.meta.url), 'utf8'),
+    readFile(
+      new URL('../src/features/legal/pages/EvidenceArchiveAbout.tsx', import.meta.url),
+      'utf8'
+    ),
     readFile(
       new URL('../src/features/legal/pages/PrivacyPolicy.tsx', import.meta.url),
       'utf8'
@@ -180,9 +184,13 @@ test('OAuth production support pages are public Service Tech routes', async () =
     ),
   ]);
 
+  assert.match(routes, /about: '\/about'/);
   assert.match(routes, /privacy: '\/privacy'/);
   assert.match(routes, /terms: '\/terms'/);
+  assert.match(app, /ROUTE_PATTERNS\.about/);
   assert.match(app, /ROUTE_PATTERNS\.privacy/);
+  assert.match(about, /Service Tech Evidence Archive/);
+  assert.match(about, /Google Drive/);
   assert.match(app, /ROUTE_PATTERNS\.terms/);
   assert.match(privacy, /Google Drive Evidence Archive/);
   assert.match(privacy, /365 วัน/);

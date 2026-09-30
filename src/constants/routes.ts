@@ -2,6 +2,7 @@
 export const ROUTE_PATTERNS = {
   home: '/',
   login: '/login',
+  about: '/about',
   privacy: '/privacy',
   terms: '/terms',
   dashboard: '/dashboard',
@@ -19,6 +20,7 @@ export const ROUTE_PATTERNS = {
 export const ROUTES = {
   home: '/',
   login: '/login',
+  about: '/about',
   privacy: '/privacy',
   terms: '/terms',
   dashboard: '/dashboard',

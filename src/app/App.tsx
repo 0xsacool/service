@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { TrackHome } from '../features/tracking/pages/TrackHome';
 import { TrackResult } from '../features/tracking/pages/TrackResult';
 import { Login } from '../features/auth/pages/Login';
+import { EvidenceArchiveAbout } from '../features/legal/pages/EvidenceArchiveAbout';
 import { PrivacyPolicy } from '../features/legal/pages/PrivacyPolicy';
 import { TermsOfService } from '../features/legal/pages/TermsOfService';
 import { Dashboard } from '../features/dashboard/pages/Dashboard';
@@ -41,6 +42,7 @@ export default function App() {
             <Route path={ROUTE_PATTERNS.trackLookup} element={<TrackResult />} />
             <Route path={ROUTE_PATTERNS.track} element={<TrackResult />} />
             <Route path={ROUTE_PATTERNS.login} element={<Login />} />
+            <Route path={ROUTE_PATTERNS.about} element={<EvidenceArchiveAbout />} />
             <Route path={ROUTE_PATTERNS.privacy} element={<PrivacyPolicy />} />
             <Route path={ROUTE_PATTERNS.terms} element={<TermsOfService />} />
 
