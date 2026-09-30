@@ -27,7 +27,7 @@ export function ExternalEvidenceSection({
     <FormSection
       icon={Link2}
       title="หลักฐานเพิ่มเติมออนไลน์"
-      subtitle="ไม่บังคับ — วางลิงก์แทนการอัปโหลดวิดีโอ"
+      subtitle="ไม่บังคับ — วางลิงก์ภายนอกได้ และหลังบันทึกงานสามารถอัปโหลดไฟล์เข้า Google Drive"
       headingId="service-job-external-evidence-heading"
     >
       <Field label="ลิงก์หลักฐานเพิ่มเติม" hint="เฉพาะลิงก์ https:// เท่านั้น">

@@ -1,5 +1,6 @@
 import type {
   AttachmentsRepository,
+  EvidenceArchiveRepository,
   CustomersRepository,
   ProductCatalogManagementRepository,
   ProductImportRepository,
@@ -55,6 +56,7 @@ export interface RepositoryProvider {
   productKnowledge: ProductKnowledgeRepository;
   productKnowledgeManagement: ProductKnowledgeManagementRepository;
   attachments: AttachmentsRepository;
+  evidenceArchive: EvidenceArchiveRepository;
   serviceReports: ServiceReportsRepository;
   approvalConsole: ApprovalConsoleRepository;
 }
@@ -164,6 +166,24 @@ export function createMockRepositoryProvider(): RepositoryProvider {
       },
     },
     attachments: attachmentsRepository,
+    evidenceArchive: {
+      async getStatus() {
+        return {
+          configured: false,
+          retentionDays: 365,
+          targetMaxBytes: 50 * 1024 * 1024,
+        };
+      },
+      async listForJob() {
+        return [];
+      },
+      async createUploadSession() {
+        throw unavailableError();
+      },
+      async download() {
+        throw unavailableError();
+      },
+    },
     serviceReports: serviceReportsRepository,
     approvalConsole: createMockApprovalConsoleRepository(),
   };
@@ -236,6 +256,12 @@ function createUnavailableRepositoryProvider(): RepositoryProvider {
       getDownloadUrl: reject,
       deleteAttachment: reject,
     },
+    evidenceArchive: {
+      getStatus: reject,
+      listForJob: reject,
+      createUploadSession: reject,
+      download: reject,
+    },
     serviceReports: {
       fetchHistoryForServiceJob: reject,
       listForServiceJob: () => [],
@@ -307,6 +333,8 @@ async function createFirestoreBackedRepositoryProvider(
     await import('./firestoreServiceReportsRepository');
   const { createWorkerApprovalConsoleRepository } =
     await import('./workerServiceReportReadRepository');
+  const { createWorkerEvidenceArchiveRepository } =
+    await import('./workerEvidenceArchiveRepository');
   const { createFirestoreRegisteredProductsRepository } =
     await import('./firestoreRegisteredProductsRepository');
   const { createFirestoreSearchRepository } = await import('./firestoreSearchRepository');
@@ -332,6 +360,7 @@ async function createFirestoreBackedRepositoryProvider(
     attachments: await activateWithDiagnostics('attachments', () =>
       resolveAttachmentsRepository(serviceJobs, tokenProvider)
     ),
+    evidenceArchive: createWorkerEvidenceArchiveRepository(tokenProvider),
     serviceReports: await activateWithDiagnostics('serviceReports', () =>
       createFirestoreServiceReportsRepository(serviceJobs, tokenProvider)
     ),

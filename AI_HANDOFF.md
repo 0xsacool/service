@@ -8,6 +8,31 @@
 
 ---
 
+## Current source override — Google Drive Evidence Archive READY / OAUTH PENDING (2026-09-30)
+
+Decision #056 adds a staff-only Google Drive archive for claim evidence after a
+durable Service Job exists. The browser prepares media locally, dynamically
+loading Mediabunny/WebCodecs only for video over 50 MiB; oversized video becomes
+MP4 H.264/AAC targeting ~45 MiB with a 55 MiB hard prepared limit. The browser
+then uploads bytes directly to a Google Drive resumable-session URL. The Worker
+never receives the media bytes.
+
+Worker routes require Firebase staff authentication plus same-brand Service Job
+ownership. Dedicated Google Drive end-user OAuth uses the narrow `drive.file`
+scope; client id/client secret/refresh token are Worker secrets and are separate
+from the existing Firestore service-account credential. Drive app properties
+carry the Service Job id, opaque archive id, uploader uid, original size,
+compression flag and 365-day `deleteAfter`. Existing `externalEvidenceUrl`
+is preserved as fallback; no Firestore schema/Rules/IAM widening is required.
+
+Evidence passes: frontend archive 5/5, Drive route security 18/18, Drive gateway
+15/15, full Worker regression, Worker/root TypeScript, targeted ESLint,
+Prettier, and production build. Google Drive API is enabled for
+`luxace-service`. Google Auth Platform initialization is paused at the
+owner-only Google API Services User Data Policy acceptance. Until that is
+accepted and OAuth secrets are configured, the archive fails closed as not
+configured; do not invent or commit credentials. Public Tracking remains OFF.
+
 ## Current production override — Thai Intake Hotkeys + Other Accessory Text ACTIVATED (2026-09-30)
 
 Decision #055 is live from source `7f6ede59a878282db118e46dc48c5750c5606801`.

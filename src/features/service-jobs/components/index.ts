@@ -7,6 +7,7 @@ export { InternalNotesSection } from './InternalNotesSection';
 export { PhotoEvidenceSection } from './PhotoEvidenceSection';
 export { ContactOrderMetadataSection } from './ContactOrderMetadataSection';
 export { ExternalEvidenceSection } from './ExternalEvidenceSection';
+export { EvidenceArchiveSection } from './EvidenceArchiveSection';
 export {
   ServiceEventMetadataEditSection,
   type ServiceEventMetadataEditValue,

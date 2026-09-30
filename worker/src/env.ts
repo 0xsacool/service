@@ -33,4 +33,13 @@ export interface Env {
   // (the default when unset). Never needed in production or in normal
   // emulator-only local dev.
   GOOGLE_TOKEN_ENDPOINT?: string;
+
+  // Google Drive evidence archive uses user OAuth, intentionally separate
+  // from the Firestore service-account credential above. These are Worker
+  // secrets except the test-only endpoint override. The app requests the
+  // narrow drive.file scope so it can manage only files it creates/uses.
+  GOOGLE_DRIVE_CLIENT_ID?: string;
+  GOOGLE_DRIVE_CLIENT_SECRET?: string;
+  GOOGLE_DRIVE_REFRESH_TOKEN?: string;
+  GOOGLE_DRIVE_TOKEN_ENDPOINT?: string;
 }

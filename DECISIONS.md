@@ -1228,3 +1228,23 @@ For brought accessories, `Other` is a special intake-only selection. Selecting i
 **Impact:** No new Worker field, Firestore migration, Rules/IAM change, or Service Job schema change is required. Worker parsing already accepts bounded accessory strings. Existing Service Jobs with English canonical quick-chip values remain valid. Public Tracking is unrelated and must remain disabled.
 
 **Status:** Owner approved implementation on 2026-09-30. Source `7f6ede59a878282db118e46dc48c5750c5606801` is live via Hosting-only rollout. Live intake verification confirms Thai issue/accessory hotkeys plus the conditional Other free-text field, including type and deselect behavior, without submitting a Service Job. Hosting serves `/assets/index-DWbK7eZd.js`; Worker was not redeployed and Public Tracking remains disabled.
+
+---
+
+## 056 - Internal claim evidence archives to owner Google Drive after Service Job creation; browser compresses/uploads directly and Worker owns authorization
+
+**Reason:** The owner needs staff-only claim evidence (especially video) retained for roughly one year so authorized Service Tech users can reopen or download it later. The owner already has a 2 TB Google Drive allocation and wants to avoid using R2 quota for these larger archive files.
+
+**Decision:** Google Drive is an internal archive, not a customer-sharing surface. Archive upload is offered only after a durable Service Job exists, avoiding orphan files when intake is cancelled. The existing optional `externalEvidenceUrl` remains unchanged as a manual fallback for externally hosted evidence and historical jobs.
+
+Drive access uses a dedicated end-user OAuth grant with the narrow `https://www.googleapis.com/auth/drive.file` scope. The OAuth client id, client secret, and refresh token exist only as Worker secrets; they are never returned to the browser or committed. The existing Firestore Google service-account credential is deliberately not reused for Drive ownership.
+
+The Worker verifies Firebase staff authentication and same-brand Service Job ownership before listing evidence, creating a resumable upload session, or downloading evidence. For upload, the Worker creates a Google Drive resumable session and returns only that short-lived session capability. The browser sends the prepared file bytes directly to the Google Drive session URL, so the original or compressed media never traverses the Worker. Staff downloads remain Worker-authorized and are streamed from Drive only after the same job authorization boundary.
+
+Drive metadata is intentionally provider-native for V1 rather than widening Firestore schema/Rules: app properties record the Service Job id, opaque archive id, uploader uid, source size, compression flag, and `deleteAfter` at 365 days. Files live below `Service Tech Archive/<Service Job id>/`. The UI displays the retained-until date and supports staff-only view/download. Automatic destructive deletion is not activated by this decision; the timestamp is the deterministic retention marker for later manual or separately approved cleanup automation.
+
+Browser preparation is bounded. Video at or below 50 MiB uploads unchanged. Oversized video is converted client-side through Mediabunny/WebCodecs to MP4 H.264 + AAC, targeting about 45 MiB (operational goal 30–50 MiB), with a hard prepared-file limit of 55 MiB and a 30-minute duration bound. Images/PDFs are not recompressed and must already be within the prepared-file limit. Unsupported codecs/devices fail with an explicit Thai fallback instead of silently uploading the large source.
+
+**Impact:** No Firestore Rules, IAM, Service Job schema, R2 lifecycle, Public Tracking, or existing external-evidence field is widened. Mediabunny/AAC encoder are dynamically imported only when oversized video actually needs conversion. Production remains fail-closed while Drive OAuth secrets are absent.
+
+**Status:** Owner approved implementation on 2026-09-30. Source, Worker routes, UI and deterministic tests are implemented locally. Frontend evidence tests 5/5 PASS; Drive route security tests 18/18 PASS; Drive gateway tests 15/15 PASS; full Worker regression, Worker/root TypeScript, targeted ESLint, Prettier, and production build pass. Google Drive API has been enabled on Cloud project `luxace-service`. Google Auth Platform registration is paused at the owner-only acceptance of the Google API Services User Data Policy; no OAuth client or Drive refresh token has yet been created, and no production evidence file has been written.

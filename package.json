@@ -28,12 +28,15 @@
     "test:return-form-guard": "node --test --test-concurrency=1 test/productReturnFormGuardRuntime.test.mjs",
     "test:product-categories": "node --test test/productCategories.test.mjs",
     "test:product-knowledge": "node --test test/productKnowledgeManagement.test.mjs",
+    "test:evidence-archive": "node --test test/evidenceArchive.test.mjs",
     "test:firestore-rules": "firebase emulators:exec --config firebase.rules-test.json --only firestore \"node --test test/firestoreRules.test.mjs\""
   },
   "dependencies": {
+    "@mediabunny/aac-encoder": "1.60.0",
     "@supabase/supabase-js": "^2.111.0",
     "firebase": "^12.17.1",
     "lucide-react": "^1.28.0",
+    "mediabunny": "1.60.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-qr-code": "2.2.0",

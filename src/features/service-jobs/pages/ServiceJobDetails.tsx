@@ -46,6 +46,7 @@ import {
   ServiceEventMetadataEditSection,
   type ServiceEventMetadataEditValue,
   PublicTrackingSection,
+  EvidenceArchiveSection,
 } from '../components';
 import { serviceEventMetadataDraftError } from '../../../validation';
 import {
@@ -711,6 +712,8 @@ function ServiceJobDetailsView({
         value={eventMetadata}
         onChange={setEventMetadata}
       />
+
+      <EvidenceArchiveSection jobId={claim.id} />
 
       <PublicTrackingSection
         job={claim}

@@ -127,6 +127,13 @@ import { parseStrictJson } from './serviceReportV2Contracts.ts';
 import type {
   ServiceReportV2Store,
 } from './serviceReportV2Operations.ts';
+import {
+  createGoogleDriveEvidenceGateway,
+  GoogleDriveNotConfiguredError,
+  GoogleDriveRequestError,
+  type GoogleDriveEvidenceGateway,
+} from './googleDriveEvidence.ts';
+import { parseEvidenceArchiveSessionRequest } from '../../src/services/evidenceArchive.ts';
 import type { DeletionObjectStore } from './attachmentDeletionCoordinatorV2.ts';
 import {
   handleApprovalQueueRead,
@@ -153,6 +160,8 @@ const PRODUCTS_PREFIX = '/products/';
 const PRODUCT_KNOWLEDGE_PATH = '/product-knowledge';
 const PRODUCT_KNOWLEDGE_COMMON_PROBLEMS_PREFIX =
   '/product-knowledge/common-problems/';
+const EVIDENCE_ARCHIVE_STATUS_PATH = '/evidence-archive/status';
+const MAX_EVIDENCE_ARCHIVE_BODY_BYTES = 8 * 1024;
 const MAX_PRODUCT_UPDATE_BODY_BYTES = 8 * 1024;
 const MAX_PRODUCT_KNOWLEDGE_BODY_BYTES = 8 * 1024;
 
@@ -178,6 +187,7 @@ export interface WorkerDependencies {
   createServiceReportV2Store?: (env: Env) => ServiceReportV2Store;
   createEvidenceObjectStore?: (env: Env) => DeletionObjectStore;
   createServiceReportReadStore?: (env: Env) => ServiceReportReadStore;
+  createDriveEvidenceGateway?: (env: Env) => GoogleDriveEvidenceGateway;
 }
 
 const defaultDependencies: WorkerDependencies = {
@@ -375,6 +385,209 @@ async function authorizeStaffCreation(request: Request, env: Env, dependencies: 
     return profile ? { profile, client } : json({ error: 'Forbidden' }, { status: 403 });
   } catch {
     return json({ error: 'Forbidden' }, { status: 403 });
+  }
+}
+
+
+async function authorizeEvidenceArchiveJob(
+  request: Request,
+  env: Env,
+  jobId: string,
+  dependencies: WorkerDependencies
+): Promise<
+  | {
+      profile: StaffProfile;
+      client: FirestoreClient;
+      gateway: GoogleDriveEvidenceGateway;
+    }
+  | Response
+> {
+  const authorization = await authorizeStaffCreation(request, env, dependencies);
+  if (authorization instanceof Response) return authorization;
+
+  try {
+    const allowed = await isServiceJobInBrand(
+      jobId,
+      authorization.profile.brandId,
+      authorization.client
+    );
+    if (!allowed) {
+      return json({ code: 'forbidden', error: 'Forbidden' }, { status: 403 });
+    }
+    return {
+      ...authorization,
+      gateway:
+        dependencies.createDriveEvidenceGateway?.(env) ??
+        createGoogleDriveEvidenceGateway(env),
+    };
+  } catch {
+    return json({ code: 'forbidden', error: 'Forbidden' }, { status: 403 });
+  }
+}
+
+async function readEvidenceArchiveJson(request: Request): Promise<unknown> {
+  const mediaType = request.headers
+    .get('Content-Type')
+    ?.split(';', 1)[0]
+    ?.trim()
+    .toLowerCase();
+  const contentLength = request.headers.get('Content-Length');
+  if (
+    !request.body ||
+    mediaType !== 'application/json' ||
+    (contentLength !== null &&
+      Number(contentLength) > MAX_EVIDENCE_ARCHIVE_BODY_BYTES)
+  ) {
+    throw new SyntaxError('Invalid evidence archive request');
+  }
+  const raw = await readBodyWithLimit(
+    request.body,
+    MAX_EVIDENCE_ARCHIVE_BODY_BYTES
+  );
+  return JSON.parse(new TextDecoder().decode(raw));
+}
+
+function evidenceArchiveFailure(error: unknown): Response {
+  if (error instanceof GoogleDriveNotConfiguredError) {
+    return json(
+      {
+        code: 'drive_not_configured',
+        error: 'Google Drive archive is not configured',
+      },
+      { status: 503 }
+    );
+  }
+  if (error instanceof FileTooLargeError || error instanceof SyntaxError) {
+    return json(
+      { code: 'validation_failed', error: 'Invalid evidence archive request' },
+      { status: 400 }
+    );
+  }
+  if (error instanceof GoogleDriveRequestError) {
+    if (error.status === 404) {
+      return json(
+        { code: 'not_found', error: 'Archived evidence was not found' },
+        { status: 404 }
+      );
+    }
+    return json(
+      {
+        code: 'drive_unavailable',
+        error: 'Google Drive archive is temporarily unavailable',
+      },
+      { status: 502 }
+    );
+  }
+  console.error('[files-worker] evidence archive operation failed');
+  return json(
+    {
+      code: 'drive_unavailable',
+      error: 'Google Drive archive is temporarily unavailable',
+    },
+    { status: 502 }
+  );
+}
+
+async function handleEvidenceArchiveStatus(
+  request: Request,
+  env: Env,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  const authorization = await authorizeStaffCreation(request, env, dependencies);
+  if (authorization instanceof Response) return authorization;
+  const gateway =
+    dependencies.createDriveEvidenceGateway?.(env) ??
+    createGoogleDriveEvidenceGateway(env);
+  return json(gateway.status(), { status: 200 });
+}
+
+async function handleEvidenceArchiveList(
+  request: Request,
+  env: Env,
+  jobId: string,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  const authorization = await authorizeEvidenceArchiveJob(
+    request,
+    env,
+    jobId,
+    dependencies
+  );
+  if (authorization instanceof Response) return authorization;
+  try {
+    const items = await authorization.gateway.listForJob(jobId);
+    return json({ items }, { status: 200 });
+  } catch (error) {
+    return evidenceArchiveFailure(error);
+  }
+}
+
+async function handleEvidenceArchiveSessionCreate(
+  request: Request,
+  env: Env,
+  jobId: string,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  const authorization = await authorizeEvidenceArchiveJob(
+    request,
+    env,
+    jobId,
+    dependencies
+  );
+  if (authorization instanceof Response) return authorization;
+  try {
+    const parsed = parseEvidenceArchiveSessionRequest(
+      await readEvidenceArchiveJson(request)
+    );
+    if (!parsed) {
+      return json(
+        { code: 'validation_failed', error: 'Invalid evidence archive request' },
+        { status: 400 }
+      );
+    }
+    const session = await authorization.gateway.createUploadSession(
+      jobId,
+      authorization.profile.uid,
+      parsed
+    );
+    return json(session, { status: 201 });
+  } catch (error) {
+    return evidenceArchiveFailure(error);
+  }
+}
+
+async function handleEvidenceArchiveDownload(
+  request: Request,
+  env: Env,
+  jobId: string,
+  archiveId: string,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  const authorization = await authorizeEvidenceArchiveJob(
+    request,
+    env,
+    jobId,
+    dependencies
+  );
+  if (authorization instanceof Response) return authorization;
+
+  try {
+    const { item, response } = await authorization.gateway.download(
+      jobId,
+      archiveId
+    );
+    const headers = new Headers();
+    headers.set('Content-Type', item.mimeType);
+    headers.set(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(item.name)}`
+    );
+    headers.set('Cache-Control', 'private, no-store');
+    const length = response.headers.get('Content-Length');
+    if (length) headers.set('Content-Length', length);
+    return new Response(response.body, { status: 200, headers });
+  } catch (error) {
+    return evidenceArchiveFailure(error);
   }
 }
 
@@ -1520,6 +1733,17 @@ export function createWorkerHandler(
       return withCors(json({ status: 'ok' }), request, env);
     }
 
+    if (
+      request.method === 'GET' &&
+      url.pathname === EVIDENCE_ARCHIVE_STATUS_PATH
+    ) {
+      return withCors(
+        await handleEvidenceArchiveStatus(request, env, dependencies),
+        request,
+        env
+      );
+    }
+
     // F5d-39A: the public routes must stay unreachable on every ordinary
     // Worker rollout until a separately approved deployment explicitly opts
     // in. Keep this guard before body parsing, rate limiting, and Firestore
@@ -1788,8 +2012,51 @@ export function createWorkerHandler(
         );
       }
       if (url.pathname.startsWith(SERVICE_JOBS_PREFIX)) {
-        const rawRest = url.pathname.slice(SERVICE_JOBS_PREFIX.length);
+        let rawRest: string;
+        try {
+          rawRest = decodeURIComponent(
+            url.pathname.slice(SERVICE_JOBS_PREFIX.length)
+          );
+        } catch {
+          return withCors(
+            json({ error: 'Not found' }, { status: 404 }),
+            request,
+            env
+          );
+        }
         const segments = rawRest.split('/').filter(Boolean);
+        if (
+          segments.length === 2 &&
+          segments[1] === 'evidence-archive'
+        ) {
+          return withCors(
+            await handleEvidenceArchiveList(
+              request,
+              env,
+              segments[0]!,
+              dependencies
+            ),
+            request,
+            env
+          );
+        }
+        if (
+          segments.length === 4 &&
+          segments[1] === 'evidence-archive' &&
+          segments[3] === 'download'
+        ) {
+          return withCors(
+            await handleEvidenceArchiveDownload(
+              request,
+              env,
+              segments[0]!,
+              segments[2]!,
+              dependencies
+            ),
+            request,
+            env
+          );
+        }
         if (segments.length === 2 && segments[1] === 'service-reports') {
           return withCors(
             await handleServiceReportHistoryRead(
@@ -1819,8 +2086,35 @@ export function createWorkerHandler(
     // prefix (it requires a trailing '/'), so there is no route-ordering
     // ambiguity between Service Job creation and these two new routes.
     if (request.method === 'POST' && url.pathname.startsWith(SERVICE_JOBS_PREFIX)) {
-      const rest = decodeURIComponent(url.pathname.slice(SERVICE_JOBS_PREFIX.length));
+      let rest: string;
+      try {
+        rest = decodeURIComponent(
+          url.pathname.slice(SERVICE_JOBS_PREFIX.length)
+        );
+      } catch {
+        return withCors(
+          json({ error: 'Not found' }, { status: 404 }),
+          request,
+          env
+        );
+      }
       const segments = rest.split('/').filter(Boolean);
+      if (
+        segments.length === 3 &&
+        segments[1] === 'evidence-archive' &&
+        segments[2] === 'sessions'
+      ) {
+        return withCors(
+          await handleEvidenceArchiveSessionCreate(
+            request,
+            env,
+            segments[0]!,
+            dependencies
+          ),
+          request,
+          env
+        );
+      }
       const v2Dependencies = {
         tokenVerifier: dependencies.tokenVerifier,
         createStore: dependencies.createServiceReportV2Store,

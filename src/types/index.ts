@@ -27,6 +27,12 @@ export type { CustomerSearchResult } from './search';
 export type { RegisteredProduct, WarrantyStatus } from './registeredProduct';
 export type { ServiceIntakeData, PhotoEvidence } from './serviceIntake';
 export type {
+  EvidenceArchiveItem,
+  EvidenceArchiveStatus,
+  EvidenceArchiveUploadSession,
+  PreparedEvidenceArchiveFile,
+} from './evidenceArchive';
+export type {
   ProductStatus,
   ProductCategory,
   AccessoryDefinition,

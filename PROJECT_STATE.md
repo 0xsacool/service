@@ -23,6 +23,36 @@ Platform: responsive web application (mobile through desktop), Thai-first for
 Version 1 (see [DECISIONS.md](DECISIONS.md) #003). The authenticated staff app
 is live at `https://luxace-service.web.app` on the Firestore + Worker runtime.
 
+## Google Drive Evidence Archive — source ready, OAuth configuration pending (2026-09-30)
+
+Decision #056 implements an internal, staff-only evidence archive backed by the
+owner's Google Drive. A durable Service Job must exist before archive upload.
+The existing optional external-evidence URL remains available unchanged.
+
+Authorized same-brand staff can list archive metadata, request a Drive resumable
+upload session, and download evidence through Worker authorization. Prepared
+bytes upload directly from the browser to the Google Drive session; OAuth client
+credentials and the refresh token remain Worker-only secrets. V1 archive
+metadata is stored in Drive app properties (Service Job id, archive id, uploader,
+source size, compression flag, and 365-day `deleteAfter`) rather than widening
+Firestore schema/Rules.
+
+Oversized video uses dynamically-loaded Mediabunny/WebCodecs and AAC encoding to
+produce MP4 H.264/AAC client-side. Video <=50 MiB passes through; larger video
+targets ~45 MiB with a 55 MiB prepared-file hard limit and 30-minute duration
+bound. Images/PDFs are not recompressed. The UI is available after Service Job
+creation and on Service Job Detail, showing upload progress, retained-until
+date, view, and download. Manual external URL remains the fallback.
+
+Deterministic evidence currently passes: frontend archive tests 5/5, Drive route
+security 18/18, Drive gateway 15/15, full Worker regression, Worker/root
+TypeScript, targeted ESLint, Prettier, and production build
+`/assets/index-BGCQ5npN.js`. Google Drive API is enabled on
+`luxace-service`. Google Auth Platform project registration is paused at the
+owner-only Google API Services User Data Policy acceptance; Drive OAuth secrets
+are therefore not configured yet and production activation has not occurred.
+Public Tracking remains unrelated and must stay OFF.
+
 ## Current production pre-handoff clean reset (2026-09-29)
 
 Production business/test data has been reset to a clean handoff state while

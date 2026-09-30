@@ -44,6 +44,8 @@
 
 ## ACTIVE
 
+- **Google Drive Evidence Archive activation.** Decision #056 source is complete: staff/job-authorized Drive archive routes, direct resumable browser upload, client-side bounded video compression, one-year retention metadata, and saved-job/detail UI are implemented and deterministic gates pass. Drive API is enabled on `luxace-service`. Remaining activation dependency is owner acceptance of the Google API Services User Data Policy in Google Auth Platform, followed by creation/authorization of the dedicated `drive.file` OAuth client and Worker secrets. Production must remain fail-closed until that configuration is complete; no synthetic archive upload is required for rollout acceptance.
+
 N9.2-N9.7 are closed after timeline stabilization, controlled publication, Hosting recovery, credentialed read-only production acceptance, and current-state documentation reconciliation. No product or production-runtime work remains active inside N9. Blocked/deferred operational and product items below retain their own approval boundaries and require separately approved phases.
 
 ## BLOCKED / DEFERRED

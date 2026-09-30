@@ -30,6 +30,7 @@ import {
   NewCustomerForm,
   NewCustomerSummaryCard,
   PublicTrackingSection,
+  EvidenceArchiveSection,
 } from '../components';
 import { ROUTES, createEmptyServiceIntake } from '../../../constants';
 import { isServiceIntakeComplete, serviceIntakeMetadataError } from '../../../validation';
@@ -287,6 +288,9 @@ export function NewServiceJob() {
               onRefreshJob={readServiceJob}
               onIssued={setSavedPublicTrackingCode}
             />
+            <div className="mt-6">
+              <EvidenceArchiveSection jobId={savedJob.id} />
+            </div>
           </div>
           <ServiceRequestPrintPreview
             job={displayJob ?? savedJob}

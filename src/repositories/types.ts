@@ -21,6 +21,9 @@ import type {
   FinalContentDigest,
   ServiceReportHistoryItem,
   ServiceReportApprovalEvent,
+  EvidenceArchiveItem,
+  EvidenceArchiveStatus,
+  EvidenceArchiveUploadSession,
 } from '../types';
 import type { BrandId } from '../types';
 import type {
@@ -37,6 +40,7 @@ import type {
   CommonProblemWriteRequest,
 } from '../services/productKnowledgeManagement';
 import type { ProductImportRowIssue } from '../services/productImportClassification';
+import type { EvidenceArchiveSessionRequest } from '../services/evidenceArchive';
 
 export type ServiceJobUpdate = Omit<
   Partial<ServiceJob>,
@@ -397,6 +401,16 @@ export interface UploadAttachmentInput {
 // deleteAttachment() can never be sync facades — they're real byte
 // transport to the Worker, not a cached read — so they stay Promises
 // regardless of what backs getForJob() later.
+export interface EvidenceArchiveRepository {
+  getStatus(): Promise<EvidenceArchiveStatus>;
+  listForJob(jobId: string): Promise<EvidenceArchiveItem[]>;
+  createUploadSession(
+    jobId: string,
+    request: EvidenceArchiveSessionRequest
+  ): Promise<EvidenceArchiveUploadSession>;
+  download(jobId: string, archiveId: string): Promise<Blob>;
+}
+
 export interface AttachmentsRepository {
   getForJob(jobId: string): Attachment[];
   upload(input: UploadAttachmentInput): Promise<Attachment>;
