@@ -29,13 +29,15 @@ Decision #056 implements an internal, staff-only evidence archive backed by the
 owner's Google Drive. A durable Service Job must exist before archive upload and
 the existing optional external-evidence URL remains available unchanged.
 
-Production Worker version `5c265266-c8ed-4b84-baeb-ff372d45222b` is at 100%
+Production Worker version `1132ec49-1232-4fe9-9e32-cf73b2765b85` is at 100%
 traffic with the dedicated Drive client id, client secret, and refresh token as
 Worker secrets. The grant uses only `drive.file`; temporary OAuth credential
 artifacts were removed from the local machine after installation. Same-brand
-staff authorization gates status/list/session/download operations, prepared bytes
-upload directly from the browser to the Google Drive resumable session, and the
-Worker never receives the media body. V1 metadata remains provider-native in
+staff authorization gates status/list/session/download/trash operations, prepared
+bytes upload directly from the browser to the Google Drive resumable session, and
+the Worker never receives the media body. Trash is deliberately reversible: the
+Worker validates the same Service Job/archive markers and PATCHes `trashed:true`
+rather than issuing a permanent Drive delete. V1 metadata remains provider-native in
 Drive app properties, including Service Job id, opaque archive id, uploader,
 source size, compression flag, and 365-day `deleteAfter`.
 
@@ -43,7 +45,8 @@ Oversized video uses dynamically-loaded Mediabunny/WebCodecs and AAC encoding to
 produce MP4 H.264/AAC client-side. Video <=50 MiB passes through; larger video
 targets ~45 MiB with a 55 MiB prepared-file hard limit and 30-minute duration
 bound. Images/PDFs are not recompressed. The UI is active on Service Job Detail
-with upload progress, retained-until date, view, and download.
+with upload progress, retained-until date, view, download, and a red delete action
+that names the file in a confirmation before moving it to Google Drive trash.
 
 Production smoke on `BRN-2026-000001` uploaded
 `service-tech-drive-smoke-20260930.png` (68 B), listed it as one archive file
@@ -57,10 +60,12 @@ archive list by archive id before declaring failure. Evidence archive regression
 is 7/7 PASS; targeted Prettier/ESLint and production build pass. Production
 preview no longer uses popup Blob navigation: source `3637623` renders image,
 video, and PDF evidence inside Service Tech itself. The live 6.74 MB MP4 smoke
-reached media `readyState=4` with no error. Hosting serves
-`/assets/index-CjGo-Q7g.js`.
+reached media `readyState=4` with no error. Source `dd62c03` adds safe Drive
+trash. Production verification moved only the 68 B system smoke file to trash;
+the owner's JPEG and MP4 remained listed. Hosting serves
+`/assets/index-Cfmz8wpm.js`.
 
-Post-deploy production checks are health=200, unauthenticated archive=401, and
+Post-deploy production checks are health=200, unauthenticated archive/trash=401, and
 Public Tracking=404. `PUBLIC_TRACKING_ENABLED=false` remains intact. Google
 Branding verification is not a runtime blocker; Google requested a 24-hour wait
 for verified home-page ownership propagation before re-verification.

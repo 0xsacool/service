@@ -10,7 +10,7 @@
 
 ## Current production override — Google Drive Evidence Archive ACTIVATED (2026-09-30)
 
-Decision #056 is live. Worker version `5c265266-c8ed-4b84-baeb-ff372d45222b`
+Decisions #056-#057 are live. Worker version `1132ec49-1232-4fe9-9e32-cf73b2765b85`
 serves 100% production traffic with `GOOGLE_DRIVE_CLIENT_ID`,
 `GOOGLE_DRIVE_CLIENT_SECRET`, and `GOOGLE_DRIVE_REFRESH_TOKEN` present only as
 Worker secrets. `PUBLIC_TRACKING_ENABLED=false` and
@@ -25,7 +25,10 @@ through Mediabunny/WebCodecs, targeting ~45 MiB with a 55 MiB prepared limit.
 Worker routes continue to require Firebase staff authentication and same-brand
 Service Job ownership. Drive app properties carry Service Job id, opaque archive
 id, uploader uid, original size, compression flag, and 365-day `deleteAfter`.
-The legacy `externalEvidenceUrl` remains available unchanged.
+Staff may also remove an archive item only after a filename-specific confirmation;
+the Worker re-verifies the Service Job/archive markers and PATCHes `trashed:true`
+on the matching Drive file. It never permanently deletes the Drive object. The
+legacy `externalEvidenceUrl` remains available unchanged.
 
 Production smoke on `BRN-2026-000001` created
 `service-tech-drive-smoke-20260930.png` (68 B), listed it with retention through
@@ -40,10 +43,13 @@ production build pass. A later live preview check found that authenticated Blob
 data downloaded correctly but popup navigation remained stuck at `about:blank`
 on both desktop and iPhone. Source `3637623` replaces popup navigation with an
 in-app image/video/PDF preview. Production MP4 verification reached media
-`readyState=4` with no media error. Hosting serves `/assets/index-CjGo-Q7g.js`.
+`readyState=4` with no media error. Source `dd62c03` adds the safe trash action.
+Production verification moved only `service-tech-drive-smoke-20260930.png` to
+Drive trash after the explicit confirmation; the owner's JPEG and MP4 remained
+listed. Hosting serves `/assets/index-Cfmz8wpm.js`.
 
-Post-rollout probes remain health=200, unauthenticated archive=401, and Public
-Tracking=404. Google Branding verification is a separate external follow-up:
+Post-rollout probes remain health=200, unauthenticated archive/trash=401, and
+Public Tracking=404. Google Branding verification is a separate external follow-up:
 Google reported that verified home-page ownership had not propagated yet and
 instructed waiting 24 hours before re-verification; a reminder is scheduled.
 
