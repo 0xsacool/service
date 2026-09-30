@@ -128,6 +128,74 @@ test('prepared bytes upload directly to the Drive resumable URL, not through Wor
   assert.equal(progress.at(-1)?.ratio, 1);
 });
 
+test('Drive upload transport errors reconcile a completed upload by archive id', async () => {
+  let listCalls = 0;
+  const repository = {
+    async createUploadSession() {
+      return {
+        archiveId: 'archive-reconciled',
+        uploadUrl: 'https://drive-upload.test/session-reconciled',
+        expiresAt: '2026-10-06T05:00:00.000Z',
+      };
+    },
+    async listForJob(jobId) {
+      assert.equal(jobId, 'BRN-2026-000001');
+      listCalls += 1;
+      return [
+        {
+          archiveId: 'archive-reconciled',
+          jobId,
+          name: 'claim.png',
+          mimeType: 'image/png',
+          sizeBytes: 5,
+          sourceSizeBytes: 5,
+          uploadedAt: '2026-09-30T05:00:00.000Z',
+          uploadedBy: 'staff@example.com',
+          deleteAfter: '2027-09-30T05:00:00.000Z',
+          compressed: false,
+        },
+      ];
+    },
+  };
+
+  const xhr = {
+    upload: {},
+    status: 0,
+    open() {},
+    setRequestHeader() {},
+    send(blob) {
+      this.upload.onprogress?.({
+        lengthComputable: true,
+        loaded: blob.size,
+        total: blob.size,
+      });
+      this.onerror?.();
+    },
+  };
+
+  const blob = new Blob(['drive'], { type: 'image/png' });
+  const progress = [];
+  const archiveId = await uploadPreparedEvidenceArchiveFile({
+    jobId: 'BRN-2026-000001',
+    file: {
+      blob,
+      name: 'claim.png',
+      mimeType: 'image/png',
+      sourceSizeBytes: blob.size,
+      preparedSizeBytes: blob.size,
+      compressed: false,
+      durationSeconds: null,
+    },
+    repository,
+    onProgress: (value) => progress.push(value),
+    xhrFactory: () => xhr,
+  });
+
+  assert.equal(archiveId, 'archive-reconciled');
+  assert.equal(listCalls, 1);
+  assert.equal(progress.at(-1)?.ratio, 1);
+});
+
 test('Service Job UI exposes Drive archive after a durable job exists while legacy URL remains', async () => {
   const [newJob, details, section, legacy] = await Promise.all([
     readFile(

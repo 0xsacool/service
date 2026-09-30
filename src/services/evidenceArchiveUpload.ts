@@ -25,6 +25,29 @@ export async function uploadPreparedEvidenceArchiveFile(input: {
 
   const xhr = (input.xhrFactory ?? (() => new XMLHttpRequest()))();
 
+  const confirmCompletedUpload = async (): Promise<boolean> => {
+    for (const delayMs of [0, 150, 350]) {
+      if (delayMs > 0) {
+        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, delayMs));
+      }
+      try {
+        const items = await input.repository.listForJob(input.jobId);
+        if (
+          items.some(
+            (item) =>
+              item.archiveId === session.archiveId &&
+              item.sizeBytes === input.file.preparedSizeBytes
+          )
+        ) {
+          return true;
+        }
+      } catch {
+        // Preserve the original upload transport error if verification is unavailable.
+      }
+    }
+    return false;
+  };
+
   await new Promise<void>((resolve, reject) => {
     xhr.open('PUT', session.uploadUrl, true);
     xhr.setRequestHeader('Content-Type', input.file.mimeType);
@@ -39,7 +62,18 @@ export async function uploadPreparedEvidenceArchiveFile(input: {
     };
 
     xhr.onerror = () => {
-      reject(new Error('การอัปโหลดไป Google Drive ขาดการเชื่อมต่อ'));
+      void (async () => {
+        if (await confirmCompletedUpload()) {
+          input.onProgress?.({
+            loadedBytes: input.file.preparedSizeBytes,
+            totalBytes: input.file.preparedSizeBytes,
+            ratio: 1,
+          });
+          resolve();
+          return;
+        }
+        reject(new Error('การอัปโหลดไป Google Drive ขาดการเชื่อมต่อ'));
+      })();
     };
     xhr.onabort = () => {
       reject(new Error('การอัปโหลดถูกยกเลิก'));
