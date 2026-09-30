@@ -51,9 +51,9 @@ export function normalizeServiceIntakeAccessories(
 }
 
 export const RECOMMENDED_PHOTO_CHECKLIST = [
-  'Product',
-  'Damaged Area',
-  'Serial Number',
+  'ตัวสินค้า',
+  'จุดที่เสียหาย',
+  'หมายเลขเครื่อง',
 ] as const;
 
 // Factory, not a shared constant object — every call returns fresh arrays so

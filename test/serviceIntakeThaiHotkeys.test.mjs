@@ -5,10 +5,19 @@ import {
   ACCESSORY_CHIPS,
   OTHER_ACCESSORY_PREFIX,
   PROBLEM_CHIPS,
+  RECOMMENDED_PHOTO_CHECKLIST,
   getOtherAccessoryText,
   isOtherAccessorySelection,
   normalizeServiceIntakeAccessories,
 } from '../src/constants/serviceIntake.ts';
+
+test('photo evidence recommendations are Thai', () => {
+  assert.deepEqual(RECOMMENDED_PHOTO_CHECKLIST, [
+    'ตัวสินค้า',
+    'จุดที่เสียหาย',
+    'หมายเลขเครื่อง',
+  ]);
+});
 
 test('problem hotkeys show Thai labels while retaining canonical stored values', () => {
   assert.deepEqual(
