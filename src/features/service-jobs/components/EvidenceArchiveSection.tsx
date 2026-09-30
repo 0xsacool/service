@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Archive, Download, Eye, File, FileImage, FileVideo, Upload } from 'lucide-react';
+import {
+  Archive,
+  Download,
+  Eye,
+  File,
+  FileImage,
+  FileVideo,
+  Upload,
+  X,
+} from 'lucide-react';
 import type {
   EvidenceArchiveItem,
   EvidenceArchiveStatus,
@@ -71,6 +80,10 @@ export function EvidenceArchiveSection({ jobId }: { jobId: string }) {
   const [uploadProgress, setUploadProgress] =
     useState<EvidenceArchiveUploadProgress | null>(null);
   const [busyDownloadId, setBusyDownloadId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{
+    item: EvidenceArchiveItem;
+    url: string;
+  } | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +123,12 @@ export function EvidenceArchiveSection({ jobId }: { jobId: string }) {
       active = false;
     };
   }, [jobId]);
+
+  useEffect(() => {
+    return () => {
+      if (preview?.url) URL.revokeObjectURL(preview.url);
+    };
+  }, [preview]);
 
   const chooseFile = async (file: File | null) => {
     if (!file || isPreparing || isUploading) return;
@@ -179,20 +198,9 @@ export function EvidenceArchiveSection({ jobId }: { jobId: string }) {
   };
 
   const viewItem = async (item: EvidenceArchiveItem) => {
-    const popup = window.open('', '_blank', 'noopener,noreferrer');
     const blob = await downloadBlob(item);
-    if (!blob) {
-      popup?.close();
-      return;
-    }
-    const url = URL.createObjectURL(blob);
-    if (!popup) {
-      URL.revokeObjectURL(url);
-      setError('เบราว์เซอร์บล็อกหน้าต่างดูไฟล์ กรุณาใช้ปุ่มดาวน์โหลดแทน');
-      return;
-    }
-    popup.location.href = url;
-    window.setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
+    if (!blob) return;
+    setPreview({ item, url: URL.createObjectURL(blob) });
   };
 
   const downloadItem = async (item: EvidenceArchiveItem) => {
@@ -381,6 +389,62 @@ export function EvidenceArchiveSection({ jobId }: { jobId: string }) {
             )}
           </div>
         </>
+      )}
+
+      {preview && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-3 sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`ดู ${preview.item.name}`}
+          onClick={() => setPreview(null)}
+        >
+          <div
+            className="flex max-h-[95dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-4 py-3">
+              <p className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
+                {preview.item.name}
+              </p>
+              <button
+                type="button"
+                onClick={() => setPreview(null)}
+                className="rounded-full p-2 text-neutral-500 hover:bg-neutral-100 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                aria-label="ปิดตัวอย่างไฟล์"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto bg-neutral-950 p-2 sm:p-4">
+              {preview.item.mimeType.startsWith('image/') ? (
+                <img
+                  src={preview.url}
+                  alt={preview.item.name}
+                  className="mx-auto max-h-[80dvh] max-w-full rounded-xl object-contain"
+                />
+              ) : preview.item.mimeType.startsWith('video/') ? (
+                <video
+                  src={preview.url}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="mx-auto max-h-[80dvh] w-full rounded-xl bg-black"
+                />
+              ) : preview.item.mimeType === 'application/pdf' ? (
+                <iframe
+                  src={preview.url}
+                  title={preview.item.name}
+                  className="h-[80dvh] w-full rounded-xl bg-white"
+                />
+              ) : (
+                <div className="rounded-xl bg-white p-6 text-center text-sm text-neutral-600">
+                  ไม่รองรับการแสดงตัวอย่างไฟล์ชนิดนี้ กรุณาใช้ปุ่มดาวน์โหลด
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       <AsyncErrorAlert message={error} />

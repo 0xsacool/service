@@ -231,6 +231,12 @@ test('Service Job UI exposes Drive archive after a durable job exists while lega
   assert.match(section, /วิดีโอเกิน 50 MB จะบีบอัดบนเครื่องก่อนอัปโหลด/);
   assert.match(section, /เก็บถึง/);
   assert.match(section, /ดาวน์โหลด/);
+  assert.doesNotMatch(section, /window\.open/);
+  assert.match(section, /role="dialog"/);
+  assert.match(section, /<video/);
+  assert.match(section, /playsInline/);
+  assert.match(section, /<iframe/);
+  assert.match(section, /application\/pdf/);
   assert.match(legacy, /ลิงก์หลักฐานเพิ่มเติม/);
 });
 
