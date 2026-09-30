@@ -2,6 +2,8 @@
 export const ROUTE_PATTERNS = {
   home: '/',
   login: '/login',
+  privacy: '/privacy',
+  terms: '/terms',
   dashboard: '/dashboard',
   serviceJobs: '/service-jobs',
   newServiceJob: '/service-jobs/new',
@@ -17,6 +19,8 @@ export const ROUTE_PATTERNS = {
 export const ROUTES = {
   home: '/',
   login: '/login',
+  privacy: '/privacy',
+  terms: '/terms',
   dashboard: '/dashboard',
   serviceJobs: '/service-jobs',
   newServiceJob: '/service-jobs/new',

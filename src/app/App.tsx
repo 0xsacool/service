@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { TrackHome } from '../features/tracking/pages/TrackHome';
 import { TrackResult } from '../features/tracking/pages/TrackResult';
 import { Login } from '../features/auth/pages/Login';
+import { PrivacyPolicy } from '../features/legal/pages/PrivacyPolicy';
+import { TermsOfService } from '../features/legal/pages/TermsOfService';
 import { Dashboard } from '../features/dashboard/pages/Dashboard';
 import { ServiceJobsList } from '../features/service-jobs/pages/ServiceJobsList';
 import { NewServiceJob } from '../features/service-jobs/pages/NewServiceJob';
@@ -39,6 +41,8 @@ export default function App() {
             <Route path={ROUTE_PATTERNS.trackLookup} element={<TrackResult />} />
             <Route path={ROUTE_PATTERNS.track} element={<TrackResult />} />
             <Route path={ROUTE_PATTERNS.login} element={<Login />} />
+            <Route path={ROUTE_PATTERNS.privacy} element={<PrivacyPolicy />} />
+            <Route path={ROUTE_PATTERNS.terms} element={<TermsOfService />} />
 
             {/* Staff (wrapped in shell) */}
             <Route element={<StaffRouteGuard />}>

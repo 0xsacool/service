@@ -165,3 +165,27 @@ test('Service Job UI exposes Drive archive after a durable job exists while lega
   assert.match(section, /ดาวน์โหลด/);
   assert.match(legacy, /ลิงก์หลักฐานเพิ่มเติม/);
 });
+
+test('OAuth production support pages are public Service Tech routes', async () => {
+  const [app, routes, privacy, terms] = await Promise.all([
+    readFile(new URL('../src/app/App.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/constants/routes.ts', import.meta.url), 'utf8'),
+    readFile(
+      new URL('../src/features/legal/pages/PrivacyPolicy.tsx', import.meta.url),
+      'utf8'
+    ),
+    readFile(
+      new URL('../src/features/legal/pages/TermsOfService.tsx', import.meta.url),
+      'utf8'
+    ),
+  ]);
+
+  assert.match(routes, /privacy: '\/privacy'/);
+  assert.match(routes, /terms: '\/terms'/);
+  assert.match(app, /ROUTE_PATTERNS\.privacy/);
+  assert.match(app, /ROUTE_PATTERNS\.terms/);
+  assert.match(privacy, /Google Drive Evidence Archive/);
+  assert.match(privacy, /365 วัน/);
+  assert.match(terms, /Google Drive/);
+  assert.match(terms, /ประมาณ 365 วัน/);
+});
