@@ -51,7 +51,7 @@ work. The smoke data was then removed; a fresh backend inventory returned no
 business documents. Production UI independently shows Dashboard counters at 0
 and Product Master `0 from 0`. Public Tracking remains disabled.
 
-## Current source change pending production activation — Product Knowledge Management (2026-09-29)
+## Current production Product Knowledge Management activation (2026-09-30)
 
 Real owner use of the first Product Master row (BRUNO Compact Hot Plate 1200W,
 model BOE021, SKU BOE021-WH) exposed the next production gap: the Accessories
@@ -59,30 +59,40 @@ and Common Problems tabs rendered their read-only states, but their existing Add
 controls were hidden because Product Knowledge still used the mock-only direct
 mutation gate.
 
-Decision #054 now implements production-safe Product Knowledge management.
-Authenticated staff read reusable `accessories` and `commonProblems`
-definitions through the Worker; every create/edit/association write requires
-server-side `canManageProducts=true`. New definitions are atomically created
-and associated with the current Product in one retryable Firestore transaction.
+Decision #054 is now live from source
+`cbf81d0bcd6bd10deb0833550a8455abc564e5e5`. Authenticated staff read
+reusable `accessories` and `commonProblems` definitions through the Worker;
+every create/edit/association write requires server-side
+`canManageProducts=true`. New definitions are atomically created and
+associated with the current Product in one retryable Firestore transaction.
 Association toggles update only the relevant Product id array, and common-problem
 edits are global reusable-definition edits. The browser performs no direct
 Firestore Product/Knowledge write and waits for authoritative server refresh
 before reporting success.
 
-The mobile UI now exposes the existing accessory input/Add control and
-Common Problem Add/Edit controls with pending/error states. A discovered CORS
-boundary defect was fixed before rollout: association writes use `PUT`, so
-`PUT` is now explicitly included in the Worker CORS method allowlist with
-regression coverage.
+The mobile UI exposes the accessory input/Add control plus Common Problem
+Add/Edit controls with pending/error states. Association writes use `PUT` and
+the Worker CORS allowlist now explicitly includes `PUT`, with regression
+coverage.
 
 Deterministic evidence passes: Product Knowledge route/security tests, Firestore
 atomic wire-shape tests, Product Knowledge frontend tests, full Worker regression,
-Worker typecheck, root TypeScript, targeted ESLint, and the production build
-(`/assets/index-XYDq5gyI.js`). Scoped Prettier/diff checks remain part of the
-final source gate. Production activation is pending guarded Worker promotion
-then Hosting-only deploy. No synthetic Product Knowledge write is permitted for
-rollout acceptance; the owner will enter the first real accessory/problem after
-the controls are live. Public Tracking must remain OFF.
+Worker typecheck, root TypeScript, targeted ESLint, Prettier/diff checks, and the
+production build `/assets/index-XYDq5gyI.js`. Guarded Worker version
+`1ee71b82-56b6-405c-9825-07f3f11fe4af` receives 100% traffic. Hosting-only
+deployment released successfully and live `index.html` references
+`/assets/index-XYDq5gyI.js`, which returns HTTP 200. Firebase CLI emitted a
+post-deploy exit code 2 after reporting `release complete` and
+`Deploy complete!`; direct live verification confirms the new Hosting release
+is active.
+
+Credentialed production UI verification on BOE021 confirms FIRESTORE + WORKER,
+the Accessories tab shows `เพิ่มอุปกรณ์เสริมใหม่…` and an enabled Add control,
+and the Common Problems tab shows an enabled `เพิ่มปัญหา` control whose modal
+contains label/status/description fields. No synthetic Product Knowledge write
+was used for acceptance. Unauthenticated Product Knowledge read/create/
+association/update routes all return 401; health is 200, D24/D25 are 401/401,
+and both Public Tracking routes remain 404/404.
 
 ## Current production BRUNO Product Categories activation (2026-09-29)
 

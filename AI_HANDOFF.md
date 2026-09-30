@@ -8,12 +8,13 @@
 
 ---
 
-## Current source override — Product Knowledge Management pending deploy (2026-09-29)
+## Current production override — Product Knowledge Management ACTIVATED (2026-09-30)
 
 Real owner use of the first production Product (BOE021 / BOE021-WH) exposed
 that Accessories and Common Problems were still mock-only management surfaces.
-Decision #054 now makes these production-safe without opening browser Firestore
-writes.
+Decision #054 is now live from source
+`cbf81d0bcd6bd10deb0833550a8455abc564e5e5` without opening browser
+Firestore writes.
 
 Definitions are reusable global masters: `accessories` and `commonProblems`.
 Products retain only `accessoryIds` / `commonProblemIds`. Authenticated staff
@@ -23,18 +24,24 @@ create the definition and associate it with the current Product. Association
 toggles and common-problem edits are narrow Worker-mediated writes followed by
 authoritative Product/Knowledge refresh.
 
-The mobile Product Detail UI now exposes Add controls with pending/error states.
-Association routes use `PUT`; Worker CORS was corrected to allow `PUT` and
-the boundary is regression-tested. Common problems are retired with
-`Inactive` rather than hard-deleted; accessory edit/delete is intentionally
-not introduced in this slice.
+The mobile Product Detail UI exposes Add controls with pending/error states.
+Association routes use `PUT`; Worker CORS allows `PUT` and the boundary is
+regression-tested. Common problems are retired with `Inactive` rather than
+hard-deleted; accessory edit/delete is intentionally not introduced in this
+slice.
 
-Targeted Product Knowledge tests, Firestore wire-shape tests, full Worker
-regression, Worker typecheck, root TypeScript, targeted ESLint, and production
-build pass. Production activation is pending guarded Worker promotion followed
-by Hosting-only deploy. Do not create synthetic Product Knowledge data for
-acceptance. Public Tracking must remain disabled and the seven protected config
-modifications/historical worktrees must remain untouched.
+Guarded Worker version `1ee71b82-56b6-405c-9825-07f3f11fe4af` is at 100%
+traffic. Hosting serves `/assets/index-XYDq5gyI.js` (HTTP 200). Credentialed
+BOE021 Product Detail verification shows the accessory input/Add control and the
+Common Problems Add modal with label/status/description fields. No synthetic
+Product Knowledge write was created for acceptance. Unauthenticated Product
+Knowledge read/create/association/update routes return 401; health=200,
+D24/D25=401/401, and Public Tracking remains 404/404. Firebase CLI returned a
+post-deploy exit code 2 only after printing release/deploy complete; live
+artifact verification confirms Hosting deployment succeeded.
+
+The seven protected config modifications and historical worktrees remain
+untouched. Do not recreate synthetic Product Knowledge data for acceptance.
 
 ## Current production override — BRUNO Product Categories ACTIVATED (2026-09-29)
 
