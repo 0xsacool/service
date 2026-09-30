@@ -8,26 +8,22 @@
 
 ---
 
-## Current source override — Thai Intake Hotkeys + Other Accessory Text pending Hosting (2026-09-30)
+## Current production override — Thai Intake Hotkeys + Other Accessory Text ACTIVATED (2026-09-30)
 
-Owner real-use testing of New Service Job intake found that quick issue chips
-and brought-accessory chips still displayed English. Decision #055 localizes
-the UI while deliberately preserving the existing stored canonical values so
-historical Service Jobs, issue summaries, reports, and Worker parsing remain
-compatible.
+Decision #055 is live from source `7f6ede59a878282db118e46dc48c5750c5606801`.
+New Service Job issue/accessory quick chips render Thai while retaining their
+existing canonical stored values for historical compatibility. Selecting
+accessory อื่น ๆ reveals a required free-text field and persists normalized
+`Other: <ข้อความ>` through the existing `accessories[]` payload; deselecting
+Other removes the custom draft value.
 
-Issue chips render Thai labels for Won't power on / No heating / Fan not
-spinning / Error Code / Broken / Other. Accessory chips render Thai labels for
-Main Unit / Power Cord / Lid / Tray / Manual / Box / Measuring Cup / Other.
-Selecting accessory อื่น ๆ reveals a free-text field; save is blocked until a
-description is entered, and the existing `accessories[]` payload stores the
-normalized value as `Other: <ข้อความ>`. No new backend field is introduced.
-
-Targeted regression 6/6, root TypeScript, targeted ESLint, Prettier, and the
-production build pass. This is frontend/shared-payload logic only: do not deploy
-or mutate Worker, Firestore Rules, IAM, Product data, or Public Tracking.
-Production activation requires only Hosting deployment followed by read-only UI
-verification.
+Targeted regression 6/6, root TypeScript, targeted ESLint, Prettier, production
+build, and diff checks pass. Worker `1ee71b82-56b6-405c-9825-07f3f11fe4af`
+was not redeployed. Hosting serves `/assets/index-DWbK7eZd.js` (HTTP 200).
+Credentialed production read-only verification selected existing customer
+Visitsak and BOE021, confirmed all Thai hotkeys, opened accessory อื่น ๆ,
+typed `ตะแกรงย่าง`, then deselected it and confirmed the field disappeared.
+No Service Job was saved. Public Tracking remains 404.
 
 ## Current production override — Product Knowledge Management ACTIVATED (2026-09-30)
 

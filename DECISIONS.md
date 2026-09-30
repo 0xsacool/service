@@ -1227,4 +1227,4 @@ For brought accessories, `Other` is a special intake-only selection. Selecting i
 
 **Impact:** No new Worker field, Firestore migration, Rules/IAM change, or Service Job schema change is required. Worker parsing already accepts bounded accessory strings. Existing Service Jobs with English canonical quick-chip values remain valid. Public Tracking is unrelated and must remain disabled.
 
-**Status:** Owner approved implementation on 2026-09-30. Source implementation and deterministic regression are complete; production activation is pending Hosting-only rollout.
+**Status:** Owner approved implementation on 2026-09-30. Source `7f6ede59a878282db118e46dc48c5750c5606801` is live via Hosting-only rollout. Live intake verification confirms Thai issue/accessory hotkeys plus the conditional Other free-text field, including type and deselect behavior, without submitting a Service Job. Hosting serves `/assets/index-DWbK7eZd.js`; Worker was not redeployed and Public Tracking remains disabled.
