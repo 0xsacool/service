@@ -36,7 +36,11 @@ The first real upload exposed a browser transport false-negative after Drive had
 already committed the file. Source `cb1c625` fixes this by reconciling an XHR
 transport error against the authoritative archive list by archive id before
 reporting failure. Regression is 7/7 PASS; targeted Prettier/ESLint and the full
-production build pass. Hosting serves `/assets/index-DuOVMR__.js`.
+production build pass. A later live preview check found that authenticated Blob
+data downloaded correctly but popup navigation remained stuck at `about:blank`
+on both desktop and iPhone. Source `3637623` replaces popup navigation with an
+in-app image/video/PDF preview. Production MP4 verification reached media
+`readyState=4` with no media error. Hosting serves `/assets/index-CjGo-Q7g.js`.
 
 Post-rollout probes remain health=200, unauthenticated archive=401, and Public
 Tracking=404. Google Branding verification is a separate external follow-up:

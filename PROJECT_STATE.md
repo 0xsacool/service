@@ -54,8 +54,11 @@ The smoke exposed an upload false-negative: Drive committed the object but the
 browser's direct PUT surfaced a transport/CORS-style error instead of the final
 response. Source `cb1c625` now reconciles that case against the authoritative
 archive list by archive id before declaring failure. Evidence archive regression
-is 7/7 PASS; targeted Prettier/ESLint and production build pass, and Hosting
-serves `/assets/index-DuOVMR__.js`.
+is 7/7 PASS; targeted Prettier/ESLint and production build pass. Production
+preview no longer uses popup Blob navigation: source `3637623` renders image,
+video, and PDF evidence inside Service Tech itself. The live 6.74 MB MP4 smoke
+reached media `readyState=4` with no error. Hosting serves
+`/assets/index-CjGo-Q7g.js`.
 
 Post-deploy production checks are health=200, unauthenticated archive=401, and
 Public Tracking=404. `PUBLIC_TRACKING_ENABLED=false` remains intact. Google
