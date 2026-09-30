@@ -23,35 +23,44 @@ Platform: responsive web application (mobile through desktop), Thai-first for
 Version 1 (see [DECISIONS.md](DECISIONS.md) #003). The authenticated staff app
 is live at `https://luxace-service.web.app` on the Firestore + Worker runtime.
 
-## Google Drive Evidence Archive — source ready, OAuth configuration pending (2026-09-30)
+## Google Drive Evidence Archive — production active (2026-09-30)
 
 Decision #056 implements an internal, staff-only evidence archive backed by the
-owner's Google Drive. A durable Service Job must exist before archive upload.
-The existing optional external-evidence URL remains available unchanged.
+owner's Google Drive. A durable Service Job must exist before archive upload and
+the existing optional external-evidence URL remains available unchanged.
 
-Authorized same-brand staff can list archive metadata, request a Drive resumable
-upload session, and download evidence through Worker authorization. Prepared
-bytes upload directly from the browser to the Google Drive session; OAuth client
-credentials and the refresh token remain Worker-only secrets. V1 archive
-metadata is stored in Drive app properties (Service Job id, archive id, uploader,
-source size, compression flag, and 365-day `deleteAfter`) rather than widening
-Firestore schema/Rules.
+Production Worker version `5c265266-c8ed-4b84-baeb-ff372d45222b` is at 100%
+traffic with the dedicated Drive client id, client secret, and refresh token as
+Worker secrets. The grant uses only `drive.file`; temporary OAuth credential
+artifacts were removed from the local machine after installation. Same-brand
+staff authorization gates status/list/session/download operations, prepared bytes
+upload directly from the browser to the Google Drive resumable session, and the
+Worker never receives the media body. V1 metadata remains provider-native in
+Drive app properties, including Service Job id, opaque archive id, uploader,
+source size, compression flag, and 365-day `deleteAfter`.
 
 Oversized video uses dynamically-loaded Mediabunny/WebCodecs and AAC encoding to
 produce MP4 H.264/AAC client-side. Video <=50 MiB passes through; larger video
 targets ~45 MiB with a 55 MiB prepared-file hard limit and 30-minute duration
-bound. Images/PDFs are not recompressed. The UI is available after Service Job
-creation and on Service Job Detail, showing upload progress, retained-until
-date, view, and download. Manual external URL remains the fallback.
+bound. Images/PDFs are not recompressed. The UI is active on Service Job Detail
+with upload progress, retained-until date, view, and download.
 
-Deterministic evidence currently passes: frontend archive tests 5/5, Drive route
-security 18/18, Drive gateway 15/15, full Worker regression, Worker/root
-TypeScript, targeted ESLint, Prettier, and production build
-`/assets/index-BGCQ5npN.js`. Google Drive API is enabled on
-`luxace-service`. Google Auth Platform project registration is paused at the
-owner-only Google API Services User Data Policy acceptance; Drive OAuth secrets
-are therefore not configured yet and production activation has not occurred.
-Public Tracking remains unrelated and must stay OFF.
+Production smoke on `BRN-2026-000001` uploaded
+`service-tech-drive-smoke-20260930.png` (68 B), listed it as one archive file
+with retention through 30 Sep 2027, and downloaded it through the authorized
+Worker path. Download SHA-256 matched the source exactly:
+`061B49754277F1B94A085B4E444E80C8AD70366C1F7B3B40ED06F1BD468B9CB2`.
+The smoke exposed an upload false-negative: Drive committed the object but the
+browser's direct PUT surfaced a transport/CORS-style error instead of the final
+response. Source `cb1c625` now reconciles that case against the authoritative
+archive list by archive id before declaring failure. Evidence archive regression
+is 7/7 PASS; targeted Prettier/ESLint and production build pass, and Hosting
+serves `/assets/index-DuOVMR__.js`.
+
+Post-deploy production checks are health=200, unauthenticated archive=401, and
+Public Tracking=404. `PUBLIC_TRACKING_ENABLED=false` remains intact. Google
+Branding verification is not a runtime blocker; Google requested a 24-hour wait
+for verified home-page ownership propagation before re-verification.
 
 ## Current production pre-handoff clean reset (2026-09-29)
 

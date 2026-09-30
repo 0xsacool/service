@@ -8,30 +8,40 @@
 
 ---
 
-## Current source override — Google Drive Evidence Archive READY / OAUTH PENDING (2026-09-30)
+## Current production override — Google Drive Evidence Archive ACTIVATED (2026-09-30)
 
-Decision #056 adds a staff-only Google Drive archive for claim evidence after a
-durable Service Job exists. The browser prepares media locally, dynamically
-loading Mediabunny/WebCodecs only for video over 50 MiB; oversized video becomes
-MP4 H.264/AAC targeting ~45 MiB with a 55 MiB hard prepared limit. The browser
-then uploads bytes directly to a Google Drive resumable-session URL. The Worker
-never receives the media bytes.
+Decision #056 is live. Worker version `5c265266-c8ed-4b84-baeb-ff372d45222b`
+serves 100% production traffic with `GOOGLE_DRIVE_CLIENT_ID`,
+`GOOGLE_DRIVE_CLIENT_SECRET`, and `GOOGLE_DRIVE_REFRESH_TOKEN` present only as
+Worker secrets. `PUBLIC_TRACKING_ENABLED=false` and
+`SERVICE_REPORT_V2_MODE=compatibility` remain unchanged. Dedicated Drive OAuth
+uses only `https://www.googleapis.com/auth/drive.file`; the temporary local OAuth
+credential JSON and downloaded client-secret JSON were deleted after secret
+installation.
 
-Worker routes require Firebase staff authentication plus same-brand Service Job
-ownership. Dedicated Google Drive end-user OAuth uses the narrow `drive.file`
-scope; client id/client secret/refresh token are Worker secrets and are separate
-from the existing Firestore service-account credential. Drive app properties
-carry the Service Job id, opaque archive id, uploader uid, original size,
-compression flag and 365-day `deleteAfter`. Existing `externalEvidenceUrl`
-is preserved as fallback; no Firestore schema/Rules/IAM widening is required.
+The staff UI uploads prepared bytes directly to Google Drive resumable-session
+URLs; media does not traverse the Worker. Oversized video is prepared locally
+through Mediabunny/WebCodecs, targeting ~45 MiB with a 55 MiB prepared limit.
+Worker routes continue to require Firebase staff authentication and same-brand
+Service Job ownership. Drive app properties carry Service Job id, opaque archive
+id, uploader uid, original size, compression flag, and 365-day `deleteAfter`.
+The legacy `externalEvidenceUrl` remains available unchanged.
 
-Evidence passes: frontend archive 5/5, Drive route security 18/18, Drive gateway
-15/15, full Worker regression, Worker/root TypeScript, targeted ESLint,
-Prettier, and production build. Google Drive API is enabled for
-`luxace-service`. Google Auth Platform initialization is paused at the
-owner-only Google API Services User Data Policy acceptance. Until that is
-accepted and OAuth secrets are configured, the archive fails closed as not
-configured; do not invent or commit credentials. Public Tracking remains OFF.
+Production smoke on `BRN-2026-000001` created
+`service-tech-drive-smoke-20260930.png` (68 B), listed it with retention through
+30 Sep 2027, and downloaded it through the staff-authorized Worker path. The
+downloaded SHA-256 exactly matched the source:
+`061B49754277F1B94A085B4E444E80C8AD70366C1F7B3B40ED06F1BD468B9CB2`.
+The first real upload exposed a browser transport false-negative after Drive had
+already committed the file. Source `cb1c625` fixes this by reconciling an XHR
+transport error against the authoritative archive list by archive id before
+reporting failure. Regression is 7/7 PASS; targeted Prettier/ESLint and the full
+production build pass. Hosting serves `/assets/index-DuOVMR__.js`.
+
+Post-rollout probes remain health=200, unauthenticated archive=401, and Public
+Tracking=404. Google Branding verification is a separate external follow-up:
+Google reported that verified home-page ownership had not propagated yet and
+instructed waiting 24 hours before re-verification; a reminder is scheduled.
 
 ## Current production override — Thai Intake Hotkeys + Other Accessory Text ACTIVATED (2026-09-30)
 
