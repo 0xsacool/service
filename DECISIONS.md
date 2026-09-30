@@ -1214,3 +1214,17 @@ Request contracts are exact and bounded, duplicate identity is NFC/trim/case nor
 **Impact:** No Firestore Rules or IAM widening is required. Product Catalog ownership remains unchanged, Public Tracking remains disabled, and this does not introduce N10/Product Instance work. Existing Product Master general edit/status/delete/import flows remain separate.
 
 **Status:** Owner approved implementation and rollout on 2026-09-29. Source `cbf81d0bcd6bd10deb0833550a8455abc564e5e5` is live. Guarded Worker version `1ee71b82-56b6-405c-9825-07f3f11fe4af` receives 100% traffic and Hosting serves `/assets/index-XYDq5gyI.js`. Credentialed production verification on BOE021 confirms the accessory input/Add control and Common Problems Add modal are available under FIRESTORE + WORKER. Unauthenticated Product Knowledge read/create/association/update routes return 401, Public Tracking remains 404/404, and no synthetic Product Knowledge data, Rules/IAM mutation, protected-config change, or historical-worktree cleanup occurred. Firebase CLI emitted an unexpected-error exit code only after reporting release/deploy complete; direct live artifact verification confirms the Hosting release succeeded.
+
+---
+
+## 055 - Service intake quick chips are Thai-facing while persisted values stay canonical; accessory Other carries bounded free text
+
+**Reason:** Owner real-use testing of the New Service Job intake showed that the quick issue chips and brought-accessory chips were still English, and accessory `Other` could not capture what the customer actually brought.
+
+**Decision:** The quick-chip primitive separates stored `value` from displayed `label`. Existing canonical issue/accessory values remain unchanged on the wire and in stored Service Jobs, while the intake UI renders Thai labels. This avoids a migration and preserves historical summaries/report compatibility.
+
+For brought accessories, `Other` is a special intake-only selection. Selecting it reveals a Thai free-text field. While blank, the draft may temporarily contain `Other`; actual save is blocked until text is supplied. The existing `accessories[]` field persists the normalized value as `Other: <ข้อความ>`, bounded by the existing Worker string limit. Deselecting Other removes both the placeholder and any custom Other value.
+
+**Impact:** No new Worker field, Firestore migration, Rules/IAM change, or Service Job schema change is required. Worker parsing already accepts bounded accessory strings. Existing Service Jobs with English canonical quick-chip values remain valid. Public Tracking is unrelated and must remain disabled.
+
+**Status:** Owner approved implementation on 2026-09-30. Source implementation and deterministic regression are complete; production activation is pending Hosting-only rollout.

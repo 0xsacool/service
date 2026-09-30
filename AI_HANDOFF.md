@@ -8,6 +8,27 @@
 
 ---
 
+## Current source override — Thai Intake Hotkeys + Other Accessory Text pending Hosting (2026-09-30)
+
+Owner real-use testing of New Service Job intake found that quick issue chips
+and brought-accessory chips still displayed English. Decision #055 localizes
+the UI while deliberately preserving the existing stored canonical values so
+historical Service Jobs, issue summaries, reports, and Worker parsing remain
+compatible.
+
+Issue chips render Thai labels for Won't power on / No heating / Fan not
+spinning / Error Code / Broken / Other. Accessory chips render Thai labels for
+Main Unit / Power Cord / Lid / Tray / Manual / Box / Measuring Cup / Other.
+Selecting accessory อื่น ๆ reveals a free-text field; save is blocked until a
+description is entered, and the existing `accessories[]` payload stores the
+normalized value as `Other: <ข้อความ>`. No new backend field is introduced.
+
+Targeted regression 6/6, root TypeScript, targeted ESLint, Prettier, and the
+production build pass. This is frontend/shared-payload logic only: do not deploy
+or mutate Worker, Firestore Rules, IAM, Product data, or Public Tracking.
+Production activation requires only Hosting deployment followed by read-only UI
+verification.
+
 ## Current production override — Product Knowledge Management ACTIVATED (2026-09-30)
 
 Real owner use of the first production Product (BOE021 / BOE021-WH) exposed

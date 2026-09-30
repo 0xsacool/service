@@ -7,6 +7,7 @@ import type {
   ServiceIntakeData,
 } from '../types';
 import { isCanonicalBrandId, type BrandId } from '../types';
+import { normalizeServiceIntakeAccessories } from '../constants/serviceIntake';
 import type { NewDurableServiceJob } from '../repositories/types';
 import type { BackendKind } from '../config/backend';
 import type { CreatePathAssertion } from '../config/runtimeDiagnostics';
@@ -120,7 +121,7 @@ export function buildServiceJobIntakePayload(
     catalogProductId: input.product.catalogProductId ?? null,
     problemDescription: input.intake.problemDescription,
     problemChips: input.intake.problemChips,
-    accessories: input.intake.accessories,
+    accessories: normalizeServiceIntakeAccessories(input.intake.accessories),
     internalNotes: input.intake.internalNotes,
     photos: input.intake.photos.map((photo) => photo.dataUrl),
     warranty: input.product.warrantyStatus === 'in_warranty',

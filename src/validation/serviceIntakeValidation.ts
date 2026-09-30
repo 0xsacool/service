@@ -1,4 +1,8 @@
 import type { ServiceIntakeData } from '../types';
+import {
+  getOtherAccessoryText,
+  isOtherAccessorySelection,
+} from '../constants/serviceIntake';
 import { isValidCalendarDate, isValidHttpsUrl } from '../utils/serviceEventValidation';
 
 // Minimum bar for "intake complete enough to move to Save & Print": the
@@ -42,5 +46,12 @@ export function serviceEventMetadataDraftError(draft: {
 }
 
 export function serviceIntakeMetadataError(intake: ServiceIntakeData): string | null {
+  const hasOtherAccessory = intake.accessories.some(isOtherAccessorySelection);
+  if (
+    hasOtherAccessory &&
+    getOtherAccessoryText(intake.accessories).trim().length === 0
+  ) {
+    return 'กรุณาระบุอุปกรณ์อื่น ๆ ที่ลูกค้านำมาด้วย';
+  }
   return serviceEventMetadataDraftError(intake);
 }

@@ -51,6 +51,30 @@ work. The smoke data was then removed; a fresh backend inventory returned no
 business documents. Production UI independently shows Dashboard counters at 0
 and Product Master `0 from 0`. Public Tracking remains disabled.
 
+## Current source change pending production activation — Thai Intake Hotkeys + Other Accessory Text (2026-09-30)
+
+Owner real-use testing of Service Job intake found that the quick issue chips
+and brought-accessory chips still displayed English labels. Decision #055 keeps
+their persisted canonical values unchanged for backward compatibility but
+renders Thai staff-facing labels. Issue chips now display เปิดเครื่องไม่ติด,
+ไม่ร้อน, พัดลมไม่หมุน, ขึ้นรหัสผิดพลาด, แตก / หัก, and อื่น ๆ. Brought-accessory
+chips now display ตัวเครื่อง, สายไฟ, ฝาปิด, ถาด, คู่มือ, กล่อง, ถ้วยตวง, and
+อื่น ๆ.
+
+Selecting อื่น ๆ for brought accessories now reveals a free-text input.
+The draft keeps a temporary `Other` placeholder while editing and persists a
+bounded `Other: <ข้อความ>` string after staff enters a value. Save validation
+blocks a selected Other accessory with no description, and payload construction
+trims the custom text before it reaches the existing Service Job `accessories`
+array. No Worker contract, Firestore Rules, IAM, or Public Tracking change is
+required.
+
+Deterministic regression covers Thai labels, canonical persisted values, Other
+selection/text helpers, save validation, payload normalization, and the
+conditional UI input. Root TypeScript, targeted ESLint, Prettier, and production
+build pass. Production activation is pending a Hosting-only rollout; Worker
+must remain unchanged and Public Tracking must remain OFF.
+
 ## Current production Product Knowledge Management activation (2026-09-30)
 
 Real owner use of the first Product Master row (BRUNO Compact Hot Plate 1200W,
