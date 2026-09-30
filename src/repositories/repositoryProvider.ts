@@ -183,6 +183,9 @@ export function createMockRepositoryProvider(): RepositoryProvider {
       async download() {
         throw unavailableError();
       },
+      async trash() {
+        throw unavailableError();
+      },
     },
     serviceReports: serviceReportsRepository,
     approvalConsole: createMockApprovalConsoleRepository(),
@@ -261,6 +264,7 @@ function createUnavailableRepositoryProvider(): RepositoryProvider {
       listForJob: reject,
       createUploadSession: reject,
       download: reject,
+      trash: reject,
     },
     serviceReports: {
       fetchHistoryForServiceJob: reject,

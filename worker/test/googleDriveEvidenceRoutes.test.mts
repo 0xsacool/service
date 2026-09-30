@@ -2,7 +2,10 @@ import { createWorkerHandler, type WorkerDependencies } from '../src/index.ts';
 import type { Env } from '../src/env.ts';
 import type { FirestoreClient } from '../src/firestoreClient.ts';
 import { parseStaffProfile } from '../src/staffAuthorization.ts';
-import type { GoogleDriveEvidenceGateway } from '../src/googleDriveEvidence.ts';
+import {
+  GoogleDriveRequestError,
+  type GoogleDriveEvidenceGateway,
+} from '../src/googleDriveEvidence.ts';
 import type { EvidenceArchiveItem } from '../../src/types/evidenceArchive.ts';
 
 let failures = 0;
@@ -23,6 +26,7 @@ interface State {
   sessions: number;
   lists: number;
   downloads: number;
+  trashes: number;
 }
 
 const archived: EvidenceArchiveItem = {
@@ -46,6 +50,7 @@ function createHandler(overrides: Partial<State> = {}) {
     sessions: 0,
     lists: 0,
     downloads: 0,
+    trashes: 0,
     ...overrides,
   };
 
@@ -81,6 +86,12 @@ function createHandler(overrides: Partial<State> = {}) {
           headers: { 'Content-Length': '11' },
         }),
       };
+    },
+    async trash(jobId, archiveId) {
+      state.trashes += 1;
+      if (jobId !== archived.jobId || archiveId !== archived.archiveId) {
+        throw new GoogleDriveRequestError('evidence_not_found', 404);
+      }
     },
   };
 
@@ -240,6 +251,50 @@ async function request(
     response.headers.get('Cache-Control') === 'private, no-store'
   );
   check('download bytes are proxied only after authorization', (await response.text()) === 'drive-bytes');
+}
+
+{
+  const context = createHandler();
+  const response = await request(
+    context,
+    'DELETE',
+    '/service-jobs/BRN-2026-000001/evidence-archive/archive-1'
+  );
+  check('authorized archive trash returns 204', response.status === 204);
+  check('authorized archive trash reaches Drive exactly once', context.state.trashes === 1);
+}
+
+{
+  const context = createHandler({ jobBrand: 'join-lux-club' });
+  const response = await request(
+    context,
+    'DELETE',
+    '/service-jobs/BRN-2026-000001/evidence-archive/archive-1'
+  );
+  check('cross-brand archive trash is forbidden', response.status === 403);
+  check('cross-brand trash never reaches Drive', context.state.trashes === 0);
+}
+
+{
+  const context = createHandler();
+  const response = await request(
+    context,
+    'DELETE',
+    '/service-jobs/BRN-2026-000001/evidence-archive/archive-missing'
+  );
+  check('missing archive trash fails closed as 404', response.status === 404);
+}
+
+{
+  const context = createHandler();
+  const response = await request(
+    context,
+    'DELETE',
+    '/service-jobs/BRN-2026-000001/evidence-archive/archive-1',
+    { token: null }
+  );
+  check('unauthenticated archive trash fails closed', response.status === 401);
+  check('unauthenticated trash never reaches Drive', context.state.trashes === 0);
 }
 
 {

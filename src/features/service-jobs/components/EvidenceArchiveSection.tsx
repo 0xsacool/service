@@ -6,6 +6,7 @@ import {
   File,
   FileImage,
   FileVideo,
+  Trash2,
   Upload,
   X,
 } from 'lucide-react';
@@ -80,6 +81,7 @@ export function EvidenceArchiveSection({ jobId }: { jobId: string }) {
   const [uploadProgress, setUploadProgress] =
     useState<EvidenceArchiveUploadProgress | null>(null);
   const [busyDownloadId, setBusyDownloadId] = useState<string | null>(null);
+  const [busyTrashId, setBusyTrashId] = useState<string | null>(null);
   const [preview, setPreview] = useState<{
     item: EvidenceArchiveItem;
     url: string;
@@ -217,6 +219,30 @@ export function EvidenceArchiveSection({ jobId }: { jobId: string }) {
     window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
   };
 
+  const trashItem = async (item: EvidenceArchiveItem) => {
+    if (busyDownloadId || busyTrashId) return;
+    const confirmed = window.confirm(
+      `ต้องการลบไฟล์ "${item.name}" หรือไม่?\n\nไฟล์จะถูกย้ายไปถังขยะ Google Drive และสามารถกู้คืนได้จาก Google Drive`
+    );
+    if (!confirmed) return;
+
+    setBusyTrashId(item.archiveId);
+    setError(null);
+    try {
+      await repositories.evidenceArchive.trash(jobId, item.archiveId);
+      if (preview?.item.archiveId === item.archiveId) setPreview(null);
+      await reload();
+    } catch (trashError) {
+      setError(
+        trashError instanceof Error
+          ? trashError.message
+          : 'ไม่สามารถย้ายไฟล์ไปถังขยะ Google Drive ได้'
+      );
+    } finally {
+      setBusyTrashId(null);
+    }
+  };
+
   return (
     <FormSection
       icon={Archive}
@@ -340,6 +366,8 @@ export function EvidenceArchiveSection({ jobId }: { jobId: string }) {
                 {items.map((item) => {
                   const Icon = itemIcon(item);
                   const busy = busyDownloadId === item.archiveId;
+                  const deleting = busyTrashId === item.archiveId;
+                  const archiveBusy = busyDownloadId !== null || busyTrashId !== null;
                   return (
                     <div
                       key={item.archiveId}
@@ -367,7 +395,7 @@ export function EvidenceArchiveSection({ jobId }: { jobId: string }) {
                       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                         <SecondaryButton
                           onClick={() => void viewItem(item)}
-                          disabled={busyDownloadId !== null}
+                          disabled={archiveBusy}
                           className="w-full px-4 py-2 text-sm sm:w-auto"
                         >
                           <Eye className="h-4 w-4" />
@@ -375,11 +403,19 @@ export function EvidenceArchiveSection({ jobId }: { jobId: string }) {
                         </SecondaryButton>
                         <SecondaryButton
                           onClick={() => void downloadItem(item)}
-                          disabled={busyDownloadId !== null}
+                          disabled={archiveBusy}
                           className="w-full px-4 py-2 text-sm sm:w-auto"
                         >
                           <Download className="h-4 w-4" />
                           ดาวน์โหลด
+                        </SecondaryButton>
+                        <SecondaryButton
+                          onClick={() => void trashItem(item)}
+                          disabled={archiveBusy}
+                          className="w-full px-4 py-2 text-sm text-red-600 sm:w-auto"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          {deleting ? 'กำลังลบ…' : 'ลบ'}
                         </SecondaryButton>
                       </div>
                     </div>

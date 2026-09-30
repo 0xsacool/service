@@ -591,6 +591,29 @@ async function handleEvidenceArchiveDownload(
   }
 }
 
+async function handleEvidenceArchiveTrash(
+  request: Request,
+  env: Env,
+  jobId: string,
+  archiveId: string,
+  dependencies: WorkerDependencies
+): Promise<Response> {
+  const authorization = await authorizeEvidenceArchiveJob(
+    request,
+    env,
+    jobId,
+    dependencies
+  );
+  if (authorization instanceof Response) return authorization;
+
+  try {
+    await authorization.gateway.trash(jobId, archiveId);
+    return new Response(null, { status: 204 });
+  } catch (error) {
+    return evidenceArchiveFailure(error);
+  }
+}
+
 // PI-3 — a separate authorizer from authorizeStaffCreation() on purpose.
 //
 // Two differences, both required by the Product Import contract:
@@ -1971,6 +1994,38 @@ export function createWorkerHandler(
 
     if (request.method === 'POST' && url.pathname === SERVICE_JOBS_PATH) {
       return withCors(await handleServiceJobCreate(request, env, dependencies), request, env);
+    }
+
+    if (request.method === 'DELETE' && url.pathname.startsWith(SERVICE_JOBS_PREFIX)) {
+      let rawRest: string;
+      try {
+        rawRest = decodeURIComponent(
+          url.pathname.slice(SERVICE_JOBS_PREFIX.length)
+        );
+      } catch {
+        return withCors(
+          json({ error: 'Not found' }, { status: 404 }),
+          request,
+          env
+        );
+      }
+      const segments = rawRest.split('/').filter(Boolean);
+      if (
+        segments.length === 3 &&
+        segments[1] === 'evidence-archive'
+      ) {
+        return withCors(
+          await handleEvidenceArchiveTrash(
+            request,
+            env,
+            segments[0]!,
+            segments[2]!,
+            dependencies
+          ),
+          request,
+          env
+        );
+      }
     }
 
     const readDependencies = {

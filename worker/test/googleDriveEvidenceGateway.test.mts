@@ -156,6 +156,75 @@ const baseEnv: Env = {
 }
 
 {
+  __resetGoogleDriveTokenCacheForTests();
+  let patchCall: { url: string; init: RequestInit } | null = null;
+  const fetchMock: typeof fetch = async (input, init = {}) => {
+    const url = String(input);
+    if (url === 'https://oauth.test/token') {
+      return Response.json({ access_token: 'access-token', expires_in: 3600 });
+    }
+    if (
+      url.startsWith('https://www.googleapis.com/drive/v3/files?') &&
+      (init.method === undefined || init.method === 'GET')
+    ) {
+      const parsed = new URL(url);
+      if (parsed.searchParams.get('fields') === 'files(id,appProperties)') {
+        return Response.json({
+          files: [
+            {
+              id: 'drive-file-1',
+              appProperties: {
+                serviceTechJobId: 'BRN-2026-000001',
+                serviceTechKind: 'evidence',
+                serviceTechArchiveId: 'archive-1',
+              },
+            },
+          ],
+        });
+      }
+      return Response.json({
+        files: [
+          {
+            id: 'drive-file-1',
+            name: 'claim.pdf',
+            mimeType: 'application/pdf',
+            size: '2048',
+            createdTime: '2026-09-30T05:00:00.000Z',
+            appProperties: {
+              serviceTechJobId: 'BRN-2026-000001',
+              serviceTechKind: 'evidence',
+              serviceTechArchiveId: 'archive-1',
+              serviceTechUploadedBy: 'staff-1',
+              serviceTechDeleteAfter: '2027-09-30T05:00:00.000Z',
+              serviceTechSourceSizeBytes: '2048',
+              serviceTechCompressed: 'false',
+            },
+          },
+        ],
+      });
+    }
+    if (
+      url ===
+        'https://www.googleapis.com/drive/v3/files/drive-file-1?fields=id%2Ctrashed' &&
+      init.method === 'PATCH'
+    ) {
+      patchCall = { url, init };
+      return Response.json({ id: 'drive-file-1', trashed: true });
+    }
+    throw new Error(`Unexpected fetch: ${url}`);
+  };
+
+  const gateway = createGoogleDriveEvidenceGateway(baseEnv, { fetch: fetchMock });
+  await gateway.trash('BRN-2026-000001', 'archive-1');
+  check('trash patches the verified app-owned Drive file', patchCall !== null);
+  const trashBody = JSON.parse(String(patchCall?.init.body ?? '{}')) as {
+    trashed?: boolean;
+  };
+  check('trash uses Drive trash instead of permanent deletion', trashBody.trashed === true);
+  check('trash uses PATCH instead of DELETE', patchCall?.init.method === 'PATCH');
+}
+
+{
   const gateway = createGoogleDriveEvidenceGateway({
     ATTACHMENTS_BUCKET: {} as R2Bucket,
     ALLOWED_ORIGINS: 'https://app.test',

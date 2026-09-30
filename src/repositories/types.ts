@@ -409,6 +409,7 @@ export interface EvidenceArchiveRepository {
     request: EvidenceArchiveSessionRequest
   ): Promise<EvidenceArchiveUploadSession>;
   download(jobId: string, archiveId: string): Promise<Blob>;
+  trash(jobId: string, archiveId: string): Promise<void>;
 }
 
 export interface AttachmentsRepository {

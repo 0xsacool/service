@@ -76,5 +76,12 @@ export function createWorkerEvidenceArchiveRepository(
       );
       return await response.blob();
     },
+
+    async trash(jobId: string, archiveId: string): Promise<void> {
+      await request(
+        `/service-jobs/${encodeURIComponent(jobId)}/evidence-archive/${encodeURIComponent(archiveId)}`,
+        { method: 'DELETE' }
+      );
+    },
   };
 }

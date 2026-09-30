@@ -309,6 +309,7 @@ export interface GoogleDriveEvidenceGateway {
     jobId: string,
     archiveId: string
   ): Promise<{ item: EvidenceArchiveItem; response: Response }>;
+  trash(jobId: string, archiveId: string): Promise<void>;
 }
 
 export function createGoogleDriveEvidenceGateway(
@@ -432,6 +433,48 @@ export function createGoogleDriveEvidenceGateway(
         throw new GoogleDriveRequestError('download', response.status);
       }
       return { item, response };
+    },
+
+    async trash(jobId, archiveId) {
+      const items = await this.listForJob(jobId);
+      if (!items.some((candidate) => candidate.archiveId === archiveId)) {
+        throw new GoogleDriveRequestError('evidence_not_found', 404);
+      }
+
+      const token = await getDriveAccessToken(env, dependencies);
+      const q = [
+        'trashed = false',
+        `appProperties has { key='${JOB_MARKER_KEY}' and value='${queryLiteral(jobId)}' }`,
+        `appProperties has { key='${KIND_MARKER_KEY}' and value='${KIND_EVIDENCE}' }`,
+        `appProperties has { key='${ARCHIVE_ID_KEY}' and value='${queryLiteral(archiveId)}' }`,
+      ].join(' and ');
+      const findUrl = new URL(`${DRIVE_API_BASE}/files`);
+      findUrl.searchParams.set('q', q);
+      findUrl.searchParams.set('spaces', 'drive');
+      findUrl.searchParams.set('pageSize', '2');
+      findUrl.searchParams.set('fields', 'files(id,appProperties)');
+      const found = await driveJson<DriveFileList>(
+        dependencies,
+        token,
+        findUrl.toString()
+      );
+      const fileId = found.files?.[0]?.id;
+      if (!fileId) throw new GoogleDriveRequestError('evidence_not_found', 404);
+
+      const response = await dependencies.fetch(
+        `${DRIVE_API_BASE}/files/${encodeURIComponent(fileId)}?fields=id%2Ctrashed`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json; charset=UTF-8',
+          },
+          body: JSON.stringify({ trashed: true }),
+        }
+      );
+      if (!response.ok) {
+        throw new GoogleDriveRequestError('trash', response.status);
+      }
     },
   };
 }
